@@ -266,7 +266,12 @@ function renderMarkdown(src) {
     if (listType !== type) { closeList(); out.push(`<${type}>`); listType = type; }
   };
 
-  for (const raw of lines) {
+  // テーブル用: 行を | で分割(前後の | は除去)
+  const splitRow = (s) => s.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+  const isTableSep = (s) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(s);
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
     const line = raw.trimEnd();
 
     if (/^ BLOCK\d+ $/.test(line.trim())) {
@@ -275,6 +280,33 @@ function renderMarkdown(src) {
       continue;
     }
     if (!line.trim()) { flushPara(); closeList(); continue; }
+
+    // テーブル: ヘッダ行の次が区切り行(|---|---|)なら表として処理
+    if (line.includes('|') && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+      flushPara(); closeList();
+      const headers = splitRow(line);
+      const aligns = splitRow(lines[i + 1]).map((c) => {
+        if (/^:.*:$/.test(c)) return 'center';
+        if (/:$/.test(c)) return 'right';
+        return 'left';
+      });
+      const rows = [];
+      i += 2;
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
+        rows.push(splitRow(lines[i]));
+        i++;
+      }
+      i--; // for文のi++と相殺
+      const th = headers.map((h, k) =>
+        `<th style="text-align:${aligns[k] || 'left'}">${inline(h)}</th>`).join('');
+      const tb = rows.map((r) =>
+        '<tr>' + headers.map((_, k) =>
+          `<td style="text-align:${aligns[k] || 'left'}">${inline(r[k] || '')}</td>`).join('') + '</tr>'
+      ).join('');
+      out.push(`<div class="md-table-wrap"><table class="md-table">` +
+        `<thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table></div>`);
+      continue;
+    }
 
     let m;
     if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {

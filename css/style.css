@@ -320,6 +320,30 @@ table.slide-table {
 }
 .md-body .md-pre code { color: #7dd3fc; }
 .md-body .md-hr { border: none; border-top: 1px solid #334155; margin: 14px 0; }
+.md-body .md-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.md-body .md-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  min-width: 100%;
+}
+.md-body .md-table th,
+.md-body .md-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #334155;
+  white-space: nowrap;
+}
+.md-body .md-table th {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom: 1px solid var(--accent);
+  background: rgba(56, 189, 248, 0.06);
+}
+.md-body .md-table tbody tr:last-child td { border-bottom: none; }
+.md-body .md-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.025); }
 .md-body a { color: var(--accent); }
 .chat-msg .md-body p:last-child { margin-bottom: 0; }
 .spinner {
