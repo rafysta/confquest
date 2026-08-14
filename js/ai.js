@@ -138,10 +138,24 @@ const AI = {
     ).join('\n');
 
     const sys = `あなたは学会発表のコーチです。日本人研究者の英語プレゼン練習を分析し、日本語でフィードバックしてください。
-以下の形式で簡潔に:
-1. 良かった点(2つ)
-2. 次回の練習で直すべき点(最重要の3つ、具体的に)
-3. 言い回しの改善例(実際の発話から1-2箇所を引用し、より自然な英語表現を提案)`;
+
+出力はMarkdown形式で、以下の見出し構成に厳密に従ってください。スマホの狭い画面で読むため、各項目は2〜3行以内に収めてください。
+
+## 良かった点
+- (2つ、箇条書き)
+
+## 次回直すべき3点
+1. (最重要から順に、具体的な行動として書く)
+2.
+3.
+
+## 英語表現の改善
+実際の発話から1〜2箇所を引用し、以下の形式で示す:
+> 元: (引用)
+> 改善案: \`(より自然な英語)\`
+理由を1行で。
+
+強調には **太字**、英語表現には \`バッククォート\` を使ってください。`;
 
     const user = `発表時間: ${PracticeUtil.fmtTime(session.totalMs)} (目標 ${PracticeUtil.fmtTime(session.targetMs)})
 WPM: ${session.wpm}
@@ -164,7 +178,7 @@ ${session.fullTranscript.slice(0, 6000)}`;
       critical: 'a very critical reviewer. Ask sharp questions about causality, controls, and alternative interpretations.'
     };
     return `You are simulating audience Q&A after a scientific conference talk. You are ${personas[persona] || personas.general}
-The presentation transcript is below. Ask ONE question at a time in English, based on the actual content. After the presenter answers, either ask a natural follow-up question or briefly (1 sentence) evaluate the answer and ask a new question. Keep each message short.
+The presentation transcript is below. Ask ONE question at a time in English, based on the actual content. After the presenter answers, either ask a natural follow-up question or briefly (1 sentence) evaluate the answer and ask a new question. Keep each message short (2-4 sentences). You may use **bold** for emphasis and \`backticks\` for technical terms, but do not use headings or long lists.
 
 TRANSCRIPT:
 ${session.fullTranscript.slice(0, 6000)}`;

@@ -227,6 +227,89 @@ function escapeHtml(str) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/* ---------- 簡易Markdownレンダラー ---------- */
+/**
+ * AI応答をMarkdownとして整形表示する。
+ * HTMLを先にエスケープするため、AI出力にタグが含まれても安全。
+ */
+function renderMarkdown(src) {
+  const blocks = [];
+  // コードブロックを退避(中身は整形しない)
+  let text = escapeHtml(src).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    blocks.push(`<pre class="md-pre"><code>${code.replace(/\n$/, '')}</code></pre>`);
+    return ` BLOCK${blocks.length - 1} `;
+  });
+
+  const inline = (s) => s
+    .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
+    .replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  const lines = text.split('\n');
+  const out = [];
+  let listType = null;   // 'ul' | 'ol' | null
+  let para = [];
+
+  const flushPara = () => {
+    if (para.length) {
+      out.push(`<p>${inline(para.join(' '))}</p>`);
+      para = [];
+    }
+  };
+  const closeList = () => {
+    if (listType) { out.push(`</${listType}>`); listType = null; }
+  };
+  const openList = (type) => {
+    if (listType !== type) { closeList(); out.push(`<${type}>`); listType = type; }
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+
+    if (/^ BLOCK\d+ $/.test(line.trim())) {
+      flushPara(); closeList();
+      out.push(line.trim());
+      continue;
+    }
+    if (!line.trim()) { flushPara(); closeList(); continue; }
+
+    let m;
+    if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+      flushPara(); closeList();
+      const lv = m[1].length <= 2 ? 3 : 4; // 画面が狭いのでh3/h4に丸める
+      out.push(`<h${lv} class="md-h">${inline(m[2])}</h${lv}>`);
+    } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+      flushPara(); closeList();
+      out.push('<hr class="md-hr">');
+    } else if ((m = line.match(/^\s*&gt;\s?(.*)$/))) {
+      // 引用(この時点で > は &gt; にエスケープ済み)
+      flushPara(); closeList();
+      const prev = out[out.length - 1];
+      if (prev && prev.startsWith('<blockquote')) {
+        // 連続する引用行はひとつのブロックにまとめる
+        out[out.length - 1] = prev.replace(/<\/blockquote>$/, `<br>${inline(m[1])}</blockquote>`);
+      } else {
+        out.push(`<blockquote class="md-quote">${inline(m[1])}</blockquote>`);
+      }
+    } else if ((m = line.match(/^\s*(?:[-*+])\s+(.*)$/))) {
+      flushPara(); openList('ul');
+      out.push(`<li>${inline(m[1])}</li>`);
+    } else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+      flushPara(); openList('ol');
+      out.push(`<li>${inline(m[1])}</li>`);
+    } else {
+      closeList();
+      para.push(line.trim());
+    }
+  }
+  flushPara(); closeList();
+
+  return out.join('\n').replace(/ BLOCK(\d+) /g, (_, i) => blocks[i]);
+}
+
 /* ---------- AIフィードバック ---------- */
 document.getElementById('btn-ai-feedback').addEventListener('click', async () => {
   const area = document.getElementById('ai-feedback-area');
@@ -235,13 +318,11 @@ document.getElementById('btn-ai-feedback').addEventListener('click', async () =>
   const label = `${AI.providerLabel()} / ${AI.getModel()}`;
   try {
     const text = await AI.presentationFeedback(Practice.session);
-    area.innerHTML = `<p class="field-note" style="margin-bottom:8px">— ${escapeHtml(label)} —</p>`;
-    const body = document.createElement('div');
-    body.style.whiteSpace = 'pre-wrap';
-    body.textContent = text;
-    area.appendChild(body);
+    area.innerHTML =
+      `<p class="field-note md-source">— ${escapeHtml(label)} —</p>
+       <div class="md-body">${renderMarkdown(text)}</div>`;
   } catch (err) {
-    area.textContent = '⚠ ' + err.message;
+    area.innerHTML = `<p class="md-error">⚠ ${escapeHtml(err.message)}</p>`;
   }
 });
 
@@ -298,7 +379,11 @@ function addChatMsg(who, text) {
   const log = document.getElementById('qa-log');
   const div = document.createElement('div');
   div.className = `chat-msg ${who}`;
-  div.textContent = text;
+  if (who === 'ai') {
+    div.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
+  } else {
+    div.textContent = text;
+  }
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 }
