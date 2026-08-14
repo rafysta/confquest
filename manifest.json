@@ -1,0 +1,22 @@
+{
+  "name": "ConfQuest - 学会スキルトレーニング",
+  "short_name": "ConfQuest",
+  "description": "学会発表・質疑応答・懇親会会話をゲーム感覚で鍛えるアプリ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

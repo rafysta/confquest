@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<title>ConfQuest</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+
+<!-- ホーム画面 -->
+<section id="screen-home" class="screen active">
+  <header class="app-header">
+    <h1>ConfQuest</h1>
+    <p class="subtitle">Level up your conference skills</p>
+  </header>
+  <div class="streak-banner card" id="streak-banner">
+    <span class="streak-flame">🔥</span>
+    <span id="streak-text">連続 0 日</span>
+    <span class="points-badge" id="points-badge">⭐ 0 pt</span>
+  </div>
+  <nav class="home-menu">
+    <button class="menu-btn primary" data-nav="setup">
+      <span class="menu-icon">🎤</span>
+      <span class="menu-label">発表練習</span>
+      <span class="menu-desc">スライドを使ってプレゼン練習</span>
+    </button>
+    <button class="menu-btn" data-nav="history">
+      <span class="menu-icon">📈</span>
+      <span class="menu-label">練習履歴</span>
+      <span class="menu-desc">これまでの記録と改善の推移</span>
+    </button>
+    <button class="menu-btn disabled" disabled>
+      <span class="menu-icon">💬</span>
+      <span class="menu-label">会話トレーニング</span>
+      <span class="menu-desc">近日公開</span>
+    </button>
+    <button class="menu-btn disabled" disabled>
+      <span class="menu-icon">🇰🇷</span>
+      <span class="menu-label">韓国語・広東語</span>
+      <span class="menu-desc">近日公開</span>
+    </button>
+    <button class="menu-btn" data-nav="settings">
+      <span class="menu-icon">⚙️</span>
+      <span class="menu-label">設定</span>
+      <span class="menu-desc">APIキー・言語など</span>
+    </button>
+  </nav>
+</section>
+
+<!-- 練習セットアップ画面 -->
+<section id="screen-setup" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>発表練習の設定</h2>
+  </header>
+  <div class="setup-form">
+    <label class="field">
+      <span>スライド (PDF)</span>
+      <input type="file" id="pdf-input" accept="application/pdf">
+      <span class="field-note" id="pdf-status">未選択(PDFなしでも練習可能)</span>
+    </label>
+    <label class="field">
+      <span>発表時間 (分)</span>
+      <input type="number" id="target-minutes" value="12" min="1" max="120" step="0.5">
+    </label>
+    <label class="field">
+      <span>発表言語</span>
+      <select id="speech-lang">
+        <option value="en-US" selected>英語 (en-US)</option>
+        <option value="ja-JP">日本語 (ja-JP)</option>
+      </select>
+    </label>
+    <label class="field checkbox-field">
+      <input type="checkbox" id="enable-speech" checked>
+      <span>音声認識を使う(文字起こし・WPM・filler分析)</span>
+    </label>
+    <label class="field checkbox-field">
+      <input type="checkbox" id="enable-recording" checked>
+      <span>録音する(終了後に聞き直せます)</span>
+    </label>
+    <button class="btn-large primary" id="start-practice">練習スタート</button>
+  </div>
+</section>
+
+<!-- 練習画面 -->
+<section id="screen-practice" class="screen practice-mode">
+  <div class="practice-status">
+    <span id="p-slide-info">Slide 1 / 1</span>
+    <span id="p-elapsed">0:00 / 12:00</span>
+    <span id="p-prediction" title="このペースでの終了予測">予測 --:--</span>
+  </div>
+  <div class="pace-bar-wrap">
+    <div class="pace-bar" id="pace-bar"></div>
+    <div class="pace-marker" id="pace-marker"></div>
+  </div>
+  <div id="pace-warning" class="pace-warning hidden"></div>
+  <div class="slide-area" id="slide-area">
+    <canvas id="slide-canvas"></canvas>
+    <div class="no-pdf-message hidden" id="no-pdf-message">
+      <p>PDFなしモード</p>
+      <p class="small">画面タップでセクションを進められます</p>
+    </div>
+    <div class="tap-zone tap-left" id="tap-prev"></div>
+    <div class="tap-zone tap-right" id="tap-next"></div>
+  </div>
+  <div class="slide-timer" id="slide-timer">このスライド 0:00</div>
+  <div class="rec-indicator hidden" id="rec-indicator"><span class="rec-dot"></span> REC</div>
+  <div class="practice-controls">
+    <button class="btn-control" id="btn-pause">⏸ 一時停止</button>
+    <button class="btn-control danger" id="btn-finish">■ 終了</button>
+  </div>
+</section>
+
+<!-- 結果画面 -->
+<section id="screen-results" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>練習結果</h2>
+  </header>
+  <div id="results-content"></div>
+  <div class="results-actions">
+    <button class="btn-large" id="btn-ai-feedback">🤖 AIフィードバック</button>
+    <button class="btn-large" id="btn-qa-sim">❓ AI質疑応答シミュレータ</button>
+    <button class="btn-large primary" data-nav="home">ホームへ戻る</button>
+  </div>
+  <div id="ai-feedback-area" class="card hidden"></div>
+</section>
+
+<!-- Q&Aシミュレータ画面 -->
+<section id="screen-qa" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="results">←</button>
+    <h2>AI質疑応答</h2>
+  </header>
+  <div class="field">
+    <span>質問者のタイプ</span>
+    <select id="qa-persona">
+      <option value="student">学生</option>
+      <option value="general" selected>分野外の生物学者</option>
+      <option value="specialist">同分野の専門家</option>
+      <option value="critical">厳しい査読者</option>
+    </select>
+  </div>
+  <div class="chat-log" id="qa-log"></div>
+  <div class="chat-input-row">
+    <textarea id="qa-input" rows="2" placeholder="英語で回答を入力..."></textarea>
+    <button id="qa-send" class="btn-control primary">送信</button>
+  </div>
+  <button class="btn-large" id="qa-start">質疑応答を開始</button>
+</section>
+
+<!-- 履歴画面 -->
+<section id="screen-history" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>練習履歴</h2>
+  </header>
+  <div id="history-content"></div>
+</section>
+
+<!-- 設定画面 -->
+<section id="screen-settings" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>設定</h2>
+  </header>
+  <div class="setup-form">
+    <label class="field">
+      <span>Anthropic APIキー</span>
+      <input type="password" id="api-key" placeholder="sk-ant-...">
+      <span class="field-note">AI機能(フィードバック・質疑応答)に必要。この端末にのみ保存されます。</span>
+    </label>
+    <label class="field">
+      <span>AIモデル</span>
+      <select id="ai-model">
+        <option value="claude-sonnet-5" selected>Claude Sonnet 5 (高品質)</option>
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (高速・低価格)</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Filler語リスト (カンマ区切り)</span>
+      <input type="text" id="filler-words" value="um, uh, so, actually, basically, you know, kind of, I mean, like">
+    </label>
+    <button class="btn-large primary" id="save-settings">保存</button>
+    <p class="field-note" id="settings-saved" style="display:none">✓ 保存しました</p>
+  </div>
+</section>
+
+<script src="js/ai.js"></script>
+<script src="js/practice.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
