@@ -172,21 +172,46 @@
   </header>
   <div class="setup-form">
     <label class="field">
-      <span>Anthropic APIキー</span>
-      <input type="password" id="api-key" placeholder="sk-ant-...">
-      <span class="field-note">AI機能(フィードバック・質疑応答)に必要。この端末にのみ保存されます。</span>
+      <span>AIプロバイダ(フィードバック・質疑応答)</span>
+      <select id="ai-provider">
+        <option value="claude" selected>Anthropic Claude</option>
+        <option value="openai">OpenAI GPT</option>
+      </select>
+      <span class="field-note">両方のキーを入れておけば、いつでも切り替えて質を比較できます。</span>
     </label>
-    <label class="field">
-      <span>OpenAI APIキー(文字起こし用)</span>
-      <input type="password" id="openai-key" placeholder="sk-...">
-      <span class="field-note">録音の文字起こし(Whisper)に必要。約0.9円/分。この端末にのみ保存されます。</span>
-    </label>
-    <label class="field">
-      <span>AIモデル</span>
+    <label class="field" id="field-claude-model">
+      <span>Claudeモデル</span>
       <select id="ai-model">
         <option value="claude-sonnet-5" selected>Claude Sonnet 5 (高品質)</option>
         <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (高速・低価格)</option>
       </select>
+    </label>
+    <label class="field" id="field-openai-model">
+      <span>OpenAIモデル</span>
+      <select id="openai-model">
+        <option value="gpt-5" selected>GPT-5 (高品質)</option>
+        <option value="gpt-5-mini">GPT-5 mini (高速・低価格)</option>
+        <option value="gpt-4o">GPT-4o</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Anthropic APIキー</span>
+      <input type="password" id="api-key" placeholder="sk-ant-...">
+      <span class="field-note">Claudeを使う場合に必要。この端末にのみ保存されます。</span>
+    </label>
+    <label class="field">
+      <span>OpenAI APIキー</span>
+      <input type="password" id="openai-key" placeholder="sk-...">
+      <span class="field-note">文字起こしに必須。OpenAI GPTを使う場合もこのキーを使います。</span>
+    </label>
+    <label class="field">
+      <span>文字起こしモデル</span>
+      <select id="stt-model">
+        <option value="whisper-1" selected>Whisper (約0.9円/分・スライド別集計に対応)</option>
+        <option value="gpt-4o-transcribe">GPT-4o Transcribe (約0.9円/分・高精度)</option>
+        <option value="gpt-4o-mini-transcribe">GPT-4o mini Transcribe (約0.45円/分・最安)</option>
+      </select>
+      <span class="field-note">Whisper以外はタイムスタンプ非対応のため、発話がスライド1にまとめて記録されます。</span>
     </label>
     <label class="field">
       <span>Filler語リスト (カンマ区切り)</span>

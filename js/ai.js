@@ -1,10 +1,13 @@
-/* ConfQuest - AI連携 (Claude API + Whisper文字起こし) */
+/* ConfQuest - AI連携 (Claude / OpenAI 切替可能 + 文字起こし) */
 'use strict';
 
-/** OpenAI Whisperによる文字起こし */
+/** OpenAIによる文字起こし */
 const STT = {
   getKey() {
     return localStorage.getItem('lq_openai_key') || '';
+  },
+  getModel() {
+    return localStorage.getItem('lq_stt_model') || 'whisper-1';
   },
 
   /**
@@ -17,10 +20,16 @@ const STT = {
     }
     const ext = (blob.type.includes('ogg')) ? 'ogg'
       : (blob.type.includes('mp4') ? 'mp4' : 'webm');
+    const model = this.getModel();
     const form = new FormData();
     form.append('file', blob, `recording.${ext}`);
-    form.append('model', 'whisper-1');
-    form.append('response_format', 'verbose_json');
+    form.append('model', model);
+    // whisper-1 のみ verbose_json (タイムスタンプ付き) に対応
+    if (model === 'whisper-1') {
+      form.append('response_format', 'verbose_json');
+    } else {
+      form.append('response_format', 'json');
+    }
     if (lang) form.append('language', lang.split('-')[0]); // en-US -> en
 
     const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -42,22 +51,39 @@ const STT = {
 };
 
 const AI = {
+  /** 'claude' | 'openai' */
+  getProvider() {
+    return localStorage.getItem('lq_ai_provider') || 'claude';
+  },
   getKey() {
-    return localStorage.getItem('lq_api_key') || '';
+    return this.getProvider() === 'openai'
+      ? (localStorage.getItem('lq_openai_key') || '')
+      : (localStorage.getItem('lq_api_key') || '');
   },
   getModel() {
-    return localStorage.getItem('lq_ai_model') || 'claude-sonnet-5';
+    return this.getProvider() === 'openai'
+      ? (localStorage.getItem('lq_openai_model') || 'gpt-5')
+      : (localStorage.getItem('lq_ai_model') || 'claude-sonnet-5');
+  },
+  providerLabel() {
+    return this.getProvider() === 'openai' ? 'OpenAI' : 'Anthropic';
   },
 
   /**
-   * Claude APIを呼ぶ。messages: [{role, content}]
+   * 選択中のプロバイダのAPIを呼ぶ。messages: [{role, content}]
    * 戻り値: アシスタントのテキスト
    */
   async chat(systemPrompt, messages, maxTokens = 1500) {
     const key = this.getKey();
     if (!key) {
-      throw new Error('APIキーが設定されていません。設定画面で入力してください。');
+      throw new Error(`${this.providerLabel()} のAPIキーが設定されていません。設定画面で入力してください。`);
     }
+    return this.getProvider() === 'openai'
+      ? this._chatOpenAI(key, systemPrompt, messages, maxTokens)
+      : this._chatClaude(key, systemPrompt, messages, maxTokens);
+  },
+
+  async _chatClaude(key, systemPrompt, messages, maxTokens) {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -75,13 +101,34 @@ const AI = {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(`APIエラー (${res.status}): ${body.slice(0, 300)}`);
+      throw new Error(`Claude APIエラー (${res.status}): ${body.slice(0, 300)}`);
     }
     const data = await res.json();
     return (data.content || [])
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
       .join('\n');
+  },
+
+  async _chatOpenAI(key, systemPrompt, messages, maxTokens) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: this.getModel(),
+        max_completion_tokens: maxTokens,
+        messages: [{ role: 'system', content: systemPrompt }, ...messages]
+      })
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`OpenAI APIエラー (${res.status}): ${body.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    return (data.choices && data.choices[0] && data.choices[0].message.content) || '';
   },
 
   /** 発表のAIフィードバック */

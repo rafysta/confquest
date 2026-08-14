@@ -52,17 +52,36 @@ function renderHome() {
 function loadSettings() {
   document.getElementById('api-key').value = localStorage.getItem('lq_api_key') || '';
   document.getElementById('openai-key').value = localStorage.getItem('lq_openai_key') || '';
+  document.getElementById('ai-provider').value =
+    localStorage.getItem('lq_ai_provider') || 'claude';
   document.getElementById('ai-model').value =
     localStorage.getItem('lq_ai_model') || 'claude-sonnet-5';
+  document.getElementById('openai-model').value =
+    localStorage.getItem('lq_openai_model') || 'gpt-5';
+  document.getElementById('stt-model').value =
+    localStorage.getItem('lq_stt_model') || 'whisper-1';
   document.getElementById('filler-words').value =
     localStorage.getItem('lq_fillers') ||
     'um, uh, so, actually, basically, you know, kind of, I mean, like';
+  updateProviderFields();
 }
+
+/** 選択中のプロバイダに応じてモデル選択欄を出し分け */
+function updateProviderFields() {
+  const isOpenAI = document.getElementById('ai-provider').value === 'openai';
+  document.getElementById('field-claude-model').classList.toggle('hidden', isOpenAI);
+  document.getElementById('field-openai-model').classList.toggle('hidden', !isOpenAI);
+}
+
+document.getElementById('ai-provider').addEventListener('change', updateProviderFields);
 
 document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_api_key', document.getElementById('api-key').value.trim());
   localStorage.setItem('lq_openai_key', document.getElementById('openai-key').value.trim());
+  localStorage.setItem('lq_ai_provider', document.getElementById('ai-provider').value);
   localStorage.setItem('lq_ai_model', document.getElementById('ai-model').value);
+  localStorage.setItem('lq_openai_model', document.getElementById('openai-model').value);
+  localStorage.setItem('lq_stt_model', document.getElementById('stt-model').value);
   localStorage.setItem('lq_fillers', document.getElementById('filler-words').value);
   const note = document.getElementById('settings-saved');
   note.style.display = 'block';
@@ -213,9 +232,14 @@ document.getElementById('btn-ai-feedback').addEventListener('click', async () =>
   const area = document.getElementById('ai-feedback-area');
   area.classList.remove('hidden');
   area.innerHTML = '<div class="spinner"></div>';
+  const label = `${AI.providerLabel()} / ${AI.getModel()}`;
   try {
     const text = await AI.presentationFeedback(Practice.session);
-    area.textContent = text;
+    area.innerHTML = `<p class="field-note" style="margin-bottom:8px">— ${escapeHtml(label)} —</p>`;
+    const body = document.createElement('div');
+    body.style.whiteSpace = 'pre-wrap';
+    body.textContent = text;
+    area.appendChild(body);
   } catch (err) {
     area.textContent = '⚠ ' + err.message;
   }

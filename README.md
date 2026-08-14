@@ -10,7 +10,7 @@
 - **時間管理**: 全体タイマー、スライドごとの滞在時間、リアルタイム終了予測、ペース警告
 - **録音**: 練習を録音し、終了後に聞き直し
 - **文字起こし**: 録音をWhisper APIで文字起こしし、WPM(話速)とfiller語(um, uh, so...)をスライドごとに自動集計
-- **AIフィードバック**: Claude APIで改善点3つ・言い回しの改善例を提示
+- **AIフィードバック**: 改善点3つ・言い回しの改善例を提示(Claude / OpenAI GPT を設定画面で切替可能。同じ練習を両方に評価させて比較できます)
 - **AI質疑応答シミュレータ**: 質問者タイプ(学生〜厳しい査読者)を選び、発表内容に基づく英語Q&A練習
 - **ゲーミフィケーション**: スコア・ポイント・連続日数(ストリーク)
 
@@ -53,8 +53,10 @@ git push -u origin main
 
 いずれも設定画面に貼り付けます(この端末のブラウザにのみ保存されます)。
 
-- **Anthropic APIキー**(AIフィードバック・質疑応答用): https://console.anthropic.com → API Keys → Create Key
-- **OpenAI APIキー**(文字起こし用、約0.9円/分): https://platform.openai.com → API Keys → Create new secret key
+- **OpenAI APIキー**(必須。文字起こし用。約0.45〜0.9円/分): https://platform.openai.com → API Keys → Create new secret key
+- **Anthropic APIキー**(任意。AIフィードバック・質疑応答をClaudeで行う場合): https://console.anthropic.com → API Keys → Create Key
+
+AIフィードバックのプロバイダは設定画面で切り替えられます。両方のキーを入れておけば、同じ練習をClaudeとGPTの両方に評価させて質を比べられます(フィードバック欄の先頭に使用モデルが表示されます)。
 
 ## 技術構成
 
