@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.6.2';
+const APP_VERSION = '0.7.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,16 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.7.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '学会攻略モード(Phase 1)を追加。分岐マップを進み、会話バトルで研究費を集め、最後のエリートに挑みます' },
+      { type: 'new', text: '通常戦闘用の短い会話カードを20枚追加(褒め方、聞き返し方、断り方、輪への入り方など)' },
+      { type: 'new', text: 'アイテム6種(シャツ、翻訳イヤホン、名刺入れ、クーポン、お守り、トロフィー)とお店・休憩所・お宝ノード' },
+      { type: 'new', text: '🧠メンタル制。悪い選択でダメージ、0でゲームオーバー(XPは持ち帰り)。進行は自動保存され中断・再開できます' }
+    ]
+  },
   {
     version: '0.6.2',
     date: '2026-08-15',

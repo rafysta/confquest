@@ -12,6 +12,7 @@ function showScreen(name) {
   if (name === 'talk-list') renderTalkList();
   if (name === 'convo-list') renderConvoList();
   if (name === 'status') renderStatus();
+  if (name === 'run-map') Run.renderMap();
 }
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
@@ -52,6 +53,7 @@ function renderHome() {
   document.getElementById('points-badge').textContent = `⭐ ${d.points} pt`;
   const sum = document.getElementById('status-summary');
   if (sum) sum.textContent = `総合レベル ${Stats.totalLevel()}・能力の成長`;
+  updateRunMenuDesc();
 }
 
 /* ---------- 設定 ---------- */
@@ -465,6 +467,25 @@ function renderHistory() {
       </span>
     </div>`;
   }).join('');
+}
+
+/* ---------- 学会攻略モード ---------- */
+document.getElementById('menu-run').addEventListener('click', () => {
+  if (Run.hasActive()) {
+    Run.resume();
+    showScreen('run-map');
+  } else {
+    if (!confirm('学会攻略を新しく始めます。\n🧠メンタルが尽きるとゲームオーバーですが、獲得したXPは残ります。')) return;
+    Run.newRun();
+    showScreen('run-map');
+  }
+});
+
+function updateRunMenuDesc() {
+  const el = document.getElementById('menu-run-desc');
+  if (el) el.textContent = Run.hasActive()
+    ? '進行中のランがあります — 続きから'
+    : 'マップを進んで学会を攻略するゲーム';
 }
 
 /* ---------- 会話トレーニング ---------- */
