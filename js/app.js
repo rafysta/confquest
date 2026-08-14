@@ -9,6 +9,7 @@ function showScreen(name) {
   if (name === 'history') renderHistory();
   if (name === 'settings') loadSettings();
   if (name === 'about') renderAbout();
+  if (name === 'talk-list') renderTalkList();
 }
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
@@ -457,6 +458,148 @@ function renderHistory() {
       </span>
     </div>`;
   }).join('');
+}
+
+/* ---------- 講演の録音・要約 ---------- */
+document.getElementById('btn-talk-start').addEventListener('click', async () => {
+  if (!localStorage.getItem('lq_openai_key')) {
+    alert('文字起こしにOpenAI APIキーが必要です。設定画面で入力してください。');
+    return;
+  }
+  const meta = {
+    title: document.getElementById('talk-title').value.trim(),
+    speaker: document.getElementById('talk-speaker').value.trim(),
+    venue: document.getElementById('talk-venue').value.trim(),
+    lang: document.getElementById('talk-lang').value
+  };
+  try {
+    await Talk.start(meta);
+  } catch (err) {
+    alert('録音を開始できませんでした: ' + err.message);
+    return;
+  }
+  document.getElementById('talk-note').value = '';
+  document.getElementById('btn-talk-pause').textContent = '⏸ 一時停止';
+  document.getElementById('talk-rec-title').textContent = meta.title || '無題の講演';
+  showScreen('talk-record');
+});
+
+document.getElementById('btn-talk-mark').addEventListener('click', () => Talk.addMark());
+document.getElementById('btn-talk-pause').addEventListener('click', () => Talk.togglePause());
+
+document.getElementById('btn-talk-finish').addEventListener('click', async () => {
+  Talk.current.note = document.getElementById('talk-note').value.trim();
+  await Talk.stop();
+  showScreen('talk-result');
+  const el = document.getElementById('talk-result-content');
+  const actions = document.getElementById('talk-actions');
+  actions.classList.add('hidden');
+  document.getElementById('talk-share-status').textContent = '';
+
+  try {
+    el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中...</p>';
+    await Talk.transcribe();
+    el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">要約を作成中...</p>';
+    await Talk.summarize();
+    Talk.save();
+    renderTalkResult();
+    actions.classList.remove('hidden');
+  } catch (err) {
+    el.innerHTML = `<p class="md-error">⚠ ${escapeHtml(err.message)}</p>`;
+    if (Talk.current && Talk.current.transcript) {
+      // 要約に失敗しても文字起こしは残す
+      Talk.save();
+      el.innerHTML += `<p class="field-note">文字起こしは保存しました。「聴講した講演」から確認できます。</p>
+        <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
+    }
+    if (Talk.audioUrl) {
+      el.innerHTML += `<p class="field-note" style="margin-top:12px">録音は再生できます:</p>
+        <audio controls src="${Talk.audioUrl}"></audio>`;
+    }
+  }
+});
+
+function renderTalkResult() {
+  const c = Talk.current;
+  const el = document.getElementById('talk-result-content');
+  el.innerHTML = `
+    <div class="card">
+      <h3 style="font-size:1.05rem;margin-bottom:6px">${escapeHtml(c.title)}</h3>
+      <p class="field-note">
+        ${c.speaker ? escapeHtml(c.speaker) + ' · ' : ''}${PracticeUtil.fmtTime(c.durationMs)}
+        ${c.markedText && c.markedText.length ? ' · ⭐' + c.markedText.length : ''}
+      </p>
+    </div>
+    ${Talk.audioUrl ? `<audio controls src="${Talk.audioUrl}"></audio>` : ''}
+    <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
+  `;
+}
+
+/* 共有・保存・コピー */
+function includeTranscript() {
+  return document.getElementById('include-transcript').checked;
+}
+
+document.getElementById('btn-talk-share').addEventListener('click', async () => {
+  const status = document.getElementById('talk-share-status');
+  try {
+    const mode = await Talk.share(includeTranscript());
+    status.textContent = mode === 'cancelled' ? '共有をキャンセルしました'
+      : (mode === 'file' ? '✓ ファイルとして共有しました' : '✓ テキストとして共有しました');
+  } catch (err) {
+    status.textContent = '⚠ ' + err.message;
+  }
+});
+
+document.getElementById('btn-talk-download').addEventListener('click', () => {
+  Talk.download(includeTranscript());
+  document.getElementById('talk-share-status').textContent = '✓ ダウンロードフォルダに保存しました';
+});
+
+document.getElementById('btn-talk-copy').addEventListener('click', async () => {
+  const status = document.getElementById('talk-share-status');
+  try {
+    await Talk.copy(includeTranscript());
+    status.textContent = '✓ クリップボードにコピーしました';
+  } catch (err) {
+    status.textContent = '⚠ コピーできませんでした: ' + err.message;
+  }
+});
+
+/* 聴講した講演の一覧 */
+function renderTalkList() {
+  const list = JSON.parse(localStorage.getItem('lq_talks') || '[]');
+  const el = document.getElementById('talk-list-content');
+  if (list.length === 0) {
+    el.innerHTML = '<p class="empty-note">まだ録音した講演がありません。<br>学会で使ってみましょう!</p>';
+    return;
+  }
+  el.innerHTML = list.map((t) => {
+    const d = new Date(t.date);
+    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+    return `<button class="talk-item" data-talk-id="${t.id}">
+      <span class="talk-item-title">${escapeHtml(t.title)}</span>
+      <span class="meta">${dateStr}${t.speaker ? ' · ' + escapeHtml(t.speaker) : ''} · ${PracticeUtil.fmtTime(t.durationMs)}${t.summary ? '' : ' · 要約なし'}</span>
+    </button>`;
+  }).join('');
+
+  el.querySelectorAll('[data-talk-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const found = Talk.load(Number(btn.dataset.talkId));
+      if (!found) return;
+      showScreen('talk-result');
+      document.getElementById('talk-share-status').textContent = '';
+      document.getElementById('talk-actions').classList.remove('hidden');
+      if (found.summary) {
+        renderTalkResult();
+      } else {
+        document.getElementById('talk-result-content').innerHTML =
+          `<div class="card"><h3 style="font-size:1.05rem">${escapeHtml(found.title)}</h3>
+           <p class="field-note">要約がありません(作成時にエラー)。文字起こしのみ表示します。</p></div>
+           <div class="transcript-box">${escapeHtml(found.transcript || '')}</div>`;
+      }
+    });
+  });
 }
 
 /* ---------- アプリ情報 ---------- */

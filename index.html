@@ -30,10 +30,20 @@
       <span class="menu-label">発表練習</span>
       <span class="menu-desc">スライドを使ってプレゼン練習</span>
     </button>
+    <button class="menu-btn" data-nav="talk-setup">
+      <span class="menu-icon">🎙️</span>
+      <span class="menu-label">講演を録音・要約</span>
+      <span class="menu-desc">学会で聴いた発表を記録してPCへ</span>
+    </button>
     <button class="menu-btn" data-nav="history">
       <span class="menu-icon">📈</span>
       <span class="menu-label">練習履歴</span>
       <span class="menu-desc">これまでの記録と改善の推移</span>
+    </button>
+    <button class="menu-btn" data-nav="talk-list">
+      <span class="menu-icon">📚</span>
+      <span class="menu-label">聴講した講演</span>
+      <span class="menu-desc">保存した要約を見る・送る</span>
     </button>
     <button class="menu-btn disabled" disabled>
       <span class="menu-icon">💬</span>
@@ -57,6 +67,92 @@
     </button>
   </nav>
   <p class="version-footer" id="version-footer"></p>
+</section>
+
+<!-- 講演録音: 設定 -->
+<section id="screen-talk-setup" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>講演を録音</h2>
+  </header>
+  <div class="setup-form">
+    <label class="field">
+      <span>講演タイトル</span>
+      <input type="text" id="talk-title" placeholder="Chromatin organization in senescence">
+    </label>
+    <label class="field">
+      <span>発表者(任意)</span>
+      <input type="text" id="talk-speaker" placeholder="Prof. Kim">
+    </label>
+    <label class="field">
+      <span>会場・セッション(任意)</span>
+      <input type="text" id="talk-venue" placeholder="ISSY39 Session 3">
+    </label>
+    <label class="field">
+      <span>講演の言語</span>
+      <select id="talk-lang">
+        <option value="en" selected>英語</option>
+        <option value="ja">日本語</option>
+        <option value="ko">韓国語</option>
+      </select>
+    </label>
+    <p class="field-note">💡 個別の講演ごとに録音してください。30分程度までが目安です。</p>
+    <button class="btn-large primary" id="btn-talk-start">● 録音を開始</button>
+  </div>
+</section>
+
+<!-- 講演録音: 録音中 -->
+<section id="screen-talk-record" class="screen">
+  <div class="talk-rec-area">
+    <div class="talk-rec-status">
+      <span class="rec-dot big" id="talk-rec-dot"></span>
+      <span id="talk-elapsed" class="talk-time">0:00</span>
+    </div>
+    <p class="field-note" id="talk-rec-title"></p>
+    <p class="field-note" id="talk-mark-count">マークなし</p>
+    <p class="pace-warning hidden" id="talk-size-warn">⚠ 録音が長くなっています。そろそろ終了してください</p>
+    <button class="mark-btn" id="btn-talk-mark">
+      <span class="mark-icon">⭐</span>
+      <span>ここは重要</span>
+      <span class="mark-hint">押した前後が要約で強調されます</span>
+    </button>
+    <label class="field" style="width:100%;max-width:420px">
+      <span>メモ(任意)</span>
+      <textarea id="talk-note" rows="3" placeholder="自分の研究との関連、思いついた質問など"></textarea>
+    </label>
+  </div>
+  <div class="practice-controls">
+    <button class="btn-control" id="btn-talk-pause">⏸ 一時停止</button>
+    <button class="btn-control danger" id="btn-talk-finish">■ 終了して要約</button>
+  </div>
+</section>
+
+<!-- 講演録音: 結果 -->
+<section id="screen-talk-result" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>講演の要約</h2>
+  </header>
+  <div id="talk-result-content"></div>
+  <div class="results-actions" id="talk-actions">
+    <label class="field checkbox-field">
+      <input type="checkbox" id="include-transcript">
+      <span>文字起こし全文も含める</span>
+    </label>
+    <button class="btn-large primary" id="btn-talk-share">📤 共有する(Nextcloud・Gmailなど)</button>
+    <button class="btn-large" id="btn-talk-download">⬇ ファイルとして保存</button>
+    <button class="btn-large" id="btn-talk-copy">📋 コピー</button>
+    <p class="field-note" id="talk-share-status"></p>
+  </div>
+</section>
+
+<!-- 聴講した講演の一覧 -->
+<section id="screen-talk-list" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>聴講した講演</h2>
+  </header>
+  <div id="talk-list-content"></div>
 </section>
 
 <!-- アプリ情報画面 -->
@@ -249,6 +345,7 @@
 <script src="js/version.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/practice.js"></script>
+<script src="js/talk.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

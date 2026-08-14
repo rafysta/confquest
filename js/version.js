@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.4.0';
+const APP_VERSION = '0.5.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,16 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.5.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '「講演を録音・要約」を追加。学会で聴いた発表を録音し、AIが構造化した要約を作成します' },
+      { type: 'new', text: '録音中の「ここは重要」ボタン。押した前後が要約で重点的に扱われます' },
+      { type: 'new', text: '共有ボタンからNextcloud・Gmailなど端末のアプリに送信可能。ファイル保存とコピーにも対応' },
+      { type: 'new', text: '「聴講した講演」で保存した要約を後から見返して再送信できます' }
+    ]
+  },
   {
     version: '0.4.0',
     date: '2026-08-15',
