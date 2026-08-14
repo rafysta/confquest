@@ -10,6 +10,8 @@ function showScreen(name) {
   if (name === 'settings') loadSettings();
   if (name === 'about') renderAbout();
   if (name === 'talk-list') renderTalkList();
+  if (name === 'convo-list') renderConvoList();
+  if (name === 'status') renderStatus();
 }
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
@@ -48,6 +50,8 @@ function renderHome() {
   document.getElementById('streak-text').textContent =
     d.lastDay === today ? `連続 ${effective} 日 (今日クリア!)` : `連続 ${effective} 日`;
   document.getElementById('points-badge').textContent = `⭐ ${d.points} pt`;
+  const sum = document.getElementById('status-summary');
+  if (sum) sum.textContent = `総合レベル ${Stats.totalLevel()}・能力の成長`;
 }
 
 /* ---------- 設定 ---------- */
@@ -460,6 +464,73 @@ function renderHistory() {
   }).join('');
 }
 
+/* ---------- 会話トレーニング ---------- */
+function renderConvoList() {
+  const hist = JSON.parse(localStorage.getItem('lq_convo_history') || '[]');
+  const el = document.getElementById('convo-list-content');
+  el.innerHTML = SCENARIOS.map((s) => {
+    const past = hist.filter((h) => h.scenarioId === s.id);
+    const best = past.length ? Math.max(...past.map((h) => h.affinity)) : null;
+    const badge = best !== null
+      ? `<span class="scen-best" style="color:${affinityRank(best).color}">最高 ${affinityRank(best).rank}</span>`
+      : '<span class="scen-best new">未挑戦</span>';
+    return `<button class="scen-card" data-scenario="${s.id}">
+      <span class="scen-icon">${s.icon}</span>
+      <span class="scen-body">
+        <span class="scen-title">${escapeHtml(s.title)}</span>
+        <span class="scen-meta">Lv.${s.level} ・ ${s.turns.length}ターン ・ ${s.focus.map((f) => Stats.KEYS[f].label).join(' / ')}</span>
+      </span>
+      ${badge}
+    </button>`;
+  }).join('');
+
+  el.querySelectorAll('[data-scenario]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const s = SCENARIOS.find((x) => x.id === btn.dataset.scenario);
+      document.getElementById('convo-title').textContent = s.title;
+      showScreen('convo-play');
+      Convo.start(btn.dataset.scenario);
+    });
+  });
+}
+
+function renderStatus() {
+  const d = Stats.data();
+  const el = document.getElementById('status-content');
+  el.innerHTML = `
+    <div class="card" style="text-align:center">
+      <p class="field-note">総合レベル</p>
+      <p class="about-version">${Stats.totalLevel()}</p>
+    </div>
+    ${Object.entries(Stats.KEYS).map(([k, meta]) => {
+      const lv = Stats.level(d[k] || 0);
+      const pct = Math.round((lv.into / lv.need) * 100);
+      return `<div class="stat-row">
+        <span class="stat-icon">${meta.icon}</span>
+        <span class="stat-name">${meta.label}<span class="stat-desc">${meta.desc}</span></span>
+        <span class="stat-lv">Lv.${lv.level}</span>
+        <div class="stat-track"><div class="stat-fill" style="width:${pct}%"></div></div>
+        <span class="stat-xp">${lv.into} / ${lv.need} XP</span>
+      </div>`;
+    }).join('')}`;
+
+  const hist = JSON.parse(localStorage.getItem('lq_convo_history') || '[]');
+  const hel = document.getElementById('convo-history-content');
+  if (!hist.length) {
+    hel.innerHTML = '<p class="empty-note">まだ記録がありません。<br>会話トレーニングを始めましょう!</p>';
+    return;
+  }
+  hel.innerHTML = hist.slice(0, 20).map((h) => {
+    const d2 = new Date(h.date);
+    const r = affinityRank(h.affinity);
+    return `<div class="history-item">
+      <span class="date">${d2.getMonth() + 1}/${d2.getDate()} ${escapeHtml(h.title)}</span>
+      <span style="font-weight:700;color:${r.color}">${r.rank}</span>
+      <span class="meta">好感度 ${h.affinity} ・ ベスト ${h.bestCount}/${h.total}</span>
+    </div>`;
+  }).join('');
+}
+
 /* ---------- 講演の録音・要約 ---------- */
 document.getElementById('btn-talk-start').addEventListener('click', async () => {
   if (!localStorage.getItem('lq_openai_key')) {
@@ -647,6 +718,7 @@ document.getElementById('btn-check-update').addEventListener('click', async () =
 /* ---------- 初期化 ---------- */
 document.getElementById('version-footer').textContent = `ConfQuest v${APP_VERSION}`;
 document.getElementById('menu-version').textContent = `バージョン v${APP_VERSION}・更新履歴`;
+document.getElementById('status-summary').textContent = `総合レベル ${Stats.totalLevel()}・能力の成長`;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then((reg) => {

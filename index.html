@@ -45,10 +45,15 @@
       <span class="menu-label">聴講した講演</span>
       <span class="menu-desc">保存した要約を見る・送る</span>
     </button>
-    <button class="menu-btn disabled" disabled>
+    <button class="menu-btn" data-nav="convo-list">
       <span class="menu-icon">💬</span>
       <span class="menu-label">会話トレーニング</span>
-      <span class="menu-desc">近日公開</span>
+      <span class="menu-desc">懇親会の立ち回りを鍛える</span>
+    </button>
+    <button class="menu-btn" data-nav="status">
+      <span class="menu-icon">📊</span>
+      <span class="menu-label">ステータス</span>
+      <span class="menu-desc" id="status-summary">能力の成長を見る</span>
     </button>
     <button class="menu-btn disabled" disabled>
       <span class="menu-icon">🇰🇷</span>
@@ -67,6 +72,44 @@
     </button>
   </nav>
   <p class="version-footer" id="version-footer"></p>
+</section>
+
+<!-- 会話トレーニング: 場面選択 -->
+<section id="screen-convo-list" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>会話トレーニング</h2>
+  </header>
+  <p class="field-note" style="margin-bottom:12px">制限時間内に最適な発言を選び、相手の好感度を上げましょう。</p>
+  <div id="convo-list-content"></div>
+</section>
+
+<!-- 会話トレーニング: プレイ -->
+<section id="screen-convo-play" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="convo-list">←</button>
+    <h2 id="convo-title">会話</h2>
+  </header>
+  <div class="convo-hud hidden" id="convo-hud">
+    <div class="affinity-row">
+      <span class="affinity-label">好感度</span>
+      <div class="affinity-track"><div class="affinity-bar" id="affinity-bar"></div></div>
+      <span class="affinity-value" id="affinity-value">50</span>
+    </div>
+    <span class="convo-progress" id="convo-progress">1 / 4</span>
+  </div>
+  <div id="convo-stage"></div>
+</section>
+
+<!-- ステータス -->
+<section id="screen-status" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>ステータス</h2>
+  </header>
+  <div id="status-content"></div>
+  <h3 class="about-section">会話トレーニングの記録</h3>
+  <div id="convo-history-content"></div>
 </section>
 
 <!-- 講演録音: 設定 -->
@@ -346,6 +389,8 @@
 <script src="js/ai.js"></script>
 <script src="js/practice.js"></script>
 <script src="js/talk.js"></script>
+<script src="js/scenarios.js"></script>
+<script src="js/convo.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

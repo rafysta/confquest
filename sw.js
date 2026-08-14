@@ -3,7 +3,7 @@
  *       更新が即座に反映され、オフライン時のみキャッシュを使う。
  *       CDN(pdf.js)はキャッシュ優先。
  */
-const CACHE_VERSION = 'cq-v7';
+const CACHE_VERSION = 'cq-v8';
 const APP_SHELL = [
   './',
   './index.html',
@@ -12,6 +12,8 @@ const APP_SHELL = [
   './js/app.js',
   './js/practice.js',
   './js/talk.js',
+  './js/scenarios.js',
+  './js/convo.js',
   './js/ai.js',
   './manifest.json',
   './icons/icon-192.png',

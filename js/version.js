@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.5.0';
+const APP_VERSION = '0.6.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,16 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.6.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '会話トレーニングを追加。懇親会の4場面・全16ターンの選択肢バトルです' },
+      { type: 'new', text: '制限時間内に最適な発言を選ぶと好感度が上昇。素早い好手には即答ボーナス' },
+      { type: 'new', text: '全選択肢に「なぜ良い/悪いか」の解説つき。終了後に見直しポイントがまとまります' },
+      { type: 'new', text: 'ステータス画面を追加。Networking / English / Confidence / Topics がXPで成長します' }
+    ]
+  },
   {
     version: '0.5.0',
     date: '2026-08-15',
