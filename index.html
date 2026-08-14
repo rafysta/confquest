@@ -19,6 +19,10 @@
     <h1>ConfQuest</h1>
     <p class="subtitle">Level up your conference skills</p>
   </header>
+  <div class="update-banner hidden" id="update-banner">
+    <span id="update-banner-text">新しいバージョンがあります</span>
+    <button id="btn-banner-update">更新</button>
+  </div>
   <div class="streak-banner card" id="streak-banner">
     <span class="streak-flame">🔥</span>
     <span id="streak-text">連続 0 日</span>
@@ -210,7 +214,18 @@
     <p class="about-version" id="about-version">v-.-.-</p>
     <p class="field-note" id="about-build"></p>
   </div>
+  <div class="card version-compare">
+    <div class="vc-row">
+      <span>この端末で実行中</span>
+      <strong id="vc-running">-</strong>
+    </div>
+    <div class="vc-row">
+      <span>サーバー上の最新</span>
+      <strong id="vc-server">未確認</strong>
+    </div>
+  </div>
   <button class="btn-large primary" id="btn-check-update">🔄 更新を確認</button>
+  <button class="btn-large" id="btn-force-reset">🧹 完全リセットして再取得</button>
   <p class="field-note" id="update-status" style="margin:8px 0 16px"></p>
   <h3 class="about-section">更新履歴</h3>
   <div id="changelog-content"></div>

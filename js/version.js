@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.6.0';
+const APP_VERSION = '0.6.1';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,16 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.6.1',
+    date: '2026-08-15',
+    items: [
+      { type: 'fix', text: '「更新を確認」を押しても更新されない問題を修正。サーバーへの問い合わせがブラウザのキャッシュに阻まれていました' },
+      { type: 'new', text: 'アプリ情報画面に「実行中」と「サーバー上の最新」のバージョンを並べて表示。更新されたかが確実に分かります' },
+      { type: 'new', text: '起動時に新しいバージョンを自動確認し、ホーム画面に通知を表示' },
+      { type: 'new', text: '「完全リセットして再取得」ボタンを追加(APIキーや履歴は消えません)' }
+    ]
+  },
   {
     version: '0.6.0',
     date: '2026-08-15',

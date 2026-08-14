@@ -625,6 +625,31 @@ audio { width: 100%; margin-bottom: 12px; }
 }
 .about-section { font-size: 1rem; margin: 20px 0 10px; }
 
+.version-compare { padding: 12px 16px; }
+.vc-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.85rem; padding: 5px 0;
+}
+.vc-row + .vc-row { border-top: 1px solid #334155; }
+.vc-row span { color: var(--text-dim); }
+.vc-row strong { font-size: 0.95rem; }
+
+.update-banner {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: 12px; padding: 10px 14px; margin-bottom: 12px;
+  font-size: 0.85rem;
+  animation: fadeSlideIn 0.3s ease;
+}
+.update-banner button {
+  margin-left: auto; flex: 0 0 auto;
+  background: var(--accent-dark); color: #fff;
+  border: none; border-radius: 8px;
+  padding: 7px 14px; font-size: 0.82rem; font-weight: 700;
+  cursor: pointer;
+}
+
 .release {
   background: var(--bg-card); border-radius: 12px;
   padding: 14px; margin-bottom: 10px;

@@ -677,6 +677,7 @@ function renderTalkList() {
 function renderAbout() {
   document.getElementById('about-version').textContent = `v${APP_VERSION}`;
   document.getElementById('about-build').textContent = `ビルド日 ${APP_BUILD}`;
+  document.getElementById('vc-running').textContent = `v${APP_VERSION}`;
 
   const typeLabel = { new: '新機能', fix: '修正', change: '変更' };
   document.getElementById('changelog-content').innerHTML = CHANGELOG.map((rel, idx) => `
@@ -695,23 +696,70 @@ function renderAbout() {
   `).join('');
 }
 
-/** キャッシュを消して最新版を取得し直す */
+/** サーバー上の最新バージョンを、キャッシュを一切通さずに取得する */
+async function fetchServerVersion() {
+  const url = `version.json?t=${Date.now()}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`サーバーから取得できません (${res.status})`);
+  return res.json();
+}
+
+/** キャッシュとService Workerを完全に消す */
+async function purgeAll() {
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+  }
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map((r) => r.unregister()));
+  }
+}
+
+/** キャッシュを避けて再読み込み(URLに時刻を付けてHTTPキャッシュも迂回) */
+function hardReload() {
+  const base = location.href.split('?')[0].split('#')[0];
+  location.replace(`${base}?v=${Date.now()}`);
+}
+
 document.getElementById('btn-check-update').addEventListener('click', async () => {
   const status = document.getElementById('update-status');
-  status.textContent = '確認中...';
+  const serverEl = document.getElementById('vc-server');
+  status.textContent = 'サーバーに問い合わせ中...';
+  let info;
   try {
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
-    }
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((r) => r.update().catch(() => r.unregister())));
-    }
-    status.textContent = '最新版を読み込み中...';
-    setTimeout(() => location.reload(true), 600);
+    info = await fetchServerVersion();
   } catch (err) {
-    status.textContent = '⚠ ' + err.message + ' — ページを手動で再読み込みしてください。';
+    serverEl.textContent = '取得失敗';
+    status.textContent = `⚠ ${err.message}\nネットワーク接続と、GitHubへのpushが済んでいるかを確認してください。`;
+    return;
+  }
+  serverEl.textContent = `v${info.version}`;
+
+  if (info.version === APP_VERSION) {
+    status.textContent = '✓ すでに最新版です。サーバーにも新しいバージョンはありません。';
+    return;
+  }
+  serverEl.style.color = 'var(--success)';
+  status.textContent = `新しいバージョン v${info.version} があります。取得しています...`;
+  try {
+    await purgeAll();
+    setTimeout(hardReload, 400);
+  } catch (err) {
+    status.textContent = '⚠ ' + err.message + ' — ブラウザを再起動してお試しください。';
+  }
+});
+
+document.getElementById('btn-force-reset').addEventListener('click', async () => {
+  const status = document.getElementById('update-status');
+  if (!confirm('保存済みのキャッシュとService Workerをすべて削除して再取得します。\n(APIキー・練習履歴・ステータスは消えません)')) return;
+  status.textContent = '削除中...';
+  try {
+    await purgeAll();
+    status.textContent = '再取得しています...';
+    setTimeout(hardReload, 400);
+  } catch (err) {
+    status.textContent = '⚠ ' + err.message;
   }
 });
 
@@ -719,6 +767,24 @@ document.getElementById('btn-check-update').addEventListener('click', async () =
 document.getElementById('version-footer').textContent = `ConfQuest v${APP_VERSION}`;
 document.getElementById('menu-version').textContent = `バージョン v${APP_VERSION}・更新履歴`;
 document.getElementById('status-summary').textContent = `総合レベル ${Stats.totalLevel()}・能力の成長`;
+
+/* 起動時にサーバーの最新版を静かに確認し、違えばホームに通知を出す */
+(async function checkUpdateOnStart() {
+  try {
+    const info = await fetchServerVersion();
+    if (info.version !== APP_VERSION) {
+      const banner = document.getElementById('update-banner');
+      document.getElementById('update-banner-text').textContent =
+        `新しいバージョン v${info.version} があります`;
+      banner.classList.remove('hidden');
+      document.getElementById('btn-banner-update').addEventListener('click', async () => {
+        document.getElementById('update-banner-text').textContent = '更新中...';
+        await purgeAll();
+        setTimeout(hardReload, 400);
+      });
+    }
+  } catch (_) { /* オフライン時は何もしない */ }
+})();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then((reg) => {

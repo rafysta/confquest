@@ -1,9 +1,11 @@
 /* ConfQuest Service Worker
- * 方針: アプリ本体(同一オリジン)はネットワーク優先。
- *       更新が即座に反映され、オフライン時のみキャッシュを使う。
+ * 方針: アプリ本体(同一オリジン)はHTTPキャッシュを完全に迂回して取得する。
+ *       GitHub Pagesなどが返す Cache-Control によって古いファイルが
+ *       使われ続けるのを防ぐため、fetch に cache:'no-store' を指定する。
+ *       ネットワークが使えないときだけ Cache Storage を使う。
  *       CDN(pdf.js)はキャッシュ優先。
  */
-const CACHE_VERSION = 'cq-v8';
+const CACHE_VERSION = 'cq-v9';
 const APP_SHELL = [
   './',
   './index.html',
@@ -16,6 +18,7 @@ const APP_SHELL = [
   './js/convo.js',
   './js/ai.js',
   './manifest.json',
+  './version.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
@@ -25,8 +28,13 @@ const APP_SHELL = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) =>
-      // 1つ失敗しても install 全体を止めない
-      Promise.allSettled(APP_SHELL.map((u) => cache.add(u)))
+      Promise.allSettled(APP_SHELL.map((u) => {
+        // 同一オリジンのファイルはHTTPキャッシュを迂回して取り込む
+        const req = u.startsWith('http')
+          ? new Request(u)
+          : new Request(u, { cache: 'no-store' });
+        return fetch(req).then((res) => res.ok && cache.put(u, res));
+      }))
     )
   );
   self.skipWaiting();
@@ -47,13 +55,15 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET') return;
-  // API呼び出しはキャッシュしない
   if (url.hostname === 'api.anthropic.com' || url.hostname === 'api.openai.com') return;
 
   if (url.origin === self.location.origin) {
-    // アプリ本体: ネットワーク優先 → 失敗時キャッシュ
+    // アプリ本体: HTTPキャッシュを使わず必ずサーバーに問い合わせる
     event.respondWith(
-      fetch(event.request)
+      fetch(new Request(event.request.url, {
+        cache: 'no-store',
+        credentials: 'same-origin'
+      }))
         .then((res) => {
           if (res && res.ok) {
             const copy = res.clone();
@@ -61,10 +71,11 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => caches.match(event.request).then((c) => c || Response.error()))
+        .catch(() =>
+          caches.match(event.request).then((c) => c || Response.error())
+        )
     );
   } else {
-    // CDN等: キャッシュ優先
     event.respondWith(
       caches.match(event.request).then((cached) => cached || fetch(event.request))
     );
