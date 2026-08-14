@@ -382,3 +382,49 @@ table.slide-table {
 .empty-note { color: var(--text-dim); text-align: center; padding: 40px 0; }
 
 audio { width: 100%; margin-bottom: 12px; }
+
+/* about / changelog */
+.version-footer {
+  text-align: center; color: var(--text-dim);
+  font-size: 0.75rem; margin-top: 20px; padding-bottom: 8px;
+}
+.about-card { text-align: center; padding: 22px 16px; }
+.about-title {
+  font-size: 1.6rem;
+  background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.about-version {
+  font-size: 1.5rem; font-weight: 800; color: var(--accent);
+  margin-top: 12px;
+}
+.about-section { font-size: 1rem; margin: 20px 0 10px; }
+
+.release {
+  background: var(--bg-card); border-radius: 12px;
+  padding: 14px; margin-bottom: 10px;
+}
+.release.latest { border: 1px solid var(--accent); }
+.release-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.release-ver { font-weight: 800; font-size: 1rem; }
+.release-date { color: var(--text-dim); font-size: 0.78rem; margin-left: auto; }
+.release-badge {
+  background: var(--accent-dark); color: #fff;
+  font-size: 0.68rem; font-weight: 700;
+  padding: 2px 8px; border-radius: 10px;
+}
+.release-list { list-style: none; padding: 0; margin: 0; }
+.release-list li {
+  font-size: 0.87rem; line-height: 1.55;
+  margin-bottom: 8px; display: flex; gap: 8px; align-items: flex-start;
+}
+.release-list li:last-child { margin-bottom: 0; }
+.tag {
+  flex: 0 0 auto;
+  font-size: 0.68rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 6px;
+  margin-top: 2px;
+}
+.tag-new { background: rgba(74, 222, 128, 0.15); color: var(--success); }
+.tag-fix { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
+.tag-change { background: rgba(250, 204, 21, 0.15); color: var(--warn); }

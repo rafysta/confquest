@@ -8,6 +8,7 @@ function showScreen(name) {
   if (name === 'home') renderHome();
   if (name === 'history') renderHistory();
   if (name === 'settings') loadSettings();
+  if (name === 'about') renderAbout();
 }
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
@@ -237,7 +238,7 @@ function renderMarkdown(src) {
   // コードブロックを退避(中身は整形しない)
   let text = escapeHtml(src).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
     blocks.push(`<pre class="md-pre"><code>${code.replace(/\n$/, '')}</code></pre>`);
-    return ` BLOCK${blocks.length - 1} `;
+    return `BLOCK${blocks.length - 1}`;
   });
 
   const inline = (s) => s
@@ -274,7 +275,7 @@ function renderMarkdown(src) {
     const raw = lines[i];
     const line = raw.trimEnd();
 
-    if (/^ BLOCK\d+ $/.test(line.trim())) {
+    if (/^BLOCK\d+$/.test(line.trim())) {
       flushPara(); closeList();
       out.push(line.trim());
       continue;
@@ -339,7 +340,7 @@ function renderMarkdown(src) {
   }
   flushPara(); closeList();
 
-  return out.join('\n').replace(/ BLOCK(\d+) /g, (_, i) => blocks[i]);
+  return out.join('\n').replace(/BLOCK(\d+)/g, (_, i) => blocks[i]);
 }
 
 /* ---------- AIフィードバック ---------- */
@@ -458,8 +459,72 @@ function renderHistory() {
   }).join('');
 }
 
+/* ---------- アプリ情報 ---------- */
+function renderAbout() {
+  document.getElementById('about-version').textContent = `v${APP_VERSION}`;
+  document.getElementById('about-build').textContent = `ビルド日 ${APP_BUILD}`;
+
+  const typeLabel = { new: '新機能', fix: '修正', change: '変更' };
+  document.getElementById('changelog-content').innerHTML = CHANGELOG.map((rel, idx) => `
+    <div class="release ${idx === 0 ? 'latest' : ''}">
+      <div class="release-head">
+        <span class="release-ver">v${escapeHtml(rel.version)}</span>
+        ${idx === 0 ? '<span class="release-badge">最新</span>' : ''}
+        <span class="release-date">${escapeHtml(rel.date)}</span>
+      </div>
+      <ul class="release-list">
+        ${rel.items.map((it) => `
+          <li><span class="tag tag-${it.type}">${typeLabel[it.type] || ''}</span>${escapeHtml(it.text)}</li>
+        `).join('')}
+      </ul>
+    </div>
+  `).join('');
+}
+
+/** キャッシュを消して最新版を取得し直す */
+document.getElementById('btn-check-update').addEventListener('click', async () => {
+  const status = document.getElementById('update-status');
+  status.textContent = '確認中...';
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.update().catch(() => r.unregister())));
+    }
+    status.textContent = '最新版を読み込み中...';
+    setTimeout(() => location.reload(true), 600);
+  } catch (err) {
+    status.textContent = '⚠ ' + err.message + ' — ページを手動で再読み込みしてください。';
+  }
+});
+
 /* ---------- 初期化 ---------- */
+document.getElementById('version-footer').textContent = `ConfQuest v${APP_VERSION}`;
+document.getElementById('menu-version').textContent = `バージョン v${APP_VERSION}・更新履歴`;
+
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // 新しいバージョンが用意できたら即座に切り替える
+    reg.addEventListener('updatefound', () => {
+      const sw = reg.installing;
+      if (!sw) return;
+      sw.addEventListener('statechange', () => {
+        if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+          sw.postMessage('skipWaiting');
+        }
+      });
+    });
+    reg.update().catch(() => {});
+  }).catch(() => {});
+
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
 }
 renderHome();
