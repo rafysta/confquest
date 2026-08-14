@@ -125,11 +125,16 @@ const Convo = {
     this.startTimer(turn.limitSec || 12);
   },
 
+  /** 設定の時間倍率(初期値はゆっくり1.5倍) */
+  timeScale() {
+    return parseFloat(localStorage.getItem('lq_time_scale') || '1.5') || 1.5;
+  },
+
   startTimer(limitSec) {
     clearInterval(this.timerId);
     this.turnStartedAt = Date.now();
     const bar = document.getElementById('timer-bar');
-    const limitMs = limitSec * 1000;
+    const limitMs = limitSec * 1000 * this.timeScale();
     this.timerId = setInterval(() => {
       const left = limitMs - (Date.now() - this.turnStartedAt);
       const frac = Math.max(0, left / limitMs);
@@ -151,7 +156,7 @@ const Convo = {
     clearInterval(this.timerId);
 
     const turn = this.scenario.turns[this.turnIndex];
-    const limitMs = (turn.limitSec || 12) * 1000;
+    const limitMs = (turn.limitSec || 12) * 1000 * this.timeScale();
     const elapsed = Date.now() - this.turnStartedAt;
     const timedOut = choiceIndex < 0;
     const choice = timedOut ? null : turn.choices[choiceIndex];

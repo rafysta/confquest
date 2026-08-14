@@ -66,6 +66,8 @@ function loadSettings() {
     localStorage.getItem('lq_openai_model') || 'gpt-5';
   document.getElementById('stt-model').value =
     localStorage.getItem('lq_stt_model') || 'whisper-1';
+  document.getElementById('time-scale').value =
+    localStorage.getItem('lq_time_scale') || '1.5';
   document.getElementById('filler-words').value =
     localStorage.getItem('lq_fillers') ||
     'um, uh, so, actually, basically, you know, kind of, I mean, like';
@@ -88,6 +90,7 @@ document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_ai_model', document.getElementById('ai-model').value);
   localStorage.setItem('lq_openai_model', document.getElementById('openai-model').value);
   localStorage.setItem('lq_stt_model', document.getElementById('stt-model').value);
+  localStorage.setItem('lq_time_scale', document.getElementById('time-scale').value);
   localStorage.setItem('lq_fillers', document.getElementById('filler-words').value);
   const note = document.getElementById('settings-saved');
   note.style.display = 'block';

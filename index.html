@@ -392,6 +392,16 @@
       <span class="field-note">Whisper以外はタイムスタンプ非対応のため、発話がスライド1にまとめて記録されます。</span>
     </label>
     <label class="field">
+      <span>会話トレーニングの制限時間</span>
+      <select id="time-scale">
+        <option value="2">じっくり (2倍)</option>
+        <option value="1.5" selected>ゆっくり (1.5倍)</option>
+        <option value="1">標準</option>
+        <option value="0.75">ハード (0.75倍)</option>
+      </select>
+      <span class="field-note">英文を読む速さに合わせて調整できます。慣れてきたら短くしていきましょう。</span>
+    </label>
+    <label class="field">
       <span>Filler語リスト (カンマ区切り)</span>
       <input type="text" id="filler-words" value="um, uh, so, actually, basically, you know, kind of, I mean, like">
     </label>

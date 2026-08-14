@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.6.1';
+const APP_VERSION = '0.6.2';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,13 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.6.2',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '会話トレーニングの制限時間を設定で調整可能に(じっくり2倍〜ハード0.75倍)。初期値は「ゆっくり1.5倍」です' }
+    ]
+  },
   {
     version: '0.6.1',
     date: '2026-08-15',
