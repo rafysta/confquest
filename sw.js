@@ -1,5 +1,5 @@
 /* ConfQuest Service Worker */
-const CACHE_VERSION = 'cq-v1';
+const CACHE_VERSION = 'cq-v2';
 const APP_SHELL = [
   './',
   './index.html',

@@ -175,10 +175,18 @@ body {
 .no-pdf-message p:first-child { font-size: 1.3rem; font-weight: 700; }
 .no-pdf-message .small { font-size: 0.85rem; margin-top: 8px; }
 .tap-zone {
-  position: absolute; top: 0; bottom: 0; width: 35%;
+  position: absolute; top: 0; bottom: 0;
 }
-.tap-left { left: 0; }
-.tap-right { right: 0; }
+.tap-left { left: 0; width: 30%; }
+.tap-right { right: 0; width: 70%; }
+.slide-area.tap-flash::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: rgba(56, 189, 248, 0.15);
+  animation: tapFlash 0.25s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes tapFlash { to { opacity: 0; } }
 
 .slide-timer {
   text-align: center; color: var(--text-dim);

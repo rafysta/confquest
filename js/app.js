@@ -51,6 +51,7 @@ function renderHome() {
 /* ---------- 設定 ---------- */
 function loadSettings() {
   document.getElementById('api-key').value = localStorage.getItem('lq_api_key') || '';
+  document.getElementById('openai-key').value = localStorage.getItem('lq_openai_key') || '';
   document.getElementById('ai-model').value =
     localStorage.getItem('lq_ai_model') || 'claude-sonnet-5';
   document.getElementById('filler-words').value =
@@ -60,6 +61,7 @@ function loadSettings() {
 
 document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_api_key', document.getElementById('api-key').value.trim());
+  localStorage.setItem('lq_openai_key', document.getElementById('openai-key').value.trim());
   localStorage.setItem('lq_ai_model', document.getElementById('ai-model').value);
   localStorage.setItem('lq_fillers', document.getElementById('filler-words').value);
   const note = document.getElementById('settings-saved');
@@ -83,10 +85,15 @@ document.getElementById('pdf-input').addEventListener('change', async (e) => {
 });
 
 document.getElementById('start-practice').addEventListener('click', async () => {
+  const enableTranscribe = document.getElementById('enable-transcribe').checked;
+  if (enableTranscribe && !localStorage.getItem('lq_openai_key')) {
+    alert('文字起こしにはOpenAI APIキーが必要です。設定画面で入力するか、文字起こしのチェックを外してください。');
+    return;
+  }
   const opts = {
     targetMinutes: parseFloat(document.getElementById('target-minutes').value) || 12,
     lang: document.getElementById('speech-lang').value,
-    enableSpeech: document.getElementById('enable-speech').checked,
+    enableTranscribe,
     enableRecording: document.getElementById('enable-recording').checked
   };
   showScreen('practice');
@@ -99,11 +106,16 @@ document.getElementById('tap-prev').addEventListener('click', () => Practice.pre
 document.getElementById('btn-pause').addEventListener('click', () => Practice.togglePause());
 document.getElementById('btn-finish').addEventListener('click', async () => {
   const session = await Practice.finish();
-  if (session) {
-    saveHistory(session);
-    renderResults(session);
-    showScreen('results');
+  if (!session) return;
+  showScreen('results');
+  if (session.transcribe) {
+    document.getElementById('results-content').innerHTML =
+      '<div class="spinner"></div><p style="text-align:center" class="field-note">文字起こし中... (発表時間により数十秒かかります)</p>';
+    await Practice.transcribeAudio();
   }
+  Practice.computeStats();
+  saveHistory(session);
+  renderResults(session);
 });
 
 /* ---------- 結果画面 ---------- */
@@ -154,6 +166,7 @@ function renderResults(s) {
         <div class="lbl">スライド数</div>
       </div>
     </div>
+    ${s.transcriptError ? `<p class="field-note" style="margin-bottom:12px;color:var(--warn)">⚠ 文字起こし失敗: ${escapeHtml(s.transcriptError)}</p>` : ''}
     ${s.fillerCount > 0 ? `<p class="field-note" style="margin-bottom:12px">Filler内訳: ${s.fillerDetail}</p>` : ''}
     ${Practice.audioUrl ? `<audio controls src="${Practice.audioUrl}"></audio>` : ''}
     <h3 style="margin-bottom:8px;font-size:1rem">スライドごとの記録</h3>
@@ -213,7 +226,7 @@ const QA = { messages: [] };
 
 document.getElementById('btn-qa-sim').addEventListener('click', () => {
   if (!Practice.session || !Practice.session.fullTranscript.trim()) {
-    alert('文字起こしがありません。音声認識を有効にして練習してください。');
+    alert('文字起こしがありません。「終了後に文字起こし」を有効にして練習してください。');
     return;
   }
   QA.messages = [];

@@ -1,5 +1,45 @@
-/* ConfQuest - Claude API連携 */
+/* ConfQuest - AI連携 (Claude API + Whisper文字起こし) */
 'use strict';
+
+/** OpenAI Whisperによる文字起こし */
+const STT = {
+  getKey() {
+    return localStorage.getItem('lq_openai_key') || '';
+  },
+
+  /**
+   * 音声Blobを文字起こしし、[{start, end, text}] (秒単位) を返す
+   */
+  async transcribe(blob, lang) {
+    const key = this.getKey();
+    if (!key) {
+      throw new Error('OpenAI APIキーが未設定です。設定画面で入力してください。');
+    }
+    const ext = (blob.type.includes('ogg')) ? 'ogg'
+      : (blob.type.includes('mp4') ? 'mp4' : 'webm');
+    const form = new FormData();
+    form.append('file', blob, `recording.${ext}`);
+    form.append('model', 'whisper-1');
+    form.append('response_format', 'verbose_json');
+    if (lang) form.append('language', lang.split('-')[0]); // en-US -> en
+
+    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}` },
+      body: form
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`文字起こしAPIエラー (${res.status}): ${body.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    if (Array.isArray(data.segments) && data.segments.length > 0) {
+      return data.segments.map((sg) => ({ start: sg.start, end: sg.end, text: sg.text }));
+    }
+    // segmentsが無い場合は全文を1セグメント扱い
+    return data.text ? [{ start: 0, end: 0, text: data.text }] : [];
+  }
+};
 
 const AI = {
   getKey() {

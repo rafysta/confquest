@@ -18,13 +18,14 @@ const Practice = {
   pdfName: '',
   session: null,
   timerInterval: null,
-  recognition: null,
-  recognitionActive: false,
   mediaRecorder: null,
   audioChunks: [],
+  audioBlob: null,
   audioUrl: null,
   paused: false,
   pauseStartedAt: 0,
+  _renderSeq: 0,
+  _renderTask: null,
 
   /* ---------- PDF ---------- */
   async loadPdf(file) {
@@ -38,20 +39,36 @@ const Practice = {
 
   async renderSlide(pageNum) {
     if (!this.pdfDoc) return;
-    const page = await this.pdfDoc.getPage(pageNum);
+    const seq = ++this._renderSeq;
+    // 前の描画が走っていたらキャンセル(連打でPDF.jsがエラーになるのを防ぐ)
+    if (this._renderTask) {
+      try { this._renderTask.cancel(); } catch (_) {}
+      this._renderTask = null;
+    }
+    let page;
+    try {
+      page = await this.pdfDoc.getPage(pageNum);
+    } catch (_) { return; }
+    if (seq !== this._renderSeq) return; // より新しい描画要求が来た
+
     const canvas = document.getElementById('slide-canvas');
     const area = document.getElementById('slide-area');
     const viewport1 = page.getViewport({ scale: 1 });
+    const dpr = window.devicePixelRatio || 1;
     const scale = Math.min(
       area.clientWidth / viewport1.width,
       area.clientHeight / viewport1.height
-    ) * (window.devicePixelRatio || 1);
+    ) * dpr;
     const viewport = page.getViewport({ scale });
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    canvas.style.width = `${viewport.width / (window.devicePixelRatio || 1)}px`;
-    canvas.style.height = `${viewport.height / (window.devicePixelRatio || 1)}px`;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    canvas.style.width = `${viewport.width / dpr}px`;
+    canvas.style.height = `${viewport.height / dpr}px`;
+    this._renderTask = page.render({ canvasContext: canvas.getContext('2d'), viewport });
+    try {
+      await this._renderTask.promise;
+    } catch (_) { /* キャンセル時 */ }
+    if (seq === this._renderSeq) this._renderTask = null;
   },
 
   /* ---------- セッション ---------- */
@@ -62,31 +79,37 @@ const Practice = {
       pdfName: this.pdfName,
       targetMs: opts.targetMinutes * 60000,
       lang: opts.lang,
+      transcribe: opts.enableTranscribe,
       numSlides,
       currentSlide: 1,
       startTime: Date.now(),
       pausedMs: 0,
       slides: Array.from({ length: numSlides }, () => ({ timeMs: 0, transcript: '' })),
       slideEnteredAt: Date.now(),
+      // スライド切り替えの時系列(録音時間軸と一致、pause除外)
+      timeline: [{ slide: 1, start: 0 }],
       fullTranscript: '',
       totalMs: 0,
+      wordCount: 0,
       wpm: 0,
       fillerCount: 0,
-      fillerDetail: ''
+      fillerDetail: '',
+      transcriptError: ''
     };
     this.paused = false;
+    this.audioBlob = null;
 
     document.getElementById('no-pdf-message').classList.toggle('hidden', !!this.pdfDoc);
     document.getElementById('slide-canvas').style.display = this.pdfDoc ? '' : 'none';
     if (this.pdfDoc) {
-      // レイアウト確定後にレンダリング
       setTimeout(() => this.renderSlide(1), 50);
     }
 
-    if (opts.enableRecording) await this.startRecording().catch((e) => {
-      alert('録音を開始できませんでした: ' + e.message);
-    });
-    if (opts.enableSpeech) this.startRecognition(opts.lang);
+    if (opts.enableRecording || opts.enableTranscribe) {
+      await this.startRecording().catch((e) => {
+        alert('録音を開始できませんでした: ' + e.message);
+      });
+    }
 
     this.timerInterval = setInterval(() => this.tick(), 500);
     this.updateStatus();
@@ -156,7 +179,6 @@ const Practice = {
   },
 
   currentSlideFrac() {
-    // 現在のスライドでの経過を平均滞在時間との比で0-1に丸める
     const s = this.session;
     const cur = s.slides[s.currentSlide - 1].timeMs;
     const avg = this.elapsedMs() / Math.max(1, s.currentSlide);
@@ -169,8 +191,10 @@ const Practice = {
     if (s.currentSlide < s.numSlides) {
       this.commitSlideTime();
       s.currentSlide++;
+      s.timeline.push({ slide: s.currentSlide, start: this.elapsedMs() });
       if (this.pdfDoc) this.renderSlide(s.currentSlide);
       this.updateStatus();
+      this.flashTap();
     }
   },
 
@@ -180,9 +204,18 @@ const Practice = {
     if (s.currentSlide > 1) {
       this.commitSlideTime();
       s.currentSlide--;
+      s.timeline.push({ slide: s.currentSlide, start: this.elapsedMs() });
       if (this.pdfDoc) this.renderSlide(s.currentSlide);
       this.updateStatus();
+      this.flashTap();
     }
+  },
+
+  flashTap() {
+    const area = document.getElementById('slide-area');
+    area.classList.remove('tap-flash');
+    void area.offsetWidth; // reflow でアニメーション再発火
+    area.classList.add('tap-flash');
   },
 
   togglePause() {
@@ -192,28 +225,24 @@ const Practice = {
       this.pauseStartedAt = Date.now();
       this.commitSlideTime();
       if (this.mediaRecorder && this.mediaRecorder.state === 'recording') this.mediaRecorder.pause();
-      this.stopRecognition();
       document.getElementById('btn-pause').textContent = '▶ 再開';
     } else {
       this.session.pausedMs += Date.now() - this.pauseStartedAt;
       this.session.slideEnteredAt = Date.now();
       this.paused = false;
       if (this.mediaRecorder && this.mediaRecorder.state === 'paused') this.mediaRecorder.resume();
-      if (this.session.lang && this._speechWanted) this.startRecognition(this.session.lang);
       document.getElementById('btn-pause').textContent = '⏸ 一時停止';
     }
   },
 
   async finish() {
     const s = this.session;
-    if (!s) return;
+    if (!s) return null;
     if (this.paused) this.togglePause();
     clearInterval(this.timerInterval);
     this.commitSlideTime();
     s.totalMs = this.elapsedMs();
-    this.stopRecognition();
     await this.stopRecording();
-    this.computeStats();
     return s;
   },
 
@@ -235,9 +264,9 @@ const Practice = {
         resolve(); return;
       }
       this.mediaRecorder.onstop = () => {
-        const blob = new Blob(this.audioChunks, { type: this.mediaRecorder.mimeType });
+        this.audioBlob = new Blob(this.audioChunks, { type: this.mediaRecorder.mimeType });
         if (this.audioUrl) URL.revokeObjectURL(this.audioUrl);
-        this.audioUrl = URL.createObjectURL(blob);
+        this.audioUrl = URL.createObjectURL(this.audioBlob);
         this.mediaRecorder.stream.getTracks().forEach((t) => t.stop());
         document.getElementById('rec-indicator').classList.add('hidden');
         resolve();
@@ -246,48 +275,29 @@ const Practice = {
     });
   },
 
-  /* ---------- 音声認識 ---------- */
-  _speechWanted: false,
-  startRecognition(lang) {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      alert('このブラウザは音声認識に対応していません。Chromeをお使いください。');
+  /* ---------- 文字起こし(録音終了後にWhisper APIで実行) ---------- */
+  async transcribeAudio() {
+    const s = this.session;
+    if (!s || !s.transcribe) return;
+    if (!this.audioBlob || this.audioBlob.size === 0) {
+      s.transcriptError = '録音データがありません。';
       return;
     }
-    this._speechWanted = true;
-    const rec = new SR();
-    rec.lang = lang;
-    rec.continuous = true;
-    rec.interimResults = false;
-    rec.onresult = (e) => {
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          const text = e.results[i][0].transcript.trim();
-          if (text && this.session) {
-            const slide = this.session.slides[this.session.currentSlide - 1];
-            slide.transcript += (slide.transcript ? ' ' : '') + text;
-          }
+    try {
+      const segments = await STT.transcribe(this.audioBlob, s.lang);
+      // 各セグメントの中間時刻でどのスライド滞在中かを判定して割り当て
+      for (const seg of segments) {
+        const midMs = ((seg.start + seg.end) / 2) * 1000;
+        let slide = 1;
+        for (const ev of s.timeline) {
+          if (ev.start <= midMs) slide = ev.slide;
+          else break;
         }
+        const sl = s.slides[slide - 1];
+        sl.transcript += (sl.transcript ? ' ' : '') + seg.text.trim();
       }
-    };
-    rec.onend = () => {
-      this.recognitionActive = false;
-      // 継続中なら自動再起動(Androidでは認識が自動終了するため)
-      if (this._speechWanted && this.session && !this.paused) {
-        setTimeout(() => {
-          if (this._speechWanted) try { rec.start(); this.recognitionActive = true; } catch (_) {}
-        }, 200);
-      }
-    };
-    rec.onerror = () => { /* onendで再起動される */ };
-    try { rec.start(); this.recognitionActive = true; } catch (_) {}
-    this.recognition = rec;
-  },
-
-  stopRecognition() {
-    this._speechWanted = false;
-    if (this.recognition) {
-      try { this.recognition.stop(); } catch (_) {}
+    } catch (err) {
+      s.transcriptError = err.message;
     }
   },
 
@@ -322,15 +332,12 @@ const Practice = {
   score() {
     const s = this.session;
     let score = 100;
-    // 時間: 目標との乖離1分ごとに-8
     const overMin = Math.abs(s.totalMs - s.targetMs) / 60000;
     score -= Math.min(35, Math.round(overMin * 8));
-    // WPM: 理想120-160から外れると減点
     if (s.wpm > 0) {
       if (s.wpm < 110) score -= Math.min(15, Math.round((110 - s.wpm) / 3));
       if (s.wpm > 170) score -= Math.min(15, Math.round((s.wpm - 170) / 3));
     }
-    // Filler: 1分あたり3回超は減点
     const perMin = s.fillerCount / Math.max(1, s.totalMs / 60000);
     if (perMin > 3) score -= Math.min(20, Math.round((perMin - 3) * 4));
     return Math.max(10, score);

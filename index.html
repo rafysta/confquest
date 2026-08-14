@@ -77,12 +77,12 @@
       </select>
     </label>
     <label class="field checkbox-field">
-      <input type="checkbox" id="enable-speech" checked>
-      <span>音声認識を使う(文字起こし・WPM・filler分析)</span>
-    </label>
-    <label class="field checkbox-field">
       <input type="checkbox" id="enable-recording" checked>
       <span>録音する(終了後に聞き直せます)</span>
+    </label>
+    <label class="field checkbox-field">
+      <input type="checkbox" id="enable-transcribe" checked>
+      <span>終了後に文字起こし(WPM・filler分析。OpenAI APIキーが必要)</span>
     </label>
     <button class="btn-large primary" id="start-practice">練習スタート</button>
   </div>
@@ -175,6 +175,11 @@
       <span>Anthropic APIキー</span>
       <input type="password" id="api-key" placeholder="sk-ant-...">
       <span class="field-note">AI機能(フィードバック・質疑応答)に必要。この端末にのみ保存されます。</span>
+    </label>
+    <label class="field">
+      <span>OpenAI APIキー(文字起こし用)</span>
+      <input type="password" id="openai-key" placeholder="sk-...">
+      <span class="field-note">録音の文字起こし(Whisper)に必要。約0.9円/分。この端末にのみ保存されます。</span>
     </label>
     <label class="field">
       <span>AIモデル</span>
