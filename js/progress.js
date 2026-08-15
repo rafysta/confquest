@@ -150,6 +150,98 @@ const Quests = {
   }
 };
 
+/* ---------- 1日の回数と報酬倍率 ----------
+ * 「やりすぎを止める」のではなく「毎日やる方が得」にする設計。
+ * 何回でも遊べるが、その日の1回目が最も報酬が高い。
+ */
+const DailyBonus = {
+  data(now) {
+    let d;
+    try { d = JSON.parse(localStorage.getItem('lq_daily_plays') || 'null'); } catch (_) { d = null; }
+    const today = localDayKey(now);
+    if (!d || d.date !== today) {
+      d = { date: today, counts: {} };
+      localStorage.setItem('lq_daily_plays', JSON.stringify(d));
+    }
+    return d;
+  },
+  /** activity の今日の実施回数 */
+  count(activity, now) { return this.data(now).counts[activity] || 0; },
+  /** これから行う回の倍率(1回目1.5倍 / 2回目1.0倍 / 3回目以降0.7倍) */
+  nextMultiplier(activity, now) {
+    const n = this.count(activity, now);
+    if (n === 0) return 1.5;
+    if (n === 1) return 1.0;
+    return 0.7;
+  },
+  multiplierLabel(activity, now) {
+    const m = this.nextMultiplier(activity, now);
+    if (m > 1) return '🌟 本日初回 報酬1.5倍';
+    if (m === 1) return '報酬 通常';
+    return '報酬 0.7倍(今日はもう十分がんばりました)';
+  },
+  /** 実施を記録して、その回の倍率を返す */
+  record(activity, now) {
+    const d = this.data(now);
+    const mult = this.nextMultiplier(activity, now);
+    d.counts[activity] = (d.counts[activity] || 0) + 1;
+    localStorage.setItem('lq_daily_plays', JSON.stringify(d));
+    return mult;
+  }
+};
+
+/* ---------- ジェムショップ(ランを有利に始める) ---------- */
+const GEM_SHOP = [
+  { id: 'start-earphone', icon: '🎧', name: '翻訳イヤホン持参', cost: 20,
+    desc: '次のランを 🎧翻訳イヤホン を持った状態で始める',
+    effect: { startItem: 'earphone' } },
+  { id: 'start-shirt', icon: '👔', name: 'きちんとした身なり', cost: 20,
+    desc: '次のランを 👔アイロンがけしたシャツ を持った状態で始める',
+    effect: { startItem: 'shirt' } },
+  { id: 'start-charm', icon: '🧿', name: 'お守りを持つ', cost: 30,
+    desc: '次のランを 🧿お守り を持った状態で始める(1度だけ復活)',
+    effect: { startItem: 'charm' } },
+  { id: 'start-funds', icon: '💰', name: '追加の研究費', cost: 15,
+    desc: '次のランの開始時研究費 +50',
+    effect: { funds: 50 } },
+  { id: 'start-hp', icon: '💪', name: '万全の体調', cost: 25,
+    desc: '次のランの🧠上限とHPを +15',
+    effect: { maxHp: 15 } }
+];
+
+const GemShop = {
+  /** 次のランに適用される購入済み特典 */
+  pending() {
+    try { return JSON.parse(localStorage.getItem('lq_gem_pending') || '[]'); }
+    catch (_) { return []; }
+  },
+  savePending(list) { localStorage.setItem('lq_gem_pending', JSON.stringify(list)); },
+  has(id) { return this.pending().includes(id); },
+  buy(id) {
+    const item = GEM_SHOP.find((g) => g.id === id);
+    if (!item || this.has(id)) return false;
+    if (!Gems.spend(item.cost)) return false;
+    const list = this.pending();
+    list.push(id);
+    this.savePending(list);
+    return true;
+  },
+  /** ラン開始時に適用して消費する。{items, funds, maxHp} を返す */
+  consume() {
+    const list = this.pending();
+    const out = { items: [], funds: 0, maxHp: 0 };
+    for (const id of list) {
+      const item = GEM_SHOP.find((g) => g.id === id);
+      if (!item) continue;
+      if (item.effect.startItem) out.items.push(item.effect.startItem);
+      if (item.effect.funds) out.funds += item.effect.funds;
+      if (item.effect.maxHp) out.maxHp += item.effect.maxHp;
+    }
+    this.savePending([]);
+    return out;
+  }
+};
+
 /* ---------- アイテム図鑑(取得したことのあるアイテムの記録) ---------- */
 const ItemDex = {
   data() { return JSON.parse(localStorage.getItem('lq_itemdex') || '{}'); },

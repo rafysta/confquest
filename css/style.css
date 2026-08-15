@@ -78,7 +78,20 @@ body {
   50% { transform: scale(1.18); }
 }
 .points-badge { margin-left: auto; color: var(--warn); }
-.gems-badge { color: #c084fc; font-weight: 700; }
+.gems-badge {
+  color: #c084fc; font-weight: 700;
+  background: rgba(192, 132, 252, 0.12);
+  border: 1px solid #c084fc; border-radius: 12px;
+  padding: 4px 10px; font-size: 0.82rem;
+  cursor: pointer;
+}
+.gems-badge:active { transform: scale(0.95); }
+.gem-balance {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.9rem;
+}
+.gem-balance strong { font-size: 1.2rem; color: #c084fc; }
+.shop-row.bought { opacity: 0.6; border: 1px solid #c084fc; }
 
 /* デイリークエスト */
 .quest-card {

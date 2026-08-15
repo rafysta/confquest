@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.3.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '💎ジェムショップを追加。ホームの💎バッジから開けます。次のランを有利に始める特典を購入できます(アイテム持参・研究費+50・🧠上限+15)' },
+      { type: 'new', text: '本日初回の学会攻略は報酬1.5倍に。3回目以降は0.7倍ですが、回数制限はありません(やる気のある日は何回でも遊べます)' }
+    ]
+  },
   {
     version: '1.2.0',
     date: '2026-08-15',

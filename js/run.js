@@ -100,17 +100,28 @@ const Run = {
 
   /* ---------- ラン開始とマップ生成 ---------- */
   newRun() {
+    // ジェムショップで購入した特典を適用
+    const perk = (typeof GemShop !== 'undefined')
+      ? GemShop.consume() : { items: [], funds: 0, maxHp: 0 };
+    const maxHp = 50 + (perk.maxHp || 0);
+    // その日の実施回数に応じた報酬倍率(1回目が最も高い)
+    const mult = (typeof DailyBonus !== 'undefined')
+      ? DailyBonus.record('run') : 1;
+
     this.state = {
       active: true,
       day: 1,
-      hp: 50, maxHp: 50,
-      funds: 30,
+      hp: maxHp, maxHp,
+      funds: 30 + (perk.funds || 0),
       items: [],
+      dailyMult: mult,
+      perkNote: perk,
       layer: -1,          // 現在の層(-1 = まだマップ上のどこにもいない)
       nodeIndex: -1,
       usedCards: [],
       map: this.genMap()
     };
+    (perk.items || []).forEach((id) => this.gainItem(id));
     this.save();
   },
 
@@ -252,7 +263,11 @@ const Run = {
     const dayInfo = (typeof DAY_INFO !== 'undefined')
       ? DAY_INFO[(this.state.day || 1) - 1] : null;
     const h = document.querySelector('#screen-run-map h2');
-    if (h) h.textContent = dayInfo ? dayInfo.name : '学会攻略';
+    if (h) {
+      const m = this.state.dailyMult || 1;
+      h.textContent = (dayInfo ? dayInfo.name : '学会攻略') +
+        (m > 1 ? ' 🌟×1.5' : (m < 1 ? ` ×${m}` : ''));
+    }
     const { layers, edges } = this.state.map;
     const W = 100, ROWH = 84;
     const H = layers.length * ROWH;
@@ -597,6 +612,7 @@ const Run = {
     if (b.isElite) reward = Math.round(reward * 2.5) + 20;
     if (b.isBoss) reward += DAY_INFO[b.bossDay - 1].bossReward.funds;
     reward = Math.round(reward * (b.rewardMult || 1));
+    reward = Math.round(reward * (this.state.dailyMult || 1));     // 本日初回ボーナス等
     if (this.hasItem('shirt')) reward = Math.round(reward * 1.25);
     if (this.hasItem('mic')) reward = Math.round(reward * 1.15);   // 座長の推薦状
     this.state.funds += reward;

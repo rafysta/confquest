@@ -66,6 +66,7 @@ function showScreen(name) {
   if (name === 'quests' && typeof Quests !== 'undefined') renderQuests();
   if (name === 'achievements' && typeof Achievements !== 'undefined') renderAchievements();
   if (name === 'itemdex' && typeof ItemDex !== 'undefined') renderItemDex();
+  if (name === 'gemshop' && typeof GemShop !== 'undefined') renderGemShop();
 }
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
@@ -606,6 +607,35 @@ function renderAchievements() {
     }).join('');
 }
 
+/* ---------- ジェムショップ ---------- */
+function renderGemShop() {
+  document.getElementById('gemshop-balance').textContent = `💎 ${Gems.get()}`;
+  const gems = Gems.get();
+  document.getElementById('gemshop-content').innerHTML = GEM_SHOP.map((g) => {
+    const bought = GemShop.has(g.id);
+    const afford = gems >= g.cost;
+    return `<div class="shop-row ${bought ? 'bought' : ''}">
+      <span class="shop-icon">${g.icon}</span>
+      <span class="shop-body"><strong>${g.name}</strong>
+        <span class="field-note">${g.desc}</span></span>
+      <button class="btn-control ${!bought && afford ? 'primary' : ''}" data-gembuy="${g.id}"
+        ${bought || !afford ? 'disabled' : ''}>${bought ? '✅ 適用待ち' : `💎${g.cost}`}</button>
+    </div>`;
+  }).join('');
+
+  document.querySelectorAll('[data-gembuy]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.gembuy;
+      if (GemShop.buy(id)) {
+        const g = GEM_SHOP.find((x) => x.id === id);
+        showToast(`${g.icon} ${g.name} を購入! 次のランに適用されます`);
+        renderGemShop();
+        renderHome();
+      }
+    });
+  });
+}
+
 /* ---------- アイテム図鑑 ---------- */
 const DEX_GROUPS = [
   { kind: 'gadget', label: '🎒 ガジェット', note: '持っている間ずっと効果が続きます' },
@@ -664,12 +694,22 @@ document.getElementById('menu-run').addEventListener('click', async () => {
     await appAlert('以前のセーブデータが古い形式だったため、リセットしました。新しく始めてください。', '🗺️ 学会攻略');
   }
   {
-    const go = await appConfirm(
-      '学会1日分のマップに挑戦します。\n🧠メンタルが尽きるとゲームオーバーですが、獲得したXPは残ります。',
-      '🗺️ 学会攻略を始める');
+    let msg = '学会1日分のマップに挑戦します。\n🧠メンタルが尽きるとゲームオーバーですが、獲得したXPは残ります。';
+    if (typeof DailyBonus !== 'undefined') {
+      msg += `\n\n${DailyBonus.multiplierLabel('run')}`;
+    }
+    const perks = (typeof GemShop !== 'undefined') ? GemShop.pending() : [];
+    if (perks.length) {
+      msg += '\n\n💎 適用される特典:\n' + perks.map((id) => {
+        const g = GEM_SHOP.find((x) => x.id === id);
+        return g ? `  ${g.icon} ${g.name}` : '';
+      }).join('\n');
+    }
+    const go = await appConfirm(msg, '🗺️ 学会攻略を始める');
     if (!go) return;
     Run.newRun();
     showScreen('run-map');
+    if (perks.length) showToast('💎 特典を適用しました');
   }
 });
 
