@@ -1190,3 +1190,33 @@ audio { width: 100%; margin-bottom: 12px; }
 .voice-row span:first-child { flex: 1; }
 .voice-ok { color: var(--success); font-size: 0.88rem; }
 .voice-ng { color: var(--danger); font-size: 0.88rem; }
+
+/* ---- 監修モード ---- */
+.learn-stat-btns { display: flex; flex-direction: column; gap: 6px; }
+.fix-badge {
+  display: inline-block; margin-left: 4px;
+  background: var(--warn); color: #1e293b;
+  border-radius: 999px; padding: 0 7px; font-size: 0.75rem; font-weight: 700;
+}
+.check-intro { line-height: 1.5; }
+.check-summary {
+  display: flex; gap: 18px; justify-content: center;
+  font-weight: 600; padding: 10px;
+}
+.check-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--bg-card); border-radius: 10px;
+  padding: 12px; margin-bottom: 8px;
+}
+.check-row.ok { border-left: 3px solid var(--success); }
+.check-row.fix { border-left: 3px solid var(--warn); background: rgba(250, 204, 21, 0.07); }
+.check-flag {
+  background: none; border: none; font-size: 1.35rem;
+  cursor: pointer; padding: 2px; line-height: 1;
+}
+.check-body { flex: 1; min-width: 0; }
+.check-t { font-size: 1.15rem; font-weight: 700; }
+.check-k { color: var(--accent); font-size: 0.9rem; margin-top: 2px; }
+.check-ja { font-size: 0.92rem; margin-top: 4px; }
+.check-note { color: var(--text-dim); font-size: 0.8rem; margin-top: 4px; line-height: 1.45; }
+.check-row .tts-btn { padding: 6px 10px; flex-shrink: 0; }

@@ -53,7 +53,7 @@ const SRS = {
   KEY: 'lq_srs',
   INTERVALS: [0, 1, 3, 7, 14, 30],  // box → 次回までの日数
   REVIEW_CAP: 20,                    // 1日の復習上限(復習負債による挫折を防ぐ)
-  NEW_PER_DAY: 5,                    // 1日に新しく学べるカード数
+  NEW_PER_DAY: 5,                    // 1日に新しく学べるカード数(言語ごとに別枠)
 
   data() {
     try {
@@ -67,9 +67,14 @@ const SRS = {
   get(id) { return this.data().cards[id] || null; },
   isIntroduced(id) { return !!this.get(id); },
 
-  /** 今日新しく学んだ枚数 */
-  newToday(now) { return this.data().newLog[localDayKey(now)] || 0; },
-  newRemaining(now) { return Math.max(0, this.NEW_PER_DAY - this.newToday(now)); },
+  /** 今日新しく学んだ枚数(言語別。v1.4.0の数値形式は韓国語の記録として読む) */
+  newToday(lang, now) {
+    const log = this.data().newLog[localDayKey(now)];
+    if (!log) return 0;
+    if (typeof log === 'number') return lang === 'ko' ? log : 0;
+    return log[lang] || 0;
+  },
+  newRemaining(lang, now) { return Math.max(0, this.NEW_PER_DAY - this.newToday(lang, now)); },
 
   addDays(dayKey, n) {
     const [y, m, d] = dayKey.split('-').map(Number);
@@ -82,8 +87,13 @@ const SRS = {
     const d = this.data();
     if (d.cards[id]) return;
     const today = localDayKey(now);
+    const lang = (Phrases.byId(id) || {}).lang || 'ko';
     d.cards[id] = { b: 0, due: today, lv: 1, s: 0, first: today, n: 0, ok: 0 };
-    d.newLog[today] = (d.newLog[today] || 0) + 1;
+    let log = d.newLog[today];
+    if (typeof log === 'number') log = { ko: log };  // 旧形式からの移行
+    if (!log || typeof log !== 'object') log = {};
+    log[lang] = (log[lang] || 0) + 1;
+    d.newLog[today] = log;
     // 60日より古い導入ログは掃除
     Object.keys(d.newLog).sort().slice(0, -60).forEach((k) => delete d.newLog[k]);
     this.save(d);
@@ -192,6 +202,34 @@ const EventDates = {
   }
 };
 
+/* ---------- 監修フラグ(ネイティブチェック用) ---------- */
+const ReviewFlags = {
+  KEY: 'lq_review_flags',
+  data() {
+    try { return JSON.parse(localStorage.getItem(this.KEY) || '{}'); }
+    catch (_) { return {}; }
+  },
+  get(id) { return this.data()[id] || ''; },
+  /** タップで 未確認 → ✅OK → ⚠要修正 → 未確認 と循環 */
+  cycle(id) {
+    const d = this.data();
+    const cur = d[id] || '';
+    const next = cur === '' ? 'ok' : (cur === 'ok' ? 'fix' : '');
+    if (next) d[id] = next; else delete d[id];
+    localStorage.setItem(this.KEY, JSON.stringify(d));
+    return next;
+  },
+  counts(lang) {
+    const d = this.data();
+    const out = { ok: 0, fix: 0, none: 0 };
+    Phrases.byLang(lang).forEach((c) => {
+      const f = d[c.id];
+      if (f === 'ok') out.ok++; else if (f === 'fix') out.fix++; else out.none++;
+    });
+    return out;
+  }
+};
+
 /* ---------- 学習UI ---------- */
 const Learn = {
   lang: localStorage.getItem('lq_learn_lang') || 'ko',
@@ -220,7 +258,7 @@ const Learn = {
     const counts = SRS.counts(lang);
     const due = SRS.dueCards(lang);
     const dueShown = Math.min(due.length, SRS.REVIEW_CAP);
-    const newRemain = SRS.newRemaining();
+    const newRemain = SRS.newRemaining(lang);
     const ttsOk = Speech.canSpeak(lang);
 
     const el = document.getElementById('learn-content');
@@ -255,7 +293,10 @@ const Learn = {
         <div class="learn-stat"><span class="val">${counts.introduced}<span class="sub">/${counts.total}</span></span><span class="lbl">学習中</span></div>
         <div class="learn-stat"><span class="val">🌸 ${counts.bloomed}</span><span class="lbl">育った</span></div>
         <div class="learn-stat"><span class="val">${newRemain}</span><span class="lbl">今日の新規残り</span></div>
-        <button class="btn-control" id="btn-learn-dex">📔 図鑑</button>
+        <div class="learn-stat-btns">
+          <button class="btn-control" id="btn-learn-dex">📔 図鑑</button>
+          <button class="btn-control" id="btn-learn-check">✍️ 監修${ReviewFlags.counts(lang).fix ? `<span class="fix-badge">${ReviewFlags.counts(lang).fix}</span>` : ''}</button>
+        </div>
       </div>
 
       ${!ttsOk && lang === 'yue' ? `
@@ -291,6 +332,7 @@ const Learn = {
     const rv = document.getElementById('btn-learn-review');
     if (rv) rv.addEventListener('click', () => this.startReview());
     document.getElementById('btn-learn-dex').addEventListener('click', () => showScreen('learn-dex'));
+    document.getElementById('btn-learn-check').addEventListener('click', () => showScreen('learn-check'));
     el.querySelectorAll('[data-learn-unit]').forEach((b) =>
       b.addEventListener('click', () => this.startUnit(b.dataset.learnUnit)));
   },
@@ -306,7 +348,7 @@ const Learn = {
   async startUnit(unitId) {
     const u = Phrases.unit(unitId);
     const fresh = u.cards.filter((c) => !SRS.isIntroduced(c.id));
-    const remain = SRS.newRemaining();
+    const remain = SRS.newRemaining(u.lang);
     if (!fresh.length) {
       // 全カード導入済み → このユニットだけ総復習(期限前でもOK、SRSには初回のみ反映)
       this.queue = u.cards.map((c) => ({
@@ -316,9 +358,10 @@ const Learn = {
       return;
     }
     if (remain <= 0) {
+      const label = LEARN_LANGS[u.lang].label;
       await appAlert(
-        '今日の新規カードはもう満タンです(1日' + SRS.NEW_PER_DAY + '枚まで)。\n' +
-        '欲張るより毎日続ける方が強くなります。復習を済ませて、また明日!',
+        `今日の${label}の新規カードはもう満タンです(言語ごとに1日${SRS.NEW_PER_DAY}枚まで)。\n` +
+        'もう一方の言語の新規は別枠で学べます。欲張るより毎日続ける方が強くなります!',
         '🌱 今日はここまで');
       return;
     }
@@ -578,6 +621,71 @@ const Learn = {
     if (more) more.addEventListener('click', () => this.startReview());
     document.querySelectorAll('#learn-stage [data-nav]').forEach((btn) =>
       btn.addEventListener('click', () => showScreen(btn.dataset.nav)));
+  },
+
+  /* ----- 監修モード(ネイティブに見せてチェックしてもらう画面) ----- */
+  renderCheck() {
+    const lang = this.lang;
+    const meta = LEARN_LANGS[lang];
+    const cnt = ReviewFlags.counts(lang);
+    const el = document.getElementById('learn-check-content');
+    el.innerHTML = `
+      <div class="learn-tabs">
+        ${Object.entries(LEARN_LANGS).map(([k, m]) => `
+          <button class="learn-tab ${k === lang ? 'active' : ''}" data-check-lang="${k}">
+            ${m.flag} ${m.label}
+          </button>`).join('')}
+      </div>
+      <div class="card check-intro">
+        <p><strong>${meta.flag} ${meta.label}の全${Phrases.byLang(lang).length}フレーズを、学習状況に関係なく表示しています。</strong></p>
+        <p class="field-note" style="margin-top:6px">ネイティブの方へ: フレーズ・カタカナ・解説を見て、左のマークをタップしてください。
+        タップするたびに <strong>未確認 → ✅ 自然でOK → ⚠️ 要修正</strong> と切り替わります。
+        ⚠️を付けてもらえれば、あとでまとめて修正できます。🔊で読み上げも確認できます。</p>
+      </div>
+      <div class="check-summary card">
+        <span>✅ ${cnt.ok}</span><span>⚠️ ${cnt.fix}</span><span>未確認 ${cnt.none}</span>
+      </div>
+      ${Phrases.units(lang).map((u) => `
+        <h3 class="about-section">${u.icon} ${escapeHtml(u.title)}</h3>
+        ${u.cards.map((c) => {
+          const f = ReviewFlags.get(c.id);
+          return `<div class="check-row ${f}">
+            <button class="check-flag" data-check-flag="${c.id}" aria-label="チェック切替">
+              ${f === 'ok' ? '✅' : (f === 'fix' ? '⚠️' : '◻️')}
+            </button>
+            <div class="check-body">
+              <p class="check-t">${escapeHtml(c.t)}</p>
+              <p class="check-k">${escapeHtml(c.k)} <span class="phrase-roman">(${escapeHtml(c.r)})</span></p>
+              <p class="check-ja">${escapeHtml(c.ja)}</p>
+              ${c.note ? `<p class="check-note">💡 ${escapeHtml(c.note)}</p>` : ''}
+            </div>
+            <button class="tts-btn" data-check-tts="${c.id}">🔊</button>
+          </div>`;
+        }).join('')}
+      `).join('')}
+    `;
+
+    el.querySelectorAll('[data-check-lang]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.lang = b.dataset.checkLang;
+        localStorage.setItem('lq_learn_lang', this.lang);
+        this.renderCheck();
+      }));
+    el.querySelectorAll('[data-check-flag]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const next = ReviewFlags.cycle(b.dataset.checkFlag);
+        b.textContent = next === 'ok' ? '✅' : (next === 'fix' ? '⚠️' : '◻️');
+        const row = b.closest('.check-row');
+        row.className = `check-row ${next}`;
+        const c2 = ReviewFlags.counts(lang);
+        el.querySelector('.check-summary').innerHTML =
+          `<span>✅ ${c2.ok}</span><span>⚠️ ${c2.fix}</span><span>未確認 ${c2.none}</span>`;
+      }));
+    el.querySelectorAll('[data-check-tts]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const c = Phrases.byId(b.dataset.checkTts);
+        Speech.speak(c.t, c.lang, 0.85);
+      }));
   },
 
   /* ----- フレーズ図鑑 ----- */

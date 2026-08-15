@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.5.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'change', text: '新規カードの1日5枚制限を言語ごとの別枠に変更。韓国語5枚+広東語5枚を同じ日に学べます' },
+      { type: 'new', text: '✍️フレーズ監修モードを追加。全フレーズを学習状況に関係なく一覧表示し、ネイティブの方にタップで✅OK/⚠️要修正を付けてもらえます(パートナーさんに広東語を見てもらう用)' }
+    ]
+  },
   {
     version: '1.4.0',
     date: '2026-08-15',
