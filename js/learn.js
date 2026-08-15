@@ -229,14 +229,27 @@ const ReviewFlags = {
     catch (_) { return {}; }
   },
   get(id) { return this.data()[id] || ''; },
-  /** タップで 未確認 → ✅OK → ⚠要修正 → 未確認 と循環 */
+  /** タップで 未確認 → ✅OK → ⚠要修正 → 未確認 と循環。⚠を外すとメモも消す */
   cycle(id) {
     const d = this.data();
     const cur = d[id] || '';
     const next = cur === '' ? 'ok' : (cur === 'ok' ? 'fix' : '');
     if (next) d[id] = next; else delete d[id];
     localStorage.setItem(this.KEY, JSON.stringify(d));
+    if (cur === 'fix' && next === '') this.setNote(id, '');
     return next;
+  },
+  /* ⚠に添える監修メモ */
+  NOTES_KEY: 'lq_review_notes',
+  notes() {
+    try { return JSON.parse(localStorage.getItem(this.NOTES_KEY) || '{}'); }
+    catch (_) { return {}; }
+  },
+  note(id) { return this.notes()[id] || ''; },
+  setNote(id, text) {
+    const n = this.notes();
+    if (text) n[id] = text; else delete n[id];
+    localStorage.setItem(this.NOTES_KEY, JSON.stringify(n));
   },
   counts(lang) {
     const d = this.data();
@@ -831,8 +844,8 @@ const Learn = {
         <p><strong>${meta.flag} ${meta.label}の全${Phrases.byLang(lang).length}フレーズを、学習状況に関係なく表示しています。</strong></p>
         <p class="field-note" style="margin-top:6px">ネイティブの方へ: フレーズ・カタカナ・解説を見て、左のマークをタップしてください。
         タップするたびに <strong>未確認 → ✅ 自然でOK → ⚠️ 要修正</strong> と切り替わります。
-        ⚠️を付けたカードは<strong>修正されるまで学習(新規・復習・クイズ)から自動的に外れます</strong>。
-        あとでまとめて修正し、直したらフラグをタップで戻してください。🔊で読み上げも確認できます。</p>
+        ⚠️を付けると<strong>メモの入力欄</strong>が開くので、どこがおかしいか一言残してください(あとからメモをタップして書き直せます)。
+        ⚠️のカードは修正されるまで学習(新規・復習・クイズ)から自動的に外れます。🔊で読み上げも確認できます。</p>
         ${(typeof MediaRecorder !== 'undefined' && typeof VoiceStore !== 'undefined' && VoiceStore.supported()) ? `
         <p class="field-note" style="margin-top:6px">🎤 さらに、<strong>お手本の声を吹き込めます</strong>。🎤をタップ→フレーズを発音→■で保存。
         録音があるカードは、学習中の再生と聞き取り問題に合成音声の代わりにその声が使われます。</p>` : ''}
@@ -853,6 +866,7 @@ const Learn = {
               <p class="check-k">${escapeHtml(c.k)} <span class="phrase-roman">(${escapeHtml(c.r)})</span></p>
               <p class="check-ja">${escapeHtml(c.ja)}</p>
               ${c.note ? `<p class="check-note">💡 ${escapeHtml(c.note)}</p>` : ''}
+              ${f === 'fix' ? `<p class="check-memo" data-check-memo="${c.id}">📝 ${ReviewFlags.note(c.id) ? escapeHtml(ReviewFlags.note(c.id)) : 'メモなし(タップで追加)'}</p>` : ''}
             </div>
             <div class="check-audio">
               <button class="tts-btn" data-check-tts="${c.id}">🔊</button>
@@ -873,15 +887,47 @@ const Learn = {
         localStorage.setItem('lq_learn_lang', this.lang);
         this.renderCheck();
       }));
+    /* ⚠️メモの表示を行内で更新し、タップで編集できるようにする */
+    const editMemo = async (id, memoEl) => {
+      const c = Phrases.byId(id);
+      const text = await appPrompt(
+        '📝 要修正メモ',
+        `「${c.t}」のどこを直せばいいですか?`,
+        ReviewFlags.note(id),
+        '例: 発音表記が違う / こうは言わない / もっと自然な言い方は◯◯');
+      if (text === null) return;  // スキップ
+      ReviewFlags.setNote(id, text);
+      if (memoEl) memoEl.textContent = '📝 ' + (text || 'メモなし(タップで追加)');
+    };
+    const bindMemo = (memoEl) =>
+      memoEl.addEventListener('click', () => editMemo(memoEl.dataset.checkMemo, memoEl));
+    el.querySelectorAll('[data-check-memo]').forEach(bindMemo);
+
     el.querySelectorAll('[data-check-flag]').forEach((b) =>
-      b.addEventListener('click', () => {
-        const next = ReviewFlags.cycle(b.dataset.checkFlag);
+      b.addEventListener('click', async () => {
+        const id = b.dataset.checkFlag;
+        const next = ReviewFlags.cycle(id);
         b.textContent = next === 'ok' ? '✅' : (next === 'fix' ? '⚠️' : '◻️');
         const row = b.closest('.check-row');
         row.className = `check-row ${next}`;
         const c2 = ReviewFlags.counts(lang);
         el.querySelector('.check-summary').innerHTML =
           `<span>✅ ${c2.ok}</span><span>⚠️ ${c2.fix}</span><span>未確認 ${c2.none}</span>`;
+        // メモ表示の追加/削除
+        let memoEl = row.querySelector('.check-memo');
+        if (next === 'fix') {
+          if (!memoEl) {
+            memoEl = document.createElement('p');
+            memoEl.className = 'check-memo';
+            memoEl.dataset.checkMemo = id;
+            row.querySelector('.check-body').appendChild(memoEl);
+            bindMemo(memoEl);
+          }
+          memoEl.textContent = '📝 メモなし(タップで追加)';
+          await editMemo(id, memoEl);  // ⚠️を付けた直後にメモ入力を促す
+        } else if (memoEl) {
+          memoEl.remove();
+        }
       }));
     el.querySelectorAll('[data-check-tts]').forEach((b) =>
       b.addEventListener('click', () => {
@@ -1001,8 +1047,10 @@ const Learn = {
           return;
         }
         playCardAudio(c, 0.85);
+        const memo = ReviewFlags.get(c.id) === 'fix'
+          ? `\n\n⚠️ 監修メモ: ${ReviewFlags.note(c.id) || '(メモなし)'}` : '';
         appAlert(
-          `${c.k}(${c.r})\n${c.ja}\n\n${c.note || ''}\n\n` +
+          `${c.k}(${c.r})\n${c.ja}\n\n${c.note || ''}${memo}\n\n` +
           `育成段階: ${SRS.stageIcon(r.lv)} ${SRS.stageName(r.lv)} ・ 正解 ${r.ok}/${r.n}回\n次の復習: ${r.due}`,
           `${c.t}`);
       }));

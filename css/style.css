@@ -1430,3 +1430,19 @@ audio { width: 100%; margin-bottom: 12px; }
 .route-goal.reached { color: var(--warn); }
 .boss-line { text-align: center; margin-bottom: 10px; padding: 12px; }
 .boss-line .tts-btn { margin-top: 6px; padding: 5px 12px; }
+
+/* ---- v1.10.1: 監修メモ ---- */
+.check-memo {
+  margin-top: 6px; padding: 8px 10px;
+  background: rgba(250, 204, 21, 0.08);
+  border: 1px dashed var(--warn); border-radius: 8px;
+  color: var(--warn); font-size: 0.83rem; line-height: 1.45;
+  cursor: pointer;
+}
+.prompt-input {
+  width: 100%; margin-top: 10px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid #334155; border-radius: 10px;
+  padding: 10px; font-size: 0.95rem; font-family: inherit;
+  resize: vertical;
+}

@@ -180,6 +180,34 @@ const ConfMode = {
   if (chip) chip.addEventListener('click', () => ConfMode.toggle());
 }
 
+/** テキスト入力ダイアログ。入力文字列を返す(スキップ/キャンセルはnull) */
+function appPrompt(title, msg, initial, placeholder) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.innerHTML = `
+      <div class="modal-box">
+        <p class="modal-title">${escapeHtml(title || '')}</p>
+        <p class="modal-msg">${escapeHtml(msg || '')}</p>
+        <textarea class="prompt-input" rows="3" placeholder="${escapeHtml(placeholder || '')}"></textarea>
+        <div class="modal-actions">
+          <button class="btn-control" data-p="skip">スキップ</button>
+          <button class="btn-control primary" data-p="ok">保存</button>
+        </div>
+      </div>`;
+    const ta = ov.querySelector('textarea');
+    ta.value = initial || '';
+    document.body.appendChild(ov);
+    setTimeout(() => ta.focus(), 60);
+    ov.querySelectorAll('[data-p]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const v = b.dataset.p === 'ok' ? ta.value.trim() : null;
+        ov.remove();
+        resolve(v);
+      }));
+  });
+}
+
 /** 選択肢を並べる簡易アクションシート。選ばれたvalueを返す(キャンセルはnull) */
 function appChoice(title, options) {
   return new Promise((resolve) => {
