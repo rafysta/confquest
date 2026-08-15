@@ -101,9 +101,10 @@ const Quests = {
     try { d = JSON.parse(localStorage.getItem('lq_quests') || 'null'); } catch (_) { d = null; }
     const today = localDayKey(now);
     if (!d || d.date !== today) {
-      d = { date: today, done: {}, spent: 0 };
+      d = { date: today, done: {}, ready: {}, spent: 0 };
       localStorage.setItem('lq_quests', JSON.stringify(d));
     }
+    if (!d.ready) d.ready = {};  // v1.5.0以前のデータへの移行
     return d;
   },
   save(d) { localStorage.setItem('lq_quests', JSON.stringify(d)); },
@@ -112,25 +113,66 @@ const Quests = {
     const d = this.data(now);
     return QUEST_DEFS.filter((q) => d.done[q.id]).length;
   },
+  readyCount(now) {
+    const d = this.data(now);
+    return QUEST_DEFS.filter((q) => d.ready[q.id] && !d.done[q.id]).length;
+  },
 
-  /** クエスト達成を試みる。達成したら報酬を自動付与 */
+  /** ホーム画面のクエストカード表示を更新 */
+  refreshHomeCard(now) {
+    const card = document.getElementById('daily-quest-summary');
+    if (!card) return;
+    const ready = this.readyCount(now);
+    card.textContent = ready > 0
+      ? `🎁 ${ready}件 受け取れます!`
+      : `${this.doneCount(now)}/${QUEST_DEFS.length} 達成`;
+    const btn = card.closest('.quest-card');
+    if (btn) btn.classList.toggle('has-ready', ready > 0);
+  },
+
+  /** 条件を満たしたクエストを「受け取り待ち」にする(報酬はまだ渡さない) */
   tryComplete(id, now) {
     const d = this.data(now);
-    if (d.done[id]) return false;
+    if (d.done[id] || d.ready[id]) return false;
     const def = QUEST_DEFS.find((q) => q.id === id);
     if (!def) return false;
+    d.ready[id] = new Date().toISOString();
+    this.save(d);
+    if (typeof showToast === 'function') {
+      showToast(`${def.icon} クエスト達成! 「今日のクエスト」で🎁報酬を受け取れます`);
+    }
+    this.refreshHomeCard(now);
+    return true;
+  },
+
+  /** 受け取り待ちのクエストをタップで受け取る。付与した定義を返す(不可ならnull) */
+  claim(id, now) {
+    const d = this.data(now);
+    if (!d.ready[id] || d.done[id]) return null;
+    const def = QUEST_DEFS.find((q) => q.id === id);
+    if (!def) return null;
+    delete d.ready[id];
     d.done[id] = new Date().toISOString();
     this.save(d);
     if (typeof Gami !== 'undefined') Gami.addPoints(def.pt);
-    Gems.add(def.gems, `クエスト達成: ${def.name}`);
-    if (typeof showToast === 'function') showToast(`${def.icon} クエスト達成! ${def.name} ⭐+${def.pt} 💎+${def.gems}`);
-    // 全達成ボーナス
-    if (QUEST_DEFS.every((q) => d.done[q.id])) {
-      Gems.add(QUEST_ALL_BONUS_GEMS, '全クエスト達成ボーナス');
-      if (typeof Achievements !== 'undefined') Achievements.unlock('quest-all');
-    }
-    const card = document.getElementById('daily-quest-summary');
-    if (card) card.textContent = `${this.doneCount()}/${QUEST_DEFS.length} 達成`;
+    Gems.add(def.gems);
+    this.refreshHomeCard(now);
+    return def;
+  },
+
+  /** 全達成ボーナスの状態: 'locked' | 'ready' | 'claimed' */
+  bonusState(now) {
+    const d = this.data(now);
+    if (d.bonus) return 'claimed';
+    return QUEST_DEFS.every((q) => d.done[q.id]) ? 'ready' : 'locked';
+  },
+  claimBonus(now) {
+    if (this.bonusState(now) !== 'ready') return false;
+    const d = this.data(now);
+    d.bonus = new Date().toISOString();
+    this.save(d);
+    Gems.add(QUEST_ALL_BONUS_GEMS);
+    if (typeof Achievements !== 'undefined') Achievements.unlock('quest-all');
     return true;
   },
 

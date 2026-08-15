@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,15 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.6.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'change', text: 'デイリークエストの報酬が自動付与ではなく「🎁受け取る」ボタン式に。達成したクエストは金色に光り、タップすると⭐と💎が弾けるエフェクトとともに受け取れます' },
+      { type: 'new', text: '受け取り待ちのクエストがあると、ホームの「今日のクエスト」カードが光って「🎁 n件 受け取れます!」と表示されます' },
+      { type: 'change', text: '全達成ボーナス(💎5)も、全クエストの報酬を受け取ったあとにタップで受け取る方式になりました' }
+    ]
+  },
   {
     version: '1.5.0',
     date: '2026-08-15',

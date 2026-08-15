@@ -118,8 +118,7 @@ function renderHome() {
   document.getElementById('points-badge').textContent = `⭐ ${d.points} pt`;
   if (typeof Gems !== 'undefined') {
     document.getElementById('gems-badge').textContent = `💎 ${Gems.get()}`;
-    document.getElementById('daily-quest-summary').textContent =
-      `${Quests.doneCount()}/${QUEST_DEFS.length} 達成`;
+    Quests.refreshHomeCard();
   }
   const sum = document.getElementById('status-summary');
   if (sum) {
@@ -620,25 +619,81 @@ function renderHistory() {
 function renderQuests() {
   const d = Quests.data();
   const el = document.getElementById('quests-content');
+  const bonus = Quests.bonusState();
+
   el.innerHTML = QUEST_DEFS.map((q) => {
     const done = !!d.done[q.id];
-    const progress = (q.id === 'spend' && !done)
+    const ready = !done && !!d.ready[q.id];
+    const progress = (q.id === 'spend' && !done && !ready)
       ? `<span class="field-note">(${Math.min(50, d.spent || 0)}/50)</span>` : '';
-    return `<div class="quest-row ${done ? 'done' : ''}">
+    const reward = done
+      ? '✅'
+      : (ready
+        ? `<button class="quest-claim" data-claim="${q.id}">🎁 受け取る</button>`
+        : `⭐${q.pt}<br>💎${q.gems}`);
+    return `<div class="quest-row ${done ? 'done' : ''} ${ready ? 'ready' : ''}" data-quest-row="${q.id}">
       <span class="quest-icon">${q.icon}</span>
       <span class="quest-body">
         <strong>${q.name}</strong> ${progress}
-        <span class="field-note">${q.desc}</span>
+        <span class="field-note">${ready ? '達成! タップして報酬を受け取ろう' : q.desc}</span>
       </span>
-      <span class="quest-reward">${done ? '✅' : `⭐${q.pt}<br>💎${q.gems}`}</span>
+      <span class="quest-reward">${reward}</span>
     </div>`;
   }).join('') + `
-    <div class="quest-row bonus ${QUEST_DEFS.every((q) => d.done[q.id]) ? 'done' : ''}">
+    <div class="quest-row bonus ${bonus === 'claimed' ? 'done' : ''} ${bonus === 'ready' ? 'ready' : ''}" data-quest-row="__bonus">
       <span class="quest-icon">🎯</span>
       <span class="quest-body"><strong>全達成ボーナス</strong>
-        <span class="field-note">${QUEST_DEFS.length}つすべて達成する</span></span>
-      <span class="quest-reward">${QUEST_DEFS.every((q) => d.done[q.id]) ? '✅' : `💎${QUEST_ALL_BONUS_GEMS}`}</span>
+        <span class="field-note">${bonus === 'ready' ? '全クエスト達成! タップして受け取ろう' : `${QUEST_DEFS.length}つすべての報酬を受け取る`}</span></span>
+      <span class="quest-reward">${bonus === 'claimed' ? '✅'
+        : (bonus === 'ready' ? `<button class="quest-claim" data-claim="__bonus">🎁 受け取る</button>` : `💎${QUEST_ALL_BONUS_GEMS}`)}</span>
     </div>`;
+
+  el.querySelectorAll('[data-claim]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.claim;
+      let rewardHtml = '';
+      if (id === '__bonus') {
+        if (!Quests.claimBonus()) return;
+        rewardHtml = `💎+${QUEST_ALL_BONUS_GEMS}`;
+      } else {
+        const def = Quests.claim(id);
+        if (!def) return;
+        rewardHtml = `⭐+${def.pt} 💎+${def.gems}`;
+      }
+      playClaimEffect(el.querySelector(`[data-quest-row="${id}"]`), rewardHtml);
+      // エフェクトを見せてから再描画(全達成でボーナスが出現する場合も反映)
+      setTimeout(() => {
+        if (document.getElementById('screen-quests').classList.contains('active')) renderQuests();
+      }, 1000);
+    });
+  });
+}
+
+/** 報酬受け取りの演出: 行のフラッシュ + 浮き上がる報酬 + 飛び散るパーティクル */
+function playClaimEffect(row, rewardHtml) {
+  if (!row) return;
+  row.classList.remove('ready');
+  row.classList.add('done', 'claim-flash');
+  const rw = row.querySelector('.quest-reward');
+  if (rw) rw.innerHTML = '✅';
+
+  const pop = document.createElement('div');
+  pop.className = 'reward-pop';
+  pop.textContent = rewardHtml;
+  row.appendChild(pop);
+
+  for (let i = 0; i < 12; i++) {
+    const s = document.createElement('span');
+    s.className = 'reward-spark';
+    const ang = (Math.PI * 2 * i) / 12 + Math.random() * 0.5;
+    const dist = 40 + Math.random() * 45;
+    s.style.setProperty('--dx', `${Math.cos(ang) * dist}px`);
+    s.style.setProperty('--dy', `${Math.sin(ang) * dist * 0.7}px`);
+    s.textContent = ['✨', '⭐', '💎', '🎉'][i % 4];
+    row.appendChild(s);
+    setTimeout(() => s.remove(), 950);
+  }
+  setTimeout(() => pop.remove(), 1150);
 }
 
 function renderAchievements() {
