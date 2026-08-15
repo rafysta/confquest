@@ -1059,3 +1059,134 @@ audio { width: 100%; margin-bottom: 12px; }
 .tag-new { background: rgba(74, 222, 128, 0.15); color: var(--success); }
 .tag-fix { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
 .tag-change { background: rgba(250, 204, 21, 0.15); color: var(--warn); }
+
+/* ================= Language Quest (学習モジュール) ================= */
+.learn-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.learn-tab {
+  flex: 1; padding: 10px; border: none; border-radius: var(--radius);
+  background: var(--bg-card); color: var(--text-dim);
+  font-size: 0.95rem; font-weight: 600; cursor: pointer;
+}
+.learn-tab.active {
+  background: var(--accent-dark); color: #fff;
+}
+
+.countdown-row { margin-bottom: 12px; text-align: center; }
+.countdown-chip {
+  display: inline-block; padding: 8px 14px; border-radius: 999px;
+  background: var(--bg-card); color: var(--text); font-size: 0.9rem;
+  border: 1px solid #334155;
+}
+.countdown-chip strong { color: var(--warn); }
+.countdown-chip.unset { color: var(--accent); cursor: pointer; border-style: dashed; }
+.countdown-chip.today { border-color: var(--warn); color: var(--warn); }
+
+.learn-cta {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  border: 1px solid var(--accent-dark); cursor: pointer; text-align: left;
+  color: var(--text); font-size: 1rem;
+}
+.learn-cta.done { border-color: #334155; cursor: default; }
+.learn-cta-icon { font-size: 1.6rem; }
+.learn-cta-body { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.learn-cta-go { color: var(--accent); font-size: 1.2rem; }
+
+.learn-stats { display: flex; align-items: center; gap: 12px; }
+.learn-stat { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.learn-stat .val { font-size: 1.15rem; font-weight: 700; }
+.learn-stat .val .sub { font-size: 0.8rem; color: var(--text-dim); font-weight: 400; }
+.learn-stat .lbl { font-size: 0.72rem; color: var(--text-dim); }
+.tts-warn { margin-bottom: 10px; color: var(--warn); }
+
+.unit-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: var(--bg-card); border: none; border-radius: var(--radius);
+  padding: 14px; margin-bottom: 10px; cursor: pointer; text-align: left;
+  color: var(--text);
+}
+.unit-row:active { background: var(--bg-card-hover); }
+.unit-row.complete { border: 1px solid var(--success); }
+.unit-icon { font-size: 1.5rem; }
+.unit-body { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.unit-title { font-weight: 600; }
+.unit-track {
+  position: relative; height: 6px; border-radius: 3px;
+  background: #0b1222; overflow: hidden; margin-top: 3px; display: block;
+}
+.unit-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--accent-dark); border-radius: 3px;
+}
+.unit-fill.bloom { background: #f472b6; }
+.unit-count { color: var(--text-dim); font-size: 0.85rem; }
+
+/* フレーズカード */
+.phrase-card { text-align: center; }
+.phrase-target { font-size: 1.9rem; font-weight: 700; line-height: 1.3; }
+.phrase-target.small { font-size: 1.3rem; }
+.phrase-kana { color: var(--accent); font-size: 1.05rem; margin-top: 4px; }
+.phrase-roman { color: var(--text-dim); font-size: 0.82rem; margin-top: 2px; }
+.phrase-ja { font-size: 1.05rem; margin-top: 10px; font-weight: 600; }
+.phrase-tts { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.tts-btn {
+  background: var(--bg-card-hover); color: var(--text);
+  border: 1px solid #334155; border-radius: 999px;
+  padding: 8px 16px; font-size: 0.95rem; cursor: pointer;
+}
+.tts-btn.big { font-size: 1.15rem; padding: 12px 22px; }
+.phrase-note {
+  margin-top: 12px; text-align: left; color: var(--text-dim);
+  font-size: 0.86rem; background: #0b1222; border-radius: 8px; padding: 10px;
+  line-height: 1.5;
+}
+
+/* 出題 */
+.quiz-kind { text-align: center; color: var(--text-dim); font-size: 0.85rem; margin-bottom: 8px; }
+.quiz-prompt { margin-bottom: 12px; }
+.quiz-ja { font-size: 1.3rem; font-weight: 700; text-align: center; }
+.learn-choice { position: relative; }
+.learn-choice .choice-kana {
+  display: block; color: var(--text-dim); font-size: 0.78rem; margin-top: 2px;
+}
+.learn-choice.correct { border-color: var(--success); background: rgba(74, 222, 128, 0.12); }
+.learn-choice.wrong { border-color: var(--danger); background: rgba(248, 113, 113, 0.12); }
+
+/* フィードバック */
+.learn-fb { margin-top: 14px; animation: fadeSlideIn 0.25s ease; }
+.learn-fb .fb-verdict { text-align: center; font-weight: 700; margin-bottom: 8px; }
+.learn-fb.good .fb-verdict { color: var(--success); }
+.learn-fb.bad .fb-verdict { color: var(--danger); }
+.learn-fb .fb-card {
+  background: var(--bg-card); border-radius: var(--radius);
+  padding: 14px; text-align: center; margin-bottom: 10px;
+}
+.learn-fb .fb-card .tts-btn { margin-top: 8px; }
+.fb-levelup {
+  text-align: center; color: var(--warn); font-weight: 700;
+  margin: 8px 0; animation: flamePulse 1s ease-in-out 2;
+}
+.learn-result-icon { font-size: 3rem; margin-bottom: 8px; }
+
+/* 図鑑 */
+.dex-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.dex-phrase {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: var(--bg-card); border: none; border-radius: 10px;
+  padding: 10px 12px; cursor: pointer; color: var(--text); text-align: left;
+}
+.dex-phrase.locked { opacity: 0.45; }
+.dex-phrase.bloomed { border-left: 3px solid #f472b6; }
+.dex-phrase.growing { border-left: 3px solid var(--accent-dark); }
+.dex-stage { font-size: 1.1rem; }
+.dex-t { font-weight: 600; flex: 1; }
+.dex-ja { color: var(--text-dim); font-size: 0.82rem; max-width: 40%; text-align: right; }
+
+/* 音声診断(設定画面) */
+.voice-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-card); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 8px;
+}
+.voice-row span:first-child { flex: 1; }
+.voice-ok { color: var(--success); font-size: 0.88rem; }
+.voice-ng { color: var(--danger); font-size: 0.88rem; }

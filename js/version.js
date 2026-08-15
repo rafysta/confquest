@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,18 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.4.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '🇰🇷 Language Quest(Phase 1)を追加! 韓国語54フレーズ・広東語39フレーズをカードで学べます(設計はdocs/language-learning-design.md)' },
+      { type: 'new', text: 'フレーズは🌱認識→🌿聞き取り→🌸想起の3段階で成長。日本語→現地語の想起問題は制限時間つきで「1秒で口から出る」を鍛えます' },
+      { type: 'new', text: '間隔反復(SRS)で「忘れかけた頃」に自動で復習に出ます。復習は1日20枚・新規は1日5枚までで、無理なく毎日続く設計' },
+      { type: 'new', text: 'フレーズの読み上げ(🔊通常/🐢ゆっくり)に対応。設定画面の「音声チェック」でこの端末の韓国語・広東語対応を診断できます' },
+      { type: 'new', text: '📔フレーズ図鑑: 育てたカードのコレクション。設定でISSY39と結婚式の日付を入れるとカウントダウンが表示されます' },
+      { type: 'new', text: 'デイリークエストに「📖 ことばの習慣」を追加。実績も3種追加(🌱ことばの種・🌸花ひらく語彙・📗ユニット制覇)' }
+    ]
+  },
   {
     version: '1.3.0',
     date: '2026-08-15',

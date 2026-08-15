@@ -63,6 +63,8 @@ function showScreen(name) {
   if (name === 'convo-list') renderConvoList();
   if (name === 'status') renderStatus();
   if (name === 'run-map') Run.renderMap();
+  if (name === 'learn' && typeof Learn !== 'undefined') Learn.renderHome();
+  if (name === 'learn-dex' && typeof Learn !== 'undefined') Learn.renderDex();
   if (name === 'quests' && typeof Quests !== 'undefined') renderQuests();
   if (name === 'achievements' && typeof Achievements !== 'undefined') renderAchievements();
   if (name === 'itemdex' && typeof ItemDex !== 'undefined') renderItemDex();
@@ -125,6 +127,23 @@ function renderHome() {
         ? `・実績 ${Achievements.count()}/${ACHIEVEMENT_DEFS.length}` : '');
   }
   updateRunMenuDesc();
+  updateLearnMenuDesc();
+}
+
+/** ホームのLanguage Questボタンに復習枚数とカウントダウンを表示 */
+function updateLearnMenuDesc() {
+  const el = document.getElementById('menu-learn-desc');
+  if (!el || typeof SRS === 'undefined') return;
+  const parts = [];
+  const due = Math.min(SRS.dueCards().length, SRS.REVIEW_CAP);
+  if (due > 0) parts.push(`📖 今日の復習 ${due}枚`);
+  const dl = EventDates.daysLeft('ko');
+  if (dl !== null && dl > 0) parts.push(`🎤 ISSY39まであと${dl}日`);
+  else {
+    const dw = EventDates.daysLeft('yue');
+    if (dw !== null && dw > 0) parts.push(`💒 結婚式まであと${dw}日`);
+  }
+  el.textContent = parts.length ? parts.join(' ・ ') : '韓国語・広東語をカードで育てて習得';
 }
 
 /* ---------- 設定 ---------- */
@@ -144,6 +163,11 @@ function loadSettings() {
   document.getElementById('filler-words').value =
     localStorage.getItem('lq_fillers') ||
     'um, uh, so, actually, basically, you know, kind of, I mean, like';
+  if (typeof EventDates !== 'undefined') {
+    document.getElementById('event-ko').value = EventDates.get('ko');
+    document.getElementById('event-yue').value = EventDates.get('yue');
+  }
+  document.getElementById('voice-check-result').innerHTML = '';
   updateProviderFields();
 }
 
@@ -165,6 +189,10 @@ document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_stt_model', document.getElementById('stt-model').value);
   localStorage.setItem('lq_time_scale', document.getElementById('time-scale').value);
   localStorage.setItem('lq_fillers', document.getElementById('filler-words').value);
+  if (typeof EventDates !== 'undefined') {
+    EventDates.set('ko', document.getElementById('event-ko').value);
+    EventDates.set('yue', document.getElementById('event-yue').value);
+  }
   // 保存されたことをはっきり示す: ボタンの見た目変化+トースト通知
   const btn = document.getElementById('save-settings');
   btn.textContent = '✓ 保存しました';
@@ -174,6 +202,30 @@ document.getElementById('save-settings').addEventListener('click', () => {
     btn.classList.remove('saved');
   }, 1800);
   showToast('✓ 設定を保存しました');
+});
+
+/* ---------- 読み上げ音声の診断(Language Quest) ---------- */
+const _vcBtn = document.getElementById('btn-voice-check');
+if (_vcBtn) _vcBtn.addEventListener('click', () => {
+  const el = document.getElementById('voice-check-result');
+  if (typeof Speech === 'undefined' || !('speechSynthesis' in window)) {
+    el.innerHTML = '<p class="field-note">⚠ この端末・ブラウザは読み上げに対応していません。</p>';
+    return;
+  }
+  Speech.init(); // 最新のvoice一覧を取り直す
+  const samples = { ko: '안녕하세요', yue: '你好' };
+  el.innerHTML = Object.entries(LEARN_LANGS).map(([k, m]) => {
+    const v = Speech.voiceFor(k);
+    return `<div class="voice-row">
+      <span>${m.flag} ${m.label}</span>
+      <span class="${v ? 'voice-ok' : 'voice-ng'}">${v ? '✓ 対応 (' + escapeHtml(v.lang) + ')' : '✗ 音声なし'}</span>
+      ${v ? `<button class="btn-control" type="button" data-voicetest="${k}">▶ テスト</button>` : ''}
+    </div>`;
+  }).join('') + (Speech.canSpeak('yue') ? '' :
+    '<p class="field-note">広東語の音声が無い端末では、聞き取り問題は文字での出題になります。Androidでは「設定 → システム → テキスト読み上げ」でGoogle音声データに広東語を追加できる場合があります。</p>');
+  el.querySelectorAll('[data-voicetest]').forEach((btn) =>
+    btn.addEventListener('click', () =>
+      Speech.speak(samples[btn.dataset.voicetest], btn.dataset.voicetest, 0.9)));
 });
 
 /** 画面下部に短時間表示される通知 */
@@ -583,7 +635,7 @@ function renderQuests() {
     <div class="quest-row bonus ${QUEST_DEFS.every((q) => d.done[q.id]) ? 'done' : ''}">
       <span class="quest-icon">🎯</span>
       <span class="quest-body"><strong>全達成ボーナス</strong>
-        <span class="field-note">4つすべて達成する</span></span>
+        <span class="field-note">${QUEST_DEFS.length}つすべて達成する</span></span>
       <span class="quest-reward">${QUEST_DEFS.every((q) => d.done[q.id]) ? '✅' : `💎${QUEST_ALL_BONUS_GEMS}`}</span>
     </div>`;
 }

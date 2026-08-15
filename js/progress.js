@@ -90,7 +90,8 @@ const QUEST_DEFS = [
   { id: 'morning', icon: '🌅', name: '朝活', desc: '朝7時〜12時にアプリを開く', pt: 10, gems: 2 },
   { id: 'evening', icon: '🌆', name: '夜活', desc: '夜19時以降にアプリを開く', pt: 10, gems: 2 },
   { id: 'spend',   icon: '💸', name: '投資家', desc: '学会攻略のお店で💰50以上使う', pt: 15, gems: 3 },
-  { id: 'play',    icon: '🗺️', name: '学会へ行こう', desc: '学会攻略で会話を1回終える', pt: 15, gems: 3 }
+  { id: 'play',    icon: '🗺️', name: '学会へ行こう', desc: '学会攻略で会話を1回終える', pt: 15, gems: 3 },
+  { id: 'study',   icon: '📖', name: 'ことばの習慣', desc: 'Language Questで復習か新カードを1セッション終える', pt: 15, gems: 3 }
 ];
 const QUEST_ALL_BONUS_GEMS = 5;
 
@@ -275,7 +276,10 @@ const ACHIEVEMENT_DEFS = [
   { id: 'gem-100',        icon: '💎', name: 'コレクター', desc: 'ジェムを100個集めた' },
   { id: 'relic-collector', icon: '✨', name: '思い出の品', desc: 'レリックを2つ以上持って学会を制覇した' },
   { id: 'dex-complete',   icon: '📖', name: '収集家', desc: 'すべてのアイテムを1度は手に入れた' },
-  { id: 'give-up',        icon: '🏳️', name: '撤退も戦術', desc: '学会攻略を途中で切り上げた' }
+  { id: 'give-up',        icon: '🏳️', name: '撤退も戦術', desc: '学会攻略を途中で切り上げた' },
+  { id: 'lang-first',     icon: '🌱', name: 'ことばの種', desc: 'Language Questで最初のカードを学んだ' },
+  { id: 'lang-bloom30',   icon: '🌸', name: '花ひらく語彙', desc: 'フレーズカード30枚を🌸想起まで育てた' },
+  { id: 'lang-unit',      icon: '📗', name: 'ユニット制覇', desc: '1つのユニットの全カードを🌸まで育てた' }
 ];
 const ACHIEVEMENT_GEMS = 10;
 

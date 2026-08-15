@@ -1,0 +1,636 @@
+/* ConfQuest - Language Quest 学習エンジン (Phase 1)
+ * フレーズカード育成 × 簡易SRS(間隔反復)
+ *   Lv1 🌱 認識(4択) → Lv2 🌿 聞き取り(TTS) → Lv3 🌸 想起(制限時間つき)
+ *   Lv4 ⭐ 発話(Whisper判定)は Phase 2 で実装予定。
+ * データは js/phrases.js。SRS状態は localStorage('lq_srs')。
+ */
+'use strict';
+
+/* ---------- 読み上げ(Web Speech API / speechSynthesis) ----------
+ * 注意: 不採用にしたのは音声認識(SpeechRecognition)。読み上げは録音と競合しない。
+ */
+const Speech = {
+  _voices: [],
+  init() {
+    if (!('speechSynthesis' in window)) return;
+    const load = () => { this._voices = speechSynthesis.getVoices() || []; };
+    load();
+    if (typeof speechSynthesis.addEventListener === 'function') {
+      speechSynthesis.addEventListener('voiceschanged', load);
+    }
+  },
+  /** lang('ko'|'yue') に合う音声を探す。無ければnull */
+  voiceFor(lang) {
+    const prefs = (LEARN_LANGS[lang] || {}).ttsLangs || [];
+    for (const p of prefs) {
+      const v = this._voices.find((x) =>
+        x.lang && x.lang.toLowerCase().startsWith(p.toLowerCase()));
+      if (v) return v;
+    }
+    return null;
+  },
+  /** 確実に読み上げられるか(聞き取り問題を出して良いか) */
+  canSpeak(lang) { return !!this.voiceFor(lang); },
+  /** 読み上げる。音声が無くても utterance.lang 指定で一応試みる */
+  speak(text, lang, rate) {
+    if (!('speechSynthesis' in window)) return false;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const v = this.voiceFor(lang);
+      if (v) u.voice = v;
+      u.lang = ((LEARN_LANGS[lang] || {}).ttsLangs || ['en'])[0];
+      u.rate = rate || 0.9;
+      speechSynthesis.speak(u);
+      return true;
+    } catch (_) { return false; }
+  }
+};
+Speech.init();
+
+/* ---------- SRS(簡易SM-2) ---------- */
+const SRS = {
+  KEY: 'lq_srs',
+  INTERVALS: [0, 1, 3, 7, 14, 30],  // box → 次回までの日数
+  REVIEW_CAP: 20,                    // 1日の復習上限(復習負債による挫折を防ぐ)
+  NEW_PER_DAY: 5,                    // 1日に新しく学べるカード数
+
+  data() {
+    try {
+      const d = JSON.parse(localStorage.getItem(this.KEY) || 'null');
+      if (d && d.cards) return d;
+    } catch (_) { /* fallthrough */ }
+    return { cards: {}, newLog: {} };
+  },
+  save(d) { localStorage.setItem(this.KEY, JSON.stringify(d)); },
+
+  get(id) { return this.data().cards[id] || null; },
+  isIntroduced(id) { return !!this.get(id); },
+
+  /** 今日新しく学んだ枚数 */
+  newToday(now) { return this.data().newLog[localDayKey(now)] || 0; },
+  newRemaining(now) { return Math.max(0, this.NEW_PER_DAY - this.newToday(now)); },
+
+  addDays(dayKey, n) {
+    const [y, m, d] = dayKey.split('-').map(Number);
+    const t = new Date(y, m - 1, d + n);
+    return localDayKey(t);
+  },
+
+  /** 新カードを学習開始 */
+  introduce(id, now) {
+    const d = this.data();
+    if (d.cards[id]) return;
+    const today = localDayKey(now);
+    d.cards[id] = { b: 0, due: today, lv: 1, s: 0, first: today, n: 0, ok: 0 };
+    d.newLog[today] = (d.newLog[today] || 0) + 1;
+    // 60日より古い導入ログは掃除
+    Object.keys(d.newLog).sort().slice(0, -60).forEach((k) => delete d.newLog[k]);
+    this.save(d);
+    if (typeof Achievements !== 'undefined') Achievements.unlock('lang-first');
+  },
+
+  /** 回答を記録。{levelUp: 新Lv|null} を返す */
+  answer(id, correct, now) {
+    const d = this.data();
+    const rec = d.cards[id];
+    if (!rec) return { levelUp: null };
+    const today = localDayKey(now);
+    rec.n++;
+    let levelUp = null;
+    if (correct) {
+      rec.ok++;
+      rec.b = Math.min(this.INTERVALS.length - 1, rec.b + 1);
+      rec.s++;
+      // 同じLvで2回連続正解したら次の段階へ(Phase 1はLv3まで)
+      if (rec.s >= 2 && rec.lv < 3) { rec.lv++; rec.s = 0; levelUp = rec.lv; }
+    } else {
+      rec.b = Math.max(0, rec.b - 2);
+      rec.s = 0;
+    }
+    rec.due = this.addDays(today, this.INTERVALS[rec.b]);
+    this.save(d);
+    if (levelUp && rec.lv >= 3) this.checkCollectAchievements();
+    return { levelUp };
+  },
+
+  /** 復習期限が来ているカード(言語で絞り込み、期限が古い順) */
+  dueCards(lang, now) {
+    const d = this.data();
+    const today = localDayKey(now);
+    return Phrases.all()
+      .filter((c) => (!lang || c.lang === lang))
+      .filter((c) => d.cards[c.id] && d.cards[c.id].due <= today)
+      .sort((a, b) => d.cards[a.id].due < d.cards[b.id].due ? -1 : 1);
+  },
+
+  stageIcon(lv) { return ['', '🌱', '🌿', '🌸', '⭐'][lv] || '🌱'; },
+  stageName(lv) { return ['', '認識', '聞き取り', '想起', '発話'][lv] || ''; },
+
+  /** 集計 */
+  counts(lang) {
+    const d = this.data();
+    const cards = Phrases.byLang(lang);
+    const out = { total: cards.length, introduced: 0, bloomed: 0 };
+    cards.forEach((c) => {
+      const r = d.cards[c.id];
+      if (r) { out.introduced++; if (r.lv >= 3) out.bloomed++; }
+    });
+    return out;
+  },
+  unitProgress(unitId) {
+    const d = this.data();
+    const u = Phrases.unit(unitId);
+    const out = { total: u.cards.length, introduced: 0, bloomed: 0 };
+    u.cards.forEach((c) => {
+      const r = d.cards[c.id];
+      if (r) { out.introduced++; if (r.lv >= 3) out.bloomed++; }
+    });
+    return out;
+  },
+  checkCollectAchievements() {
+    if (typeof Achievements === 'undefined') return;
+    const d = this.data();
+    const bloomed = Phrases.all().filter((c) => d.cards[c.id] && d.cards[c.id].lv >= 3);
+    if (bloomed.length >= 30) Achievements.unlock('lang-bloom30');
+    for (const u of PHRASE_UNITS) {
+      if (u.cards.every((c) => d.cards[c.id] && d.cards[c.id].lv >= 3)) {
+        Achievements.unlock('lang-unit');
+        break;
+      }
+    }
+  }
+};
+
+/* ---------- イベント日カウントダウン ---------- */
+const EventDates = {
+  get(lang) { return localStorage.getItem(LEARN_LANGS[lang].eventKey) || ''; },
+  set(lang, v) {
+    if (v) localStorage.setItem(LEARN_LANGS[lang].eventKey, v);
+    else localStorage.removeItem(LEARN_LANGS[lang].eventKey);
+  },
+  daysLeft(lang, now) {
+    const v = this.get(lang);
+    if (!v) return null;
+    const [y, m, d] = v.split('-').map(Number);
+    const target = new Date(y, m - 1, d);
+    const base = now ? new Date(now) : new Date();
+    const today = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    return Math.round((target - today) / 86400000);
+  },
+  chip(lang) {
+    const meta = LEARN_LANGS[lang];
+    const left = this.daysLeft(lang);
+    if (left === null) {
+      return `<button class="countdown-chip unset" data-nav="settings">${meta.eventIcon} ${meta.event}の日付を設定 →</button>`;
+    }
+    if (left > 0) {
+      return `<span class="countdown-chip">${meta.eventIcon} ${meta.event}まで <strong>あと${left}日</strong></span>`;
+    }
+    if (left === 0) return `<span class="countdown-chip today">${meta.eventIcon} ${meta.event}は今日! 楽しんで!</span>`;
+    return `<span class="countdown-chip past">${meta.eventIcon} ${meta.event} おつかれさまでした!</span>`;
+  }
+};
+
+/* ---------- 学習UI ---------- */
+const Learn = {
+  lang: localStorage.getItem('lq_learn_lang') || 'ko',
+  queue: [],          // [{type:'intro'|'quiz', card, mode}]
+  idx: 0,
+  firstTry: {},       // id -> まだ初回answerを記録していないか
+  correct: 0,
+  answered: 0,
+  sessionKind: '',    // 'review' | 'unit'
+  timerId: null,
+  turnStartedAt: 0,
+  locked: false,
+
+  timeScale() { return parseFloat(localStorage.getItem('lq_time_scale') || '1.5') || 1.5; },
+
+  setLang(lang) {
+    this.lang = lang;
+    localStorage.setItem('lq_learn_lang', lang);
+    this.renderHome();
+  },
+
+  /* ----- ホーム(言語タブ・復習CTA・ユニット一覧) ----- */
+  renderHome() {
+    const lang = this.lang;
+    const meta = LEARN_LANGS[lang];
+    const counts = SRS.counts(lang);
+    const due = SRS.dueCards(lang);
+    const dueShown = Math.min(due.length, SRS.REVIEW_CAP);
+    const newRemain = SRS.newRemaining();
+    const ttsOk = Speech.canSpeak(lang);
+
+    const el = document.getElementById('learn-content');
+    el.innerHTML = `
+      <div class="learn-tabs">
+        ${Object.entries(LEARN_LANGS).map(([k, m]) => `
+          <button class="learn-tab ${k === lang ? 'active' : ''}" data-learn-lang="${k}">
+            ${m.flag} ${m.label}
+          </button>`).join('')}
+      </div>
+
+      <div class="countdown-row">${EventDates.chip(lang)}</div>
+
+      ${dueShown > 0 ? `
+        <button class="learn-cta card" id="btn-learn-review">
+          <span class="learn-cta-icon">📖</span>
+          <span class="learn-cta-body">
+            <strong>今日の復習 ${dueShown}枚</strong>
+            <span class="field-note">${due.length > SRS.REVIEW_CAP ? `残り${due.length - SRS.REVIEW_CAP}枚は明日に繰り越し・` : ''}記憶が消える前に育てましょう</span>
+          </span>
+          <span class="learn-cta-go">▶</span>
+        </button>` : `
+        <div class="learn-cta card done">
+          <span class="learn-cta-icon">✅</span>
+          <span class="learn-cta-body">
+            <strong>今日の復習は完了!</strong>
+            <span class="field-note">${counts.introduced ? '新しいカードを学びましょう' : '下のユニットから最初のカードを学びましょう'}</span>
+          </span>
+        </div>`}
+
+      <div class="learn-stats card">
+        <div class="learn-stat"><span class="val">${counts.introduced}<span class="sub">/${counts.total}</span></span><span class="lbl">学習中</span></div>
+        <div class="learn-stat"><span class="val">🌸 ${counts.bloomed}</span><span class="lbl">育った</span></div>
+        <div class="learn-stat"><span class="val">${newRemain}</span><span class="lbl">今日の新規残り</span></div>
+        <button class="btn-control" id="btn-learn-dex">📔 図鑑</button>
+      </div>
+
+      ${!ttsOk && lang === 'yue' ? `
+        <p class="field-note tts-warn">🔇 この端末には広東語の読み上げ音声が無いため、聞き取り問題は文字での出題になります。カタカナと粤拼を頼りに覚えましょう(Phase 2でパートナー録音機能を追加予定)。</p>` : ''}
+      ${lang === 'yue' ? `
+        <p class="field-note" style="margin-bottom:10px">📝 広東語フレーズはパートナー監修前のドラフトです。おかしな表現があったら教えてもらいましょう。</p>` : ''}
+
+      <h3 class="about-section">${meta.flag} ユニット</h3>
+      ${Phrases.units(lang).map((u) => {
+        const p = SRS.unitProgress(u.id);
+        const complete = p.bloomed === p.total;
+        const pct = Math.round(p.introduced / p.total * 100);
+        const bloomPct = Math.round(p.bloomed / p.total * 100);
+        return `<button class="unit-row ${complete ? 'complete' : ''}" data-learn-unit="${u.id}">
+          <span class="unit-icon">${u.icon}</span>
+          <span class="unit-body">
+            <span class="unit-title">${escapeHtml(u.title)} ${complete ? '🏅' : ''}</span>
+            <span class="field-note">${escapeHtml(u.desc)}</span>
+            <span class="unit-track">
+              <span class="unit-fill" style="width:${pct}%"></span>
+              <span class="unit-fill bloom" style="width:${bloomPct}%"></span>
+            </span>
+          </span>
+          <span class="unit-count">${p.introduced}/${p.total}</span>
+        </button>`;
+      }).join('')}
+    `;
+
+    el.querySelectorAll('[data-learn-lang]').forEach((b) =>
+      b.addEventListener('click', () => this.setLang(b.dataset.learnLang)));
+    el.querySelectorAll('[data-nav]').forEach((b) =>
+      b.addEventListener('click', () => showScreen(b.dataset.nav)));
+    const rv = document.getElementById('btn-learn-review');
+    if (rv) rv.addEventListener('click', () => this.startReview());
+    document.getElementById('btn-learn-dex').addEventListener('click', () => showScreen('learn-dex'));
+    el.querySelectorAll('[data-learn-unit]').forEach((b) =>
+      b.addEventListener('click', () => this.startUnit(b.dataset.learnUnit)));
+  },
+
+  /* ----- セッション構築 ----- */
+  startReview() {
+    const due = SRS.dueCards(this.lang).slice(0, SRS.REVIEW_CAP);
+    if (!due.length) return;
+    this.queue = due.map((c) => ({ type: 'quiz', card: c }));
+    this.beginSession('review', '📖 今日の復習');
+  },
+
+  async startUnit(unitId) {
+    const u = Phrases.unit(unitId);
+    const fresh = u.cards.filter((c) => !SRS.isIntroduced(c.id));
+    const remain = SRS.newRemaining();
+    if (!fresh.length) {
+      // 全カード導入済み → このユニットだけ総復習(期限前でもOK、SRSには初回のみ反映)
+      this.queue = u.cards.map((c) => ({
+        type: 'quiz', card: Object.assign({ unitId: u.id, lang: u.lang }, c)
+      }));
+      this.beginSession('unit-review', `${u.icon} ${u.title}(総復習)`);
+      return;
+    }
+    if (remain <= 0) {
+      await appAlert(
+        '今日の新規カードはもう満タンです(1日' + SRS.NEW_PER_DAY + '枚まで)。\n' +
+        '欲張るより毎日続ける方が強くなります。復習を済ませて、また明日!',
+        '🌱 今日はここまで');
+      return;
+    }
+    const batch = fresh.slice(0, remain).map((c) =>
+      Object.assign({ unitId: u.id, lang: u.lang }, c));
+    // 導入 → すぐ確認クイズ の順で並べる
+    this.queue = [];
+    batch.forEach((c) => this.queue.push({ type: 'intro', card: c }));
+    batch.forEach((c) => this.queue.push({ type: 'quiz', card: c }));
+    this.beginSession('unit', `${u.icon} ${u.title}`);
+  },
+
+  beginSession(kind, title) {
+    this.sessionKind = kind;
+    this.idx = 0;
+    this.correct = 0;
+    this.answered = 0;
+    this.firstTry = {};
+    this.queue.forEach((q) => { this.firstTry[q.card.id] = true; });
+    document.getElementById('learn-session-title').textContent = title;
+    showScreen('learn-session');
+    this.renderStep();
+  },
+
+  updateProgress() {
+    document.getElementById('learn-progress').textContent =
+      `${Math.min(this.idx + 1, this.queue.length)} / ${this.queue.length}`;
+  },
+
+  renderStep() {
+    clearInterval(this.timerId);
+    if (this.idx >= this.queue.length) { this.finishSession(); return; }
+    this.updateProgress();
+    const step = this.queue[this.idx];
+    if (step.type === 'intro') this.renderIntro(step.card);
+    else this.renderQuiz(step.card);
+  },
+
+  /* ----- 新カード紹介 ----- */
+  renderIntro(card) {
+    const meta = LEARN_LANGS[card.lang];
+    SRS.introduce(card.id);
+    document.getElementById('learn-stage').innerHTML = `
+      <p class="field-note" style="text-align:center">🌱 新しいカード</p>
+      <div class="phrase-card card">
+        <p class="phrase-target">${escapeHtml(card.t)}</p>
+        <p class="phrase-kana">${escapeHtml(card.k)}</p>
+        <p class="phrase-roman">${meta.romanLabel}: ${escapeHtml(card.r)}</p>
+        <p class="phrase-ja">${escapeHtml(card.ja)}</p>
+        <div class="phrase-tts">
+          <button class="tts-btn" id="btn-tts">🔊 聞く</button>
+          <button class="tts-btn" id="btn-tts-slow">🐢 ゆっくり</button>
+        </div>
+        ${card.note ? `<p class="phrase-note">💡 ${escapeHtml(card.note)}</p>` : ''}
+      </div>
+      <button class="btn-large primary" id="btn-learn-next">覚えた!次へ</button>
+    `;
+    const play = (rate) => Speech.speak(card.t, card.lang, rate);
+    document.getElementById('btn-tts').addEventListener('click', () => play(0.9));
+    document.getElementById('btn-tts-slow').addEventListener('click', () => play(0.6));
+    document.getElementById('btn-learn-next').addEventListener('click', () => {
+      this.idx++; this.renderStep();
+    });
+    if (Speech.canSpeak(card.lang)) setTimeout(() => play(0.9), 350);
+  },
+
+  /* ----- 出題 ----- */
+  quizMode(card) {
+    const lv = (SRS.get(card.id) || { lv: 1 }).lv;
+    if (lv >= 3) return 'recall';
+    if (lv === 2 && Speech.canSpeak(card.lang)) return 'listen';
+    return 'read';
+  },
+
+  /** 同じ言語のカードから誤答選択肢を3つ選ぶ */
+  distractors(card, key) {
+    const pool = Phrases.byLang(card.lang).filter((c) => c.id !== card.id);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const seen = new Set([card[key]]);
+    const out = [];
+    for (const c of pool) {
+      if (out.length >= 3) break;
+      if (seen.has(c[key])) continue;
+      seen.add(c[key]);
+      out.push(c);
+    }
+    return out;
+  },
+
+  renderQuiz(card) {
+    const mode = this.quizMode(card);
+    this.locked = false;
+    const stage = document.getElementById('learn-stage');
+    const lv = (SRS.get(card.id) || { lv: 1 }).lv;
+
+    let promptHtml, answerKey;
+    if (mode === 'recall') {
+      // 日本語 → 現地語(制限時間つき、会話の想起速度を鍛える)
+      answerKey = 't';
+      promptHtml = `
+        <p class="quiz-kind">🌸 想起 — 1秒で口から出るように</p>
+        <div class="quiz-prompt card"><p class="quiz-ja">${escapeHtml(card.ja)}</p>
+        <p class="field-note">この意味の${LEARN_LANGS[card.lang].label}は?</p></div>
+        <div class="timer-wrap"><div class="timer-bar" id="learn-timer"></div></div>`;
+    } else if (mode === 'listen') {
+      answerKey = 'ja';
+      promptHtml = `
+        <p class="quiz-kind">🌿 聞き取り</p>
+        <div class="quiz-prompt card" style="text-align:center">
+          <button class="tts-btn big" id="btn-quiz-tts">🔊 もう一度聞く</button>
+          <p class="field-note">音声の意味は?</p>
+        </div>`;
+    } else {
+      answerKey = 'ja';
+      promptHtml = `
+        <p class="quiz-kind">🌱 認識</p>
+        <div class="quiz-prompt card" style="text-align:center">
+          <p class="phrase-target">${escapeHtml(card.t)}</p>
+          <p class="phrase-kana">${escapeHtml(card.k)}</p>
+          <p class="field-note">この意味は?</p>
+        </div>`;
+    }
+
+    const wrong = this.distractors(card, answerKey);
+    const options = [{ v: card[answerKey], ok: true }]
+      .concat(wrong.map((c) => ({ v: c[answerKey], ok: false })));
+    for (let i = options.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [options[i], options[j]] = [options[j], options[i]];
+    }
+
+    stage.innerHTML = promptHtml + `
+      <div class="choices">
+        ${options.map((o, i) => `
+          <button class="choice-btn learn-choice" data-learn-choice="${i}">
+            ${escapeHtml(o.v)}${answerKey === 't' ? `<span class="choice-kana">${escapeHtml((Phrases.byLang(card.lang).find((c) => c.t === o.v) || {}).k || '')}</span>` : ''}
+          </button>`).join('')}
+      </div>`;
+
+    stage.querySelectorAll('[data-learn-choice]').forEach((btn) => {
+      btn.addEventListener('click', () =>
+        this.answer(card, mode, options[Number(btn.dataset.learnChoice)].ok, btn));
+    });
+
+    if (mode === 'listen') {
+      const play = () => Speech.speak(card.t, card.lang, 0.85);
+      document.getElementById('btn-quiz-tts').addEventListener('click', play);
+      setTimeout(play, 350);
+    }
+    if (mode === 'recall') this.startTimer(10, () => this.answer(card, mode, false, null));
+  },
+
+  startTimer(limitSec, onTimeout) {
+    clearInterval(this.timerId);
+    this.turnStartedAt = Date.now();
+    const bar = document.getElementById('learn-timer');
+    const limitMs = limitSec * 1000 * this.timeScale();
+    this.timerId = setInterval(() => {
+      const left = limitMs - (Date.now() - this.turnStartedAt);
+      const frac = Math.max(0, left / limitMs);
+      if (bar) {
+        bar.style.width = `${frac * 100}%`;
+        bar.className = 'timer-bar' + (frac < 0.3 ? ' urgent' : '');
+      }
+      if (left <= 0) {
+        clearInterval(this.timerId);
+        if (!this.locked) onTimeout();
+      }
+    }, 100);
+  },
+
+  answer(card, mode, correct, btn) {
+    if (this.locked) return;
+    this.locked = true;
+    clearInterval(this.timerId);
+
+    // SRSには各カードの初回回答だけを反映(セッション内の再挑戦は練習扱い)
+    let levelUp = null;
+    if (this.firstTry[card.id]) {
+      this.firstTry[card.id] = false;
+      levelUp = SRS.answer(card.id, correct).levelUp;
+      this.answered++;
+      if (correct) this.correct++;
+    }
+    // 間違えたカードはセッション末尾でもう一度
+    if (!correct && !this.queue.slice(this.idx + 1).some((q) => q.card.id === card.id)) {
+      this.queue.push({ type: 'quiz', card, retry: true });
+    }
+    if (btn) btn.classList.add(correct ? 'correct' : 'wrong');
+    this.renderFeedback(card, correct, levelUp);
+  },
+
+  renderFeedback(card, correct, levelUp) {
+    const meta = LEARN_LANGS[card.lang];
+    const rec = SRS.get(card.id) || { lv: 1 };
+    const stage = document.getElementById('learn-stage');
+    const fb = document.createElement('div');
+    fb.className = `learn-fb ${correct ? 'good' : 'bad'}`;
+    fb.innerHTML = `
+      <p class="fb-verdict">${correct ? '⭕ 正解!' : '❌ 残念…このカードは後でもう一度'}</p>
+      <div class="fb-card">
+        <p class="phrase-target small">${escapeHtml(card.t)}</p>
+        <p class="phrase-kana">${escapeHtml(card.k)} <span class="phrase-roman">(${escapeHtml(card.r)})</span></p>
+        <p class="phrase-ja">${escapeHtml(card.ja)}</p>
+        <button class="tts-btn" id="btn-fb-tts">🔊 聞く</button>
+        ${card.note ? `<p class="phrase-note">💡 ${escapeHtml(card.note)}</p>` : ''}
+      </div>
+      ${levelUp ? `<p class="fb-levelup">✨ このカードが ${SRS.stageIcon(levelUp)} ${SRS.stageName(levelUp)} に成長しました!</p>` : ''}
+      <p class="field-note" style="text-align:center">現在 ${SRS.stageIcon(rec.lv)} ${SRS.stageName(rec.lv)}</p>
+      <button class="btn-large primary" id="btn-learn-next">次へ</button>
+    `;
+    stage.appendChild(fb);
+    // 選択肢は押せないように
+    stage.querySelectorAll('.learn-choice').forEach((b) => { b.disabled = true; });
+    document.getElementById('btn-fb-tts').addEventListener('click', () =>
+      Speech.speak(card.t, card.lang, 0.85));
+    document.getElementById('btn-learn-next').addEventListener('click', () => {
+      this.idx++; this.renderStep();
+    });
+    fb.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  },
+
+  /* ----- セッション終了 ----- */
+  finishSession() {
+    const total = this.answered;
+    const perfect = total > 0 && this.correct === total;
+    const earned = this.correct * 2 + (perfect ? 5 : 0) + (this.sessionKind === 'unit' ? 5 : 0);
+    if (typeof Gami !== 'undefined' && earned) Gami.addPoints(earned);
+    if (typeof Quests !== 'undefined') Quests.tryComplete('study');
+    SRS.checkCollectAchievements();
+
+    const counts = SRS.counts(this.lang);
+    const due = SRS.dueCards(this.lang).length;
+    document.getElementById('learn-stage').innerHTML = `
+      <div class="convo-result">
+        <div class="learn-result-icon">${perfect ? '🎉' : '📖'}</div>
+        <h3>${perfect ? 'パーフェクト!' : 'セッション完了!'}</h3>
+        <p class="field-note">正解 ${this.correct} / ${total}${total === 0 ? '(新カードの学習)' : ''}</p>
+        <div class="xp-gains">
+          <span class="xp-chip points">⭐ +${earned} pt</span>
+          <span class="xp-chip">🌸 育った ${counts.bloomed}/${counts.total}</span>
+        </div>
+        ${due > 0
+          ? `<p class="field-note" style="margin-top:10px">📖 復習が残り${Math.min(due, SRS.REVIEW_CAP)}枚あります</p>`
+          : '<p class="field-note" style="margin-top:10px">✅ 今日の復習はすべて完了!</p>'}
+      </div>
+      <div class="results-actions">
+        ${due > 0 ? '<button class="btn-large primary" id="btn-learn-more">📖 続けて復習する</button>' : ''}
+        <button class="btn-large ${due > 0 ? '' : 'primary'}" data-nav="learn">ユニット一覧へ</button>
+        <button class="btn-large" data-nav="home">ホームへ</button>
+      </div>`;
+
+    const more = document.getElementById('btn-learn-more');
+    if (more) more.addEventListener('click', () => this.startReview());
+    document.querySelectorAll('#learn-stage [data-nav]').forEach((btn) =>
+      btn.addEventListener('click', () => showScreen(btn.dataset.nav)));
+  },
+
+  /* ----- フレーズ図鑑 ----- */
+  renderDex() {
+    const lang = this.lang;
+    const counts = SRS.counts(lang);
+    const el = document.getElementById('learn-dex-content');
+    el.innerHTML = `
+      <div class="learn-tabs">
+        ${Object.entries(LEARN_LANGS).map(([k, m]) => `
+          <button class="learn-tab ${k === lang ? 'active' : ''}" data-dex-lang="${k}">
+            ${m.flag} ${m.label}
+          </button>`).join('')}
+      </div>
+      <p class="field-note" style="margin-bottom:12px">
+        🌱認識 → 🌿聞き取り → 🌸想起 と正解を重ねるとカードが育ちます(⭐発話はPhase 2で解放)。
+        現在 🌸${counts.bloomed} / ${counts.total}枚。
+      </p>
+      ${Phrases.units(lang).map((u) => {
+        const p = SRS.unitProgress(u.id);
+        return `
+        <h3 class="about-section">${u.icon} ${escapeHtml(u.title)} <span class="dex-count">${p.bloomed}🌸/${p.total}</span></h3>
+        <div class="dex-list">
+          ${u.cards.map((c) => {
+            const r = SRS.get(c.id);
+            return `<button class="dex-phrase ${r ? (r.lv >= 3 ? 'bloomed' : 'growing') : 'locked'}" data-dex-card="${c.id}">
+              <span class="dex-stage">${r ? SRS.stageIcon(r.lv) : '🔒'}</span>
+              <span class="dex-t">${escapeHtml(c.t)}</span>
+              <span class="dex-ja">${r ? escapeHtml(c.ja) : '???'}</span>
+            </button>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+    `;
+    el.querySelectorAll('[data-dex-lang]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.lang = b.dataset.dexLang;
+        localStorage.setItem('lq_learn_lang', this.lang);
+        this.renderDex();
+      }));
+    el.querySelectorAll('[data-dex-card]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const c = Phrases.byId(b.dataset.dexCard);
+        const r = SRS.get(c.id);
+        if (!r) {
+          appAlert('まだ学習していないカードです。ユニットから学ぶと図鑑に記録されます。', '🔒 未習得');
+          return;
+        }
+        Speech.speak(c.t, c.lang, 0.85);
+        appAlert(
+          `${c.k}(${c.r})\n${c.ja}\n\n${c.note || ''}\n\n` +
+          `育成段階: ${SRS.stageIcon(r.lv)} ${SRS.stageName(r.lv)} ・ 正解 ${r.ok}/${r.n}回\n次の復習: ${r.due}`,
+          `${c.t}`);
+      }));
+  }
+};
