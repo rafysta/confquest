@@ -452,6 +452,46 @@ audio { width: 100%; margin-bottom: 12px; }
   50% { box-shadow: 0 0 0 8px rgba(56, 189, 248, 0); }
 }
 
+.elite-intro {
+  min-height: 320px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  background: radial-gradient(circle at 50% 40%, rgba(248, 113, 113, 0.12), transparent 70%), #020617;
+  border-radius: var(--radius);
+  animation: introShake 0.5s ease;
+  cursor: pointer;
+}
+@keyframes introShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+.elite-warning {
+  color: var(--danger); font-weight: 900;
+  font-size: 1.15rem; letter-spacing: 0.35em;
+  animation: blink 0.7s ease-in-out infinite;
+}
+.elite-star {
+  font-size: 4rem;
+  animation: eliteStar 1.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes eliteStar {
+  0% { transform: scale(0) rotate(-360deg); opacity: 0; }
+  60% { transform: scale(1.25) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.elite-name {
+  font-weight: 700; font-size: 1rem; text-align: center;
+  padding: 0 16px; line-height: 1.5;
+  animation: fadeSlideIn 0.5s ease 0.5s both;
+}
+.elite-hint {
+  color: var(--text-dim); font-size: 0.8rem;
+  animation: fadeSlideIn 0.5s ease 1s both;
+}
+
 .battle-head {
   display: flex; justify-content: space-between; align-items: flex-start;
   gap: 10px; padding-bottom: 10px;

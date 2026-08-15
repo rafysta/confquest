@@ -252,7 +252,29 @@ const Run = {
     showScreen('run-battle');
     document.getElementById('run-battle-title').textContent = title;
     document.getElementById('run-battle-partner').textContent = partner;
-    this.renderBattleTurn();
+    if (isElite) this.renderEliteIntro();
+    else this.renderBattleTurn();
+  },
+
+  /** エリート戦前の短い演出(タップでスキップ可) */
+  renderEliteIntro() {
+    const stage = document.getElementById('run-battle-stage');
+    document.getElementById('run-battle-progress').textContent = '';
+    stage.innerHTML = `
+      <div class="elite-intro">
+        <div class="elite-warning">⚠ 強敵出現 ⚠</div>
+        <div class="elite-star">⭐</div>
+        <p class="elite-name">${escapeHtml(this.battle.partner)}</p>
+        <p class="elite-hint">深呼吸して、会話に臨みましょう…</p>
+      </div>`;
+    let started = false;
+    const begin = () => {
+      if (started || !this.battle) return;
+      started = true;
+      this.renderBattleTurn();
+    };
+    stage.addEventListener('click', begin, { once: true });
+    setTimeout(begin, 2400);
   },
 
   battleTimeMs(limitSec) {
@@ -428,7 +450,9 @@ const Run = {
         ${missed.length ? `<div class="review-item" style="margin-top:10px">
           <p class="review-chosen">見直し: ${escapeHtml(missed[0].chosen)}</p>
           <p class="review-best">ベスト: ${escapeHtml(missed[0].best.text)}</p>
-        </div>` : '<p class="all-best">全ターンでベスト選択!</p>'}
+        </div>` : (b.turns.length === 1
+          ? '<p class="all-best">ベストな返しができた!</p>'
+          : '<p class="all-best">全ターンでベスト選択!</p>')}
       </div>
       <button class="btn-large primary" id="btn-run-battle-done">${b.isElite ? '結果へ' : 'マップに戻る'}</button>`;
 

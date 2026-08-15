@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.7.0';
+const APP_VERSION = '0.7.1';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.7.1',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: 'エリート戦の開始前に「⚠ 強敵出現」の演出を追加(タップでスキップ可)' },
+      { type: 'fix', text: '1ターンの会話後の表示を「ベストな返しができた!」に修正(「全ターンで〜」は複数ターン時のみ)' }
+    ]
+  },
   {
     version: '0.7.0',
     date: '2026-08-15',
