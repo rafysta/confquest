@@ -1612,3 +1612,16 @@ audio { width: 100%; margin-bottom: 12px; }
 .rankup-gems { color: #c084fc; font-weight: 700; font-size: 1.05rem; margin: 8px 0 0; }
 .rankup-box .btn-large { margin-top: 14px; }
 
+
+/* 🗓️プログラム委員の腕章(マス変更モード) */
+.map-node.armband-target {
+  opacity: 1;
+  border-color: #c084fc;
+  animation: armbandPulse 1.2s ease-in-out infinite;
+}
+.map-node.armband-target:active { transform: translate(-50%, -50%) scale(0.92); }
+@keyframes armbandPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192, 132, 252, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(192, 132, 252, 0); }
+}
+.armband-note { color: #c084fc; }

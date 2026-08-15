@@ -6,43 +6,62 @@
 /* ---------- アイテム定義 ---------- */
 const RUN_ITEMS = {
   shirt:    { icon: '👔', name: 'アイロンがけしたシャツ', price: 60, kind: 'gadget',
-              desc: '会話で得られる研究費が25%増える' },
+              desc: '会話で得られる研究費が25%増える',
+              how: '🛒 お店で購入 ・ 🎁 お宝でもらえることも ・ 💎 ジェム特典' },
   earphone: { icon: '🎧', name: '翻訳イヤホン', price: 70, kind: 'gadget',
-              desc: 'スピードゲージの減りが25%遅くなる' },
+              desc: 'スピードゲージの減りが25%遅くなる',
+              how: '🛒 お店で購入 ・ 🎁 お宝でもらえることも ・ 💎 ジェム特典' },
   cardcase: { icon: '💼', name: '名刺入れ', price: 55, kind: 'gadget',
-              desc: '会話の各ターンで30%の確率で最悪の選択肢が消える' },
+              desc: '会話の各ターンで30%の確率で最悪の選択肢が消える',
+              how: '🛒 お店で購入 ・ 🎁 お宝でもらえることも' },
   coupon:   { icon: '🎫', name: '学会クーポン', price: 45, kind: 'gadget',
-              desc: 'お店の売買が20%有利になる' },
+              desc: 'お店の売買が20%有利になる',
+              how: '🛒 お店で購入 ・ 🎁 お宝でもらえることも' },
   charm:    { icon: '🧿', name: 'お守り', price: 80, kind: 'gadget',
-              desc: 'メンタルが0になっても一度だけHP15で復活する(消滅)' },
+              desc: 'メンタルが0になっても一度だけHP15で復活する(消滅)',
+              how: '🛒 お店で購入 ・ 🎁 お宝でもらえることも ・ 💎 ジェム特典' },
   trophy:   { icon: '🏆', name: '記念トロフィー', price: 999, kind: 'gadget',
-              desc: '効果はないが高く売れる(80pt)', sellValue: 80, noShop: true },
+              desc: '効果はないが高く売れる(80pt)', sellValue: 80, noShop: true,
+              how: '⭐ エリートに勝利すると1個もらえる' },
   mic:      { icon: '🎤', name: '座長の推薦状', price: 999, kind: 'gadget', noShop: true,
-              desc: '会話で得られる研究費が15%増える(Day 1ボス撃破の証)', sellValue: 60 },
+              desc: '会話で得られる研究費が15%増える(Day 1ボス撃破の証)', sellValue: 60,
+              how: '👑 Day 1 ボス撃破の証' },
   goldcard: { icon: '🥇', name: '大御所の名刺', price: 999, kind: 'gadget', noShop: true,
-              desc: '会話で受けるダメージが25%減る(Day 2ボス撃破の証)', sellValue: 70 },
+              desc: '会話で受けるダメージが25%減る(Day 2ボス撃破の証)', sellValue: 70,
+              how: '👑 Day 2 ボス撃破の証' },
   // ドリンク(使い切り。アイコンをタップして使用)
   coffee:   { icon: '☕', name: 'コーヒー', price: 20, kind: 'drink',
-              desc: '使うと、次の会話だけスピードゲージの減りが半分になる' },
+              desc: '使うと、次の会話だけスピードゲージの減りが半分になる',
+              how: '🛒 お店 ・ 🛍️ 売店 ・ 🎟️ 抽選会 ・ 📦 落とし物' },
   energy:   { icon: '🧃', name: '栄養ドリンク', price: 15, kind: 'drink',
-              desc: '使うと、🧠が15回復する' },
+              desc: '使うと、🧠が15回復する',
+              how: '🛒 お店 ・ 🛍️ 売店 ・ 🚶 コーヒーブレイク ・ 📦 落とし物' },
   invite:   { icon: '🍀', name: '招待状', price: 35, kind: 'drink',
-              desc: '研究者ノードに入るとき、会話を1回スキップできる(自動で確認されます)' },
+              desc: '研究者ノードに入るとき、会話を1回スキップできる(自動で確認されます)',
+              how: '🛒 お店 ・ 🛍️ 売店 ・ 🚶 コーヒーブレイク ・ 📦 落とし物' },
+  armband:  { icon: '🗓️', name: 'プログラム委員の腕章', price: 70, kind: 'drink',
+              desc: 'マップの未訪問マスを1つ、好きな種類(💬🎁☕🛒)に作り変える(👑ボスと🛡️質疑応答は変更不可)。マップ画面でアイコンをタップして使う',
+              how: '🛒 お店で購入' },
   // レリック: 効果は地味だが、学会を完走したとき特別ボーナスをくれる
   notebook: { icon: '📓', name: 'research notebook', price: 90, kind: 'relic',
               desc: '学会攻略をクリアしたとき ⭐+150 のボーナス(所持していること)',
-              clearBonus: { pt: 150, msg: '📓 ノートに書き溜めたアイデアが形になった' } },
+              clearBonus: { pt: 150, msg: '📓 ノートに書き溜めたアイデアが形になった' },
+              how: '🛒 お店にたまに入荷(✨レリック枠)' },
   passport: { icon: '🛂', name: 'よく使い込まれたパスポート', price: 110, kind: 'relic',
               desc: '学会攻略をクリアしたとき 💎+15 のボーナス(所持していること)',
-              clearBonus: { gems: 15, msg: '🛂 旅の記録が次の招待につながった' } },
+              clearBonus: { gems: 15, msg: '🛂 旅の記録が次の招待につながった' },
+              how: '🛒 お店にたまに入荷(✨レリック枠)' },
   ribbon:   { icon: '🎀', name: 'Invited Speaker リボン', price: 130, kind: 'relic',
               desc: '学会攻略をクリアしたとき ⭐+100 と 💎+10 のボーナス(所持していること)',
-              clearBonus: { pt: 100, gems: 10, msg: '🎀 招待講演者としての評判が広まった' } },
+              clearBonus: { pt: 100, gems: 10, msg: '🎀 招待講演者としての評判が広まった' },
+              how: '🛒 お店にたまに入荷(✨レリック枠)' },
   // バッドアイテム(拾ってしまうことがある。お店で売って処分)
   jetlag:      { icon: '😪', name: '時差ボケ', price: 20, kind: 'bad', noShop: true,
-                 desc: 'スピードゲージの減りが25%速くなる(バッドアイテム。お店で売って処分できます)' },
+                 desc: 'スピードゲージの減りが25%速くなる(バッドアイテム。お店で売って処分できます)',
+              how: '📦 落とし物イベントで拾ってしまう(お店で売って処分)' },
   proceedings: { icon: '📚', name: '分厚いプロシーディングス', price: 20, kind: 'bad', noShop: true,
-                 desc: '会話中、30%の確率で紛らわしい選択肢が1つ増える(バッドアイテム。お店で売って処分できます)' }
+                 desc: '会話中、30%の確率で紛らわしい選択肢が1つ増える(バッドアイテム。お店で売って処分できます)',
+              how: '📦 落とし物イベントで拾ってしまう(お店で売って処分)' }
 };
 
 const NODE_TYPES = {
@@ -279,6 +298,15 @@ const Run = {
       btn.addEventListener('click', async () => {
         const id = btn.dataset.itemInfo;
         const it = RUN_ITEMS[id];
+        // 🗓️腕章: マップ画面でマス変更モードに入る(もう一度タップで中止)
+        if (id === 'armband') {
+          const onMap = document.getElementById('screen-run-map').classList.contains('active');
+          if (!onMap) { appAlert(it.desc, `${it.icon} ${it.name}`); return; }
+          if (this.armbandMode) { this.cancelArmband(); return; }
+          const use = await appConfirm(`${it.desc}\n\n使いますか?`, `${it.icon} ${it.name}`);
+          if (use) this.startArmband();
+          return;
+        }
         // ドリンクはタップで使用できる
         if (it.kind === 'drink' && id !== 'invite') {
           const use = await appConfirm(`${it.desc}\n\n今すぐ使いますか?`, `${it.icon} ${it.name}`);
@@ -334,10 +362,19 @@ const Run = {
         const p = pos(i, j);
         const isCur = i === this.state.layer && j === this.state.nodeIndex;
         const can = reachable.some(([ri, rj]) => ri === i && rj === j);
-        nodesHtml += `<button class="map-node ${n.visited ? 'visited' : ''} ${isCur ? 'current' : ''} ${can ? 'reachable' : ''}"
-          style="left:${p.x}%;top:${p.y}px"
-          ${can ? `data-go="${i},${j}"` : 'disabled'}
-          aria-label="${NODE_TYPES[n.type].label}">${NODE_TYPES[n.type].icon}</button>`;
+        if (this.armbandMode) {
+          // 腕章モード: 変更できるマスだけタップ可能にする
+          const ok = this.armbandTargetable(i, j);
+          nodesHtml += `<button class="map-node ${n.visited ? 'visited' : ''} ${isCur ? 'current' : ''} ${ok ? 'armband-target' : ''}"
+            style="left:${p.x}%;top:${p.y}px"
+            ${ok ? `data-armband="${i},${j}"` : 'disabled'}
+            aria-label="${NODE_TYPES[n.type].label}">${NODE_TYPES[n.type].icon}</button>`;
+        } else {
+          nodesHtml += `<button class="map-node ${n.visited ? 'visited' : ''} ${isCur ? 'current' : ''} ${can ? 'reachable' : ''}"
+            style="left:${p.x}%;top:${p.y}px"
+            ${can ? `data-go="${i},${j}"` : 'disabled'}
+            aria-label="${NODE_TYPES[n.type].label}">${NODE_TYPES[n.type].icon}</button>`;
+        }
       });
     });
 
@@ -346,7 +383,9 @@ const Run = {
         <svg class="map-lines" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${svg}</svg>
         ${nodesHtml}
       </div>
-      <p class="field-note" style="text-align:center">光っているノードをタップして進みます</p>`;
+      ${this.armbandMode
+        ? '<p class="field-note armband-note" style="text-align:center">🗓️ 紫に光るマスをタップして種類を変更(🗓️アイコンをもう一度タップで中止)</p>'
+        : '<p class="field-note" style="text-align:center">光っているノードをタップして進みます</p>'}`;
 
     document.querySelectorAll('[data-go]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -354,9 +393,59 @@ const Run = {
         this.enterNode(i, j);
       });
     });
+    document.querySelectorAll('[data-armband]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const [i, j] = btn.dataset.armband.split(',').map(Number);
+        this.applyArmband(i, j);
+      });
+    });
 
     const area = document.getElementById('run-map-area');
     area.scrollTop = area.scrollHeight;
+  },
+
+  /* ---------- 🗓️プログラム委員の腕章(マス変更) ---------- */
+  armbandMode: false,
+
+  /** 変更できないマス: ボス・質疑応答の関門・訪問済み・現在地・過ぎた層 */
+  ARMBAND_LOCKED: ['boss', 'qa'],
+  ARMBAND_CHOICES: ['researcher', 'treasure', 'rest', 'shop'],
+
+  armbandTargetable(i, j) {
+    const n = this.state.map.layers[i][j];
+    if (n.visited) return false;
+    if (i <= this.state.layer) return false;                  // もう通り過ぎた層
+    if (this.ARMBAND_LOCKED.includes(n.type)) return false;
+    return true;
+  },
+
+  startArmband() {
+    this.armbandMode = true;
+    this.renderMap();
+  },
+  cancelArmband() {
+    this.armbandMode = false;
+    this.renderMap();
+    showToast('🗓️ マスの変更をやめた(腕章は消費されていません)');
+  },
+
+  async applyArmband(i, j) {
+    if (!this.armbandMode || !this.hasItem('armband')) return;
+    const node = this.state.map.layers[i][j];
+    const pick = await appChoice(
+      `${NODE_TYPES[node.type].icon} ${NODE_TYPES[node.type].label} のマスを何に変える?`,
+      this.ARMBAND_CHOICES.filter((t) => t !== node.type).map((t) => ({
+        label: `${NODE_TYPES[t].icon} ${NODE_TYPES[t].label}`,
+        value: t,
+        desc: NODE_TYPES[t].desc
+      })));
+    if (!pick) return;                                        // モードは維持(選び直せる)
+    node.type = pick;
+    this.removeItem('armband');
+    this.armbandMode = false;
+    this.save();
+    this.renderMap();
+    showToast(`🗓️ プログラムを書き換えた! マスが ${NODE_TYPES[pick].icon}${NODE_TYPES[pick].label} になった`);
   },
 
   /* ---------- アイコンの説明(凡例) ---------- */
@@ -848,7 +937,7 @@ const Run = {
   renderShop() {
     this.renderHud();
     const s = this.state;
-    const drinks = ['coffee', 'energy', 'invite'];
+    const drinks = ['coffee', 'energy', 'invite', 'armband'];
     const row = (id, priceLabel, dataAttr, enabled) => `
       <div class="shop-row">
         <span class="shop-icon">${RUN_ITEMS[id].icon}</span>
@@ -870,7 +959,7 @@ const Run = {
         <h4 class="about-section">✨ レリック(完走ボーナス)</h4>
         ${this.relicStock.map((id) =>
           row(id, `💰${this.priceBuy(id)}`, 'data-buy', s.funds >= this.priceBuy(id))).join('')}` : ''}
-      <h4 class="about-section">ドリンク(使い切り)</h4>
+      <h4 class="about-section">ドリンク・使い切り</h4>
       ${drinks.map((id) =>
         row(id, `💰${this.priceBuy(id)}`, 'data-buy', s.funds >= this.priceBuy(id))).join('')}
       <h4 class="about-section">売却</h4>

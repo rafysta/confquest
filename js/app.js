@@ -860,7 +860,7 @@ function renderGemShop() {
 const DEX_GROUPS = [
   { kind: 'gadget', label: '🎒 ガジェット', note: '持っている間ずっと効果が続きます' },
   { kind: 'relic',  label: '✨ レリック', note: '持ったまま学会を制覇するとボーナス' },
-  { kind: 'drink',  label: '🥤 ドリンク', note: '使い切り。HUDのアイコンをタップして使用' },
+  { kind: 'drink',  label: '🥤 ドリンク・使い切り', note: '使い切り。HUDのアイコンをタップして使用' },
   { kind: 'bad',    label: '😪 バッドアイテム', note: 'できれば持ちたくない。お店で売って処分' }
 ];
 
@@ -868,7 +868,7 @@ function renderItemDex() {
   const all = Object.keys(RUN_ITEMS);
   const found = all.filter((id) => ItemDex.has(id));
   document.getElementById('dex-summary').textContent =
-    `${found.length} / ${all.length} 種類を発見 ・ 未発見のアイテムは効果が伏せられています`;
+    `${found.length} / ${all.length} 種類を発見 ・ 未発見のアイテムは名前と入手方法だけ見られます`;
 
   document.getElementById('itemdex-content').innerHTML = DEX_GROUPS.map((g) => {
     const ids = all.filter((id) => RUN_ITEMS[id].kind === g.kind);
@@ -881,7 +881,7 @@ function renderItemDex() {
         ${ids.map((id) => {
           const got = ItemDex.has(id);
           return `<button class="dex-cell ${got ? 'found' : 'unknown'}" data-dex="${id}"
-            aria-label="${got ? escapeHtml(RUN_ITEMS[id].name) : '未発見'}">
+            aria-label="${escapeHtml(RUN_ITEMS[id].name)}${got ? '' : '(未入手)'}">
             <span class="dex-icon">${RUN_ITEMS[id].icon}</span>
           </button>`;
         }).join('')}
@@ -892,11 +892,12 @@ function renderItemDex() {
     btn.addEventListener('click', () => {
       const id = btn.dataset.dex;
       const it = RUN_ITEMS[id];
+      const howLine = it.how ? `\n\n入手方法: ${it.how}` : '';
       if (ItemDex.has(id)) {
         const when = new Date(ItemDex.data()[id]).toLocaleDateString('ja-JP');
-        appAlert(`${it.desc}\n\n初めて手に入れた日: ${when}`, `${it.icon} ${it.name}`);
+        appAlert(`${it.desc}${howLine}\n\n初めて手に入れた日: ${when}`, `${it.icon} ${it.name}`);
       } else {
-        appAlert('まだ手に入れたことがありません。\n学会攻略で見つけると、効果がここに記録されます。', '❔ 未発見のアイテム');
+        appAlert(`効果: ???(入手すると記録されます)${howLine}`, `${it.icon} ${it.name}`);
       }
     });
   });
