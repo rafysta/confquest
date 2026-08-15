@@ -2,6 +2,8 @@
 
 **Level up your conference skills.**
 
+> 📘 **開発者向け**: 現在の実装状況の詳細は [`docs/implementation-notes.md`](docs/implementation-notes.md) にまとまっています。新しく作業を始めるときは、まずこれを読んでください。
+
 学会を一つのクエストとして攻略する、研究者向けトレーニングPWA(Webアプリ)。発表練習・質疑応答・懇親会会話をゲーム感覚で鍛えます。AndroidのChromeで開き、ホーム画面に追加するとアプリとして使えます。
 
 ## 現在の機能(発表練習モジュール)
