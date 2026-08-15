@@ -66,6 +66,7 @@ function showScreen(name) {
   if (name === 'learn' && typeof Learn !== 'undefined') Learn.renderHome();
   if (name === 'learn-dex' && typeof Learn !== 'undefined') Learn.renderDex();
   if (name === 'learn-check' && typeof Learn !== 'undefined') Learn.renderCheck();
+  if (name === 'route' && typeof Route !== 'undefined') Route.renderMap();
   if (name === 'quests' && typeof Quests !== 'undefined') renderQuests();
   if (name === 'achievements' && typeof Achievements !== 'undefined') renderAchievements();
   if (name === 'itemdex' && typeof ItemDex !== 'undefined') renderItemDex();

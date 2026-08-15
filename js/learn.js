@@ -308,6 +308,24 @@ const Learn = {
 
       <div class="countdown-row">${EventDates.chip(lang)}</div>
 
+      ${lang === 'ko' && typeof Route !== 'undefined' ? `
+        <button class="learn-cta card route-cta" id="btn-open-route">
+          <span class="learn-cta-icon">🚄</span>
+          <span class="learn-cta-body">
+            <strong>Korea Route</strong>
+            <span class="field-note">旅程を先取りする路線図 ・ ${Route.clearedCount()}/${KOREA_ROUTE.length}駅クリア</span>
+          </span>
+          <span class="learn-cta-go">▶</span>
+        </button>` : ''}
+      ${lang === 'yue' ? `
+        <div class="learn-cta card done">
+          <span class="learn-cta-icon">💒</span>
+          <span class="learn-cta-body">
+            <strong>Hong Kong Route</strong>
+            <span class="field-note">結婚式編(Wedding Quest)はPhase 3で開通予定</span>
+          </span>
+        </div>` : ''}
+
       ${dueShown > 0 ? `
         <button class="learn-cta card" id="btn-learn-review">
           <span class="learn-cta-icon">📖</span>
@@ -371,6 +389,8 @@ const Learn = {
       b.addEventListener('click', () => showScreen(b.dataset.nav)));
     const rv = document.getElementById('btn-learn-review');
     if (rv) rv.addEventListener('click', () => this.startReview());
+    const rt = document.getElementById('btn-open-route');
+    if (rt) rt.addEventListener('click', () => showScreen('route'));
     document.getElementById('btn-learn-dex').addEventListener('click', () => showScreen('learn-dex'));
     document.getElementById('btn-learn-check').addEventListener('click', () => showScreen('learn-check'));
     el.querySelectorAll('[data-learn-unit]').forEach((b) =>

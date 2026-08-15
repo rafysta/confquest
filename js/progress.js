@@ -323,7 +323,9 @@ const ACHIEVEMENT_DEFS = [
   { id: 'lang-bloom30',   icon: '🌸', name: '花ひらく語彙', desc: 'フレーズカード30枚を🌸想起まで育てた' },
   { id: 'lang-unit',      icon: '📗', name: 'ユニット制覇', desc: '1つのユニットの全カードを🌸まで育てた' },
   { id: 'lang-speak',     icon: '🎙️', name: '声に出して言えた', desc: '発話チェックに初めて合格し⭐マスターした' },
-  { id: 'lang-voice',     icon: '❤️', name: 'ふたりの教科書', desc: 'パートナーのお手本録音を初めて保存した' }
+  { id: 'lang-voice',     icon: '❤️', name: 'ふたりの教科書', desc: 'パートナーのお手本録音を初めて保存した' },
+  { id: 'route-first',    icon: '🚉', name: '出発進行', desc: 'Korea Routeで最初の駅をクリアした' },
+  { id: 'route-clear',    icon: '🚄', name: 'Korea Route制覇', desc: 'Korea Routeの全駅をクリアした' }
 ];
 const ACHIEVEMENT_GEMS = 10;
 

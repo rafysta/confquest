@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '1.10.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,16 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.10.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '🚄 Korea Routeが開通!(Language Quest Phase 2完結)11月の旅程を先取りする路線図モードです。✈️空港到着→🏛️初対面→🍽️食堂→🍻懇親会→🔬シンポジウム→🤝帰国の朝の6駅' },
+      { type: 'new', text: '各駅のフレーズを学びきると⚔️小ボス「会話バトル」に挑戦可能。相手のセリフは韓国語(読み上げ+日本語字幕)、選択肢はすべて学んだフレーズ。好感度60以上でクリア、何度でも再挑戦できます' },
+      { type: 'new', text: '駅クリアで⭐30pt+💎3、全駅制覇で💎10。実績2種追加(🚉出発進行・🚄Korea Route制覇)。最終駅には第1駅で学んだ「行く/残るのさようなら使い分け」が伏線回収として登場します' },
+      { type: 'new', text: 'Language Questホーム(韓国語タブ)の上部からKorea Routeに入れます。広東語タブにはHong Kong Route(結婚式編)の予告が表示されます' }
+    ]
+  },
   {
     version: '1.9.1',
     date: '2026-08-15',

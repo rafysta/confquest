@@ -1395,3 +1395,38 @@ audio { width: 100%; margin-bottom: 12px; }
 .check-audio .voice-del { border-color: var(--danger); color: var(--danger); }
 .dex-phrase.fixwait { border-left: 3px solid var(--warn); opacity: 0.75; }
 .dex-phrase.fixwait .dex-ja { color: var(--warn); }
+
+/* ---- Korea Route (v1.10.0) ---- */
+.route-cta { border-color: #f472b6; }
+.route-line { position: relative; padding-left: 8px; }
+.route-line::before {
+  content: ''; position: absolute; left: 27px; top: 20px; bottom: 40px;
+  width: 4px; background: #334155; border-radius: 2px;
+}
+.route-station {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  width: 100%; background: var(--bg-card); color: var(--text);
+  border: 1px solid #334155; border-radius: var(--radius);
+  padding: 13px; margin-bottom: 12px; cursor: pointer; text-align: left;
+}
+.route-station:disabled { opacity: 0.5; cursor: default; }
+.route-station.cleared { border-color: var(--success); }
+.route-station.ready {
+  border-color: var(--warn);
+  animation: questReadyPulse 1.6s ease-in-out infinite;
+}
+.route-node {
+  font-size: 1.5rem; width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); border-radius: 50%; flex-shrink: 0;
+  position: relative; z-index: 1;
+}
+.route-body { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.route-title { font-weight: 700; }
+.route-goal {
+  text-align: center; padding: 12px; color: var(--text-dim);
+  font-weight: 700; position: relative; z-index: 1;
+}
+.route-goal.reached { color: var(--warn); }
+.boss-line { text-align: center; margin-bottom: 10px; padding: 12px; }
+.boss-line .tts-btn { margin-top: 6px; padding: 5px 12px; }
