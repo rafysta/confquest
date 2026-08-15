@@ -1,6 +1,29 @@
 /* ConfQuest - アプリ本体(画面遷移・設定・履歴・ゲーミフィケーション) */
 'use strict';
 
+/* ---------- アプリ内ダイアログ(ブラウザのalert/confirm代替) ---------- */
+function appDialog(msg, title, isConfirm) {
+  return new Promise((resolve) => {
+    const ov = document.getElementById('modal-overlay');
+    document.getElementById('modal-title').textContent = title || '';
+    document.getElementById('modal-msg').textContent = msg;
+    const okBtn = document.getElementById('modal-ok');
+    const cancelBtn = document.getElementById('modal-cancel');
+    cancelBtn.style.display = isConfirm ? '' : 'none';
+    const close = (result) => {
+      ov.classList.add('hidden');
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      resolve(result);
+    };
+    okBtn.onclick = () => close(true);
+    cancelBtn.onclick = () => close(false);
+    ov.classList.remove('hidden');
+  });
+}
+function appAlert(msg, title) { return appDialog(msg, title, false); }
+function appConfirm(msg, title) { return appDialog(msg, title, true); }
+
 /* ---------- 画面遷移 ---------- */
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
@@ -117,7 +140,7 @@ document.getElementById('pdf-input').addEventListener('change', async (e) => {
 document.getElementById('start-practice').addEventListener('click', async () => {
   const enableTranscribe = document.getElementById('enable-transcribe').checked;
   if (enableTranscribe && !localStorage.getItem('lq_openai_key')) {
-    alert('文字起こしにはOpenAI APIキーが必要です。設定画面で入力するか、文字起こしのチェックを外してください。');
+    appAlert('文字起こしにはOpenAI APIキーが必要です。設定画面で入力するか、文字起こしのチェックを外してください。', '🔑 APIキーが必要');
     return;
   }
   const opts = {
@@ -374,7 +397,7 @@ const QA = { messages: [] };
 
 document.getElementById('btn-qa-sim').addEventListener('click', () => {
   if (!Practice.session || !Practice.session.fullTranscript.trim()) {
-    alert('文字起こしがありません。「終了後に文字起こし」を有効にして練習してください。');
+    appAlert('文字起こしがありません。「終了後に文字起こし」を有効にして練習してください。', '❓ Q&Aシミュレータ');
     return;
   }
   QA.messages = [];
@@ -470,12 +493,15 @@ function renderHistory() {
 }
 
 /* ---------- 学会攻略モード ---------- */
-document.getElementById('menu-run').addEventListener('click', () => {
+document.getElementById('menu-run').addEventListener('click', async () => {
   if (Run.hasActive()) {
     Run.resume();
     showScreen('run-map');
   } else {
-    if (!confirm('学会攻略を新しく始めます。\n🧠メンタルが尽きるとゲームオーバーですが、獲得したXPは残ります。')) return;
+    const go = await appConfirm(
+      '学会1日分のマップに挑戦します。\n🧠メンタルが尽きるとゲームオーバーですが、獲得したXPは残ります。',
+      '🗺️ 学会攻略を始める');
+    if (!go) return;
     Run.newRun();
     showScreen('run-map');
   }
@@ -558,7 +584,7 @@ function renderStatus() {
 /* ---------- 講演の録音・要約 ---------- */
 document.getElementById('btn-talk-start').addEventListener('click', async () => {
   if (!localStorage.getItem('lq_openai_key')) {
-    alert('文字起こしにOpenAI APIキーが必要です。設定画面で入力してください。');
+    appAlert('文字起こしにOpenAI APIキーが必要です。設定画面で入力してください。', '🔑 APIキーが必要');
     return;
   }
   const meta = {
@@ -570,7 +596,7 @@ document.getElementById('btn-talk-start').addEventListener('click', async () => 
   try {
     await Talk.start(meta);
   } catch (err) {
-    alert('録音を開始できませんでした: ' + err.message);
+    appAlert('録音を開始できませんでした: ' + err.message, '🎙️ エラー');
     return;
   }
   document.getElementById('talk-note').value = '';
@@ -776,7 +802,10 @@ document.getElementById('btn-check-update').addEventListener('click', async () =
 
 document.getElementById('btn-force-reset').addEventListener('click', async () => {
   const status = document.getElementById('update-status');
-  if (!confirm('保存済みのキャッシュとService Workerをすべて削除して再取得します。\n(APIキー・練習履歴・ステータスは消えません)')) return;
+  const go = await appConfirm(
+    '保存済みのキャッシュとService Workerをすべて削除して再取得します。\n(APIキー・練習履歴・ステータスは消えません)',
+    '🧹 完全リセット');
+  if (!go) return;
   status.textContent = '削除中...';
   try {
     await purgeAll();

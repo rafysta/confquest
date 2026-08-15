@@ -107,7 +107,7 @@ const Practice = {
 
     if (opts.enableRecording || opts.enableTranscribe) {
       await this.startRecording().catch((e) => {
-        alert('録音を開始できませんでした: ' + e.message);
+        appAlert('録音を開始できませんでした: ' + e.message, '🎙️ エラー');
       });
     }
 

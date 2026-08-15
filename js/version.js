@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.7.1';
+const APP_VERSION = '0.7.2';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.7.2',
+    date: '2026-08-15',
+    items: [
+      { type: 'fix', text: '「rafysta.github.ioの内容」と表示されていた確認・アイテム説明ウィンドウを、アプリ内のデザインされたダイアログに置き換えました' },
+      { type: 'change', text: 'エリート戦前の演出を少し長くしました(タップでスキップは従来どおり)' }
+    ]
+  },
   {
     version: '0.7.1',
     date: '2026-08-15',

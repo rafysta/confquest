@@ -141,7 +141,7 @@ const Run = {
     document.querySelectorAll('[data-item-info]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const it = RUN_ITEMS[btn.dataset.itemInfo];
-        alert(`${it.icon} ${it.name}\n${it.desc}`);
+        appAlert(it.desc, `${it.icon} ${it.name}`);
       });
     });
   },
@@ -274,7 +274,7 @@ const Run = {
       this.renderBattleTurn();
     };
     stage.addEventListener('click', begin, { once: true });
-    setTimeout(begin, 2400);
+    setTimeout(begin, 3400);
   },
 
   battleTimeMs(limitSec) {
