@@ -853,6 +853,12 @@ const Learn = {
       <div class="check-summary card">
         <span>✅ ${cnt.ok}</span><span>⚠️ ${cnt.fix}</span><span>未確認 ${cnt.none}</span>
       </div>
+      <div class="check-export">
+        <button class="btn-control" id="btn-check-share">📤 結果を共有</button>
+        <button class="btn-control" id="btn-check-copy">📋 コピー</button>
+        <button class="btn-control" id="btn-check-dl">⬇ 保存</button>
+      </div>
+      <p class="field-note" id="check-export-status" style="text-align:center;margin-bottom:12px"></p>
       ${Phrases.units(lang).map((u) => `
         <h3 class="about-section">${u.icon} ${escapeHtml(u.title)}</h3>
         ${u.cards.map((c) => {
@@ -887,6 +893,9 @@ const Learn = {
         localStorage.setItem('lq_learn_lang', this.lang);
         this.renderCheck();
       }));
+    document.getElementById('btn-check-share').addEventListener('click', () => this.exportCheck('share'));
+    document.getElementById('btn-check-copy').addEventListener('click', () => this.exportCheck('copy'));
+    document.getElementById('btn-check-dl').addEventListener('click', () => this.exportCheck('dl'));
     /* ⚠️メモの表示を行内で更新し、タップで編集できるようにする */
     const editMemo = async (id, memoEl) => {
       const c = Phrases.byId(id);
@@ -977,6 +986,68 @@ const Learn = {
         b.classList.add('recording');
         b.textContent = '■ 保存';
       }));
+  },
+
+  /* ----- 監修結果のレポート生成と書き出し ----- */
+  reviewReport() {
+    const stamp = localDayKey();
+    let out = `# ConfQuest フレーズ監修結果 (${stamp})\n`;
+    for (const lang of ['yue', 'ko']) {
+      const meta = LEARN_LANGS[lang];
+      const cnt = ReviewFlags.counts(lang);
+      if (cnt.ok + cnt.fix === 0) continue;  // 未着手の言語は省略
+      out += `\n## ${meta.flag} ${meta.label} (✅${cnt.ok} / ⚠️${cnt.fix} / 未確認${cnt.none})\n`;
+      const fixes = [];
+      const oks = [];
+      Phrases.units(lang).forEach((u) => u.cards.forEach((c) => {
+        const f = ReviewFlags.get(c.id);
+        if (f === 'fix') fixes.push(c);
+        else if (f === 'ok') oks.push(c);
+      }));
+      if (fixes.length) {
+        out += `\n### ⚠️ 要修正 (${fixes.length}件)\n`;
+        fixes.forEach((c) => {
+          out += `- [${c.id}] ${c.t}(${c.k} / ${c.r})— ${c.ja}\n`;
+          const memo = ReviewFlags.note(c.id);
+          out += `  📝 ${memo || '(メモなし)'}\n`;
+        });
+      }
+      if (oks.length) {
+        out += `\n### ✅ OK (${oks.length}件)\n${oks.map((c) => c.t).join('、')}\n`;
+      }
+    }
+    out += '\n---\nこのレポートをそのままClaudeに貼り付ければ、phrases.jsの修正に使えます。\n';
+    return out;
+  },
+
+  async exportCheck(mode) {
+    const status = document.getElementById('check-export-status');
+    const text = this.reviewReport();
+    try {
+      if (mode === 'share') {
+        if (navigator.share) {
+          await navigator.share({ title: 'ConfQuest フレーズ監修結果', text });
+          status.textContent = '✓ 共有しました';
+        } else {
+          await navigator.clipboard.writeText(text);
+          status.textContent = 'この環境に共有機能が無いため、クリップボードにコピーしました';
+        }
+      } else if (mode === 'copy') {
+        await navigator.clipboard.writeText(text);
+        status.textContent = '✓ クリップボードにコピーしました';
+      } else {
+        const blob = new Blob([text], { type: 'text/markdown' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `confquest-review-${localDayKey()}.md`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+        status.textContent = '✓ ダウンロードフォルダに保存しました';
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') { status.textContent = '共有をキャンセルしました'; return; }
+      status.textContent = '⚠ ' + (err.message || err);
+    }
   },
 
   /* ----- 学会攻略のお宝クイズ用の問題生成(SRSと共有) ----- */

@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.10.2';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.10.2',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '✍️監修結果の書き出しを追加。監修画面の「📤 結果を共有」から共有シート(Nextcloud・Gmail等)へ送信、「📋 コピー」「⬇ 保存」も選べます' },
+      { type: 'new', text: 'レポートは⚠️要修正(フレーズ+📝メモ)と✅OKの一覧を含むMarkdown形式。そのままClaudeに貼り付ければフレーズ修正に使えます' }
+    ]
+  },
   {
     version: '1.10.1',
     date: '2026-08-15',

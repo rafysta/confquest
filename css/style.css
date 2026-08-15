@@ -1446,3 +1446,9 @@ audio { width: 100%; margin-bottom: 12px; }
   padding: 10px; font-size: 0.95rem; font-family: inherit;
   resize: vertical;
 }
+
+/* ---- v1.10.2: 監修結果の書き出し ---- */
+.check-export {
+  display: flex; gap: 8px; justify-content: center;
+  margin-bottom: 8px; flex-wrap: wrap;
+}
