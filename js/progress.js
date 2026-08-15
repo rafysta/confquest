@@ -357,16 +357,20 @@ const Achievements = {
  * 保存するのは「どこまで報酬を受け取ったか」(claimedIdx)と到達日(log)のみ。
  */
 const CAREER_RANKS = [
-  { id: 'b4',       icon: '🎒', name: '学部生',   need: 0,     gems: 0  },
-  { id: 'master',   icon: '📖', name: '修士課程', need: 150,   gems: 5  },
-  { id: 'doctor',   icon: '🔬', name: '博士課程', need: 400,   gems: 5  },
-  { id: 'postdoc',  icon: '🎓', name: 'ポスドク', need: 800,   gems: 8  },
-  { id: 'jokyo',    icon: '🧑‍🏫', name: '助教',     need: 1400,  gems: 10 },
-  { id: 'koshi',    icon: '📝', name: '講師',     need: 2200,  gems: 10 },
-  { id: 'junkyoju', icon: '🏛️', name: '准教授',   need: 3200,  gems: 12 },
-  { id: 'kyoju',    icon: '👑', name: '教授',     need: 4500,  gems: 15 },
-  { id: 'meiyo',    icon: '🌟', name: '名誉教授', need: 7000,  gems: 20 },
-  { id: 'kaicho',   icon: '🏆', name: '学会長',   need: 10000, gems: 30 }
+  { id: 'b4',       icon: '🎒', name: '学部生',       need: 0,     gems: 0  },
+  { id: 'master',   icon: '📖', name: '修士課程',     need: 150,   gems: 5  },
+  { id: 'doctor',   icon: '🔬', name: '博士課程',     need: 400,   gems: 5  },
+  { id: 'postdoc',  icon: '🎓', name: 'ポスドク',     need: 800,   gems: 8  },
+  { id: 'jokyo',    icon: '🧑‍🏫', name: '助教',         need: 1400,  gems: 10 },
+  { id: 'koshi',    icon: '📝', name: '講師',         need: 2200,  gems: 10 },
+  { id: 'junkyoju', icon: '🏛️', name: '准教授',       need: 3200,  gems: 12 },
+  { id: 'kyoju',    icon: '👑', name: '教授',         need: 9000,  gems: 15 },
+  { id: 'dean',     icon: '🏫', name: '学部長',       need: 16000, gems: 18 },
+  { id: 'meiyo',    icon: '🌟', name: '名誉教授',     need: 25000, gems: 20 },
+  { id: 'kaicho',   icon: '🏆', name: '学会長',       need: 36000, gems: 30 },
+  { id: 'juchin',   icon: '🎖️', name: '学界の重鎮',   need: 50000, gems: 35 },
+  { id: 'authority',icon: '🌏', name: '世界的権威',   need: 68000, gems: 40 },
+  { id: 'legend',   icon: '🪐', name: '伝説の研究者', need: 90000, gems: 50 }
 ];
 
 const CareerRank = {
@@ -389,18 +393,23 @@ const CareerRank = {
     }
     return i;
   },
-  current() { return CAREER_RANKS[this.index()]; },
+  /** 表示用ランクindex: 一度到達した称号は、しきい値の調整後も失わない */
+  effectiveIndex() {
+    const claimed = Math.min(this.data().claimedIdx, CAREER_RANKS.length - 1);
+    return Math.max(this.index(), claimed);
+  },
+  current() { return CAREER_RANKS[this.effectiveIndex()]; },
   next() {
-    const i = this.index();
+    const i = this.effectiveIndex();
     return i < CAREER_RANKS.length - 1 ? CAREER_RANKS[i + 1] : null;
   },
   /** 次ランクへの進捗 {into, span, pct}。最高位ならnull */
   progress() {
     const nxt = this.next();
     if (!nxt) return null;
-    const base = CAREER_RANKS[this.index()].need;
+    const base = CAREER_RANKS[this.effectiveIndex()].need;
     const span = nxt.need - base;
-    const into = this.points() - base;
+    const into = Math.max(0, this.points() - base);
     return { into, span, pct: Math.max(0, Math.min(100, Math.round(into / span * 100))) };
   },
 

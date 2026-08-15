@@ -1027,7 +1027,7 @@ function careerCardHtml() {
   const nxt = CareerRank.next();
   const prog = CareerRank.progress();
   const pts = CareerRank.points();
-  const idx = CareerRank.index();
+  const idx = CareerRank.effectiveIndex();
   return `
     <div class="career-card card">
       <div class="career-head">
@@ -1039,7 +1039,7 @@ function careerCardHtml() {
       </div>
       ${nxt ? `
         <div class="career-bar-track"><div class="career-bar" style="width:${prog.pct}%"></div></div>
-        <p class="career-next">${nxt.icon} ${nxt.name}まで あと⭐${nxt.need - pts}pt</p>`
+        <p class="career-next">${nxt.icon} ${nxt.name}まで あと⭐${Math.max(0, nxt.need - pts)}pt</p>`
         : '<p class="career-next">🏆 最高位に到達!それでも業績は積み上がり続けます</p>'}
       <details class="career-history">
         <summary>📜 キャリア年表を見る</summary>
