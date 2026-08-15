@@ -940,8 +940,14 @@ const Run = {
   },
 
   miniLang() {
-    const q = LANG_QUIZ[Math.floor(Math.random() * LANG_QUIZ.length)];
+    // Language Questの学習済みカードがあればそこから出題(回答はSRSにも記録)
+    let q = null;
+    if (typeof Learn !== 'undefined' && typeof SRS !== 'undefined') {
+      try { q = Learn.runQuizQuestion(); } catch (_) { q = null; }
+    }
+    if (!q) q = LANG_QUIZ[Math.floor(Math.random() * LANG_QUIZ.length)];
     this.renderQuiz('🗣️', `${q.lang}クイズ`, q, (ok, qq) => {
+      if (qq.cardId && typeof SRS !== 'undefined') SRS.answer(qq.cardId, ok);
       let msg;
       if (ok) {
         this.state.funds += 15;

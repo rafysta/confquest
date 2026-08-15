@@ -135,16 +135,33 @@ const SRS = {
   },
 
   stageIcon(lv) { return ['', '🌱', '🌿', '🌸', '⭐'][lv] || '🌱'; },
-  stageName(lv) { return ['', '認識', '聞き取り', '想起', '発話'][lv] || ''; },
+  stageName(lv) { return ['', '認識', '聞き取り', '想起', '発話マスター'][lv] || ''; },
+
+  /** 発話チェック合格でLv4(⭐マスター)にする */
+  master(id, now) {
+    const d = this.data();
+    const rec = d.cards[id];
+    if (!rec || rec.lv >= 4) return false;
+    rec.lv = 4;
+    rec.s = 0;
+    this.save(d);
+    if (typeof Achievements !== 'undefined') Achievements.unlock('lang-speak');
+    this.checkCollectAchievements();
+    return true;
+  },
 
   /** 集計 */
   counts(lang) {
     const d = this.data();
     const cards = Phrases.byLang(lang);
-    const out = { total: cards.length, introduced: 0, bloomed: 0 };
+    const out = { total: cards.length, introduced: 0, bloomed: 0, mastered: 0 };
     cards.forEach((c) => {
       const r = d.cards[c.id];
-      if (r) { out.introduced++; if (r.lv >= 3) out.bloomed++; }
+      if (r) {
+        out.introduced++;
+        if (r.lv >= 3) out.bloomed++;
+        if (r.lv >= 4) out.mastered++;
+      }
     });
     return out;
   },
@@ -230,6 +247,23 @@ const ReviewFlags = {
   }
 };
 
+/** カード音声の再生: パートナーのお手本録音があれば優先、無ければTTS */
+function playCardAudio(card, rate) {
+  if (typeof VoiceStore !== 'undefined' && VoiceStore.has(card.id)) {
+    VoiceStore.play(card.id, rate).then((ok) => {
+      if (!ok) Speech.speak(card.t, card.lang, rate);
+    });
+    return;
+  }
+  Speech.speak(card.t, card.lang, rate);
+}
+
+/** このカードの音声を聞かせられるか(聞き取り出題して良いか) */
+function canHearCard(card) {
+  return (typeof VoiceStore !== 'undefined' && VoiceStore.has(card.id)) ||
+    Speech.canSpeak(card.lang);
+}
+
 /* ---------- 学習UI ---------- */
 const Learn = {
   lang: localStorage.getItem('lq_learn_lang') || 'ko',
@@ -291,7 +325,7 @@ const Learn = {
 
       <div class="learn-stats card">
         <div class="learn-stat"><span class="val">${counts.introduced}<span class="sub">/${counts.total}</span></span><span class="lbl">学習中</span></div>
-        <div class="learn-stat"><span class="val">🌸 ${counts.bloomed}</span><span class="lbl">育った</span></div>
+        <div class="learn-stat"><span class="val">🌸${counts.bloomed}${counts.mastered ? ` ⭐${counts.mastered}` : ''}</span><span class="lbl">育った${counts.mastered ? '/マスター' : ''}</span></div>
         <div class="learn-stat"><span class="val">${newRemain}</span><span class="lbl">今日の新規残り</span></div>
         <div class="learn-stat-btns">
           <button class="btn-control" id="btn-learn-dex">📔 図鑑</button>
@@ -299,8 +333,12 @@ const Learn = {
         </div>
       </div>
 
-      ${!ttsOk && lang === 'yue' ? `
-        <p class="field-note tts-warn">🔇 この端末には広東語の読み上げ音声が無いため、聞き取り問題は文字での出題になります。カタカナと粤拼を頼りに覚えましょう(Phase 2でパートナー録音機能を追加予定)。</p>` : ''}
+      ${!ttsOk && lang === 'yue' ? (() => {
+        const rec = (typeof VoiceStore !== 'undefined') ? VoiceStore.countByLang('yue') : 0;
+        return rec > 0
+          ? `<p class="field-note" style="margin-bottom:10px">❤️ パートナーのお手本録音が${rec}枚あります。録音済みのカードは聞き取り問題が出せます(残りは✍️監修画面から吹き込み)。</p>`
+          : `<p class="field-note tts-warn">🔇 この端末には広東語の読み上げ音声がありません。✍️監修画面でパートナーにお手本を吹き込んでもらうと、そのカードは音声つきで学べるようになります。</p>`;
+      })() : ''}
       ${lang === 'yue' ? `
         <p class="field-note" style="margin-bottom:10px">📝 広東語フレーズはパートナー監修前のドラフトです。おかしな表現があったら教えてもらいましょう。</p>` : ''}
 
@@ -419,20 +457,24 @@ const Learn = {
       </div>
       <button class="btn-large primary" id="btn-learn-next">覚えた!次へ</button>
     `;
-    const play = (rate) => Speech.speak(card.t, card.lang, rate);
+    const play = (rate) => playCardAudio(card, rate);
     document.getElementById('btn-tts').addEventListener('click', () => play(0.9));
     document.getElementById('btn-tts-slow').addEventListener('click', () => play(0.6));
     document.getElementById('btn-learn-next').addEventListener('click', () => {
       this.idx++; this.renderStep();
     });
-    if (Speech.canSpeak(card.lang)) setTimeout(() => play(0.9), 350);
+    if (canHearCard(card)) setTimeout(() => play(0.9), 350);
   },
 
   /* ----- 出題 ----- */
   quizMode(card) {
     const lv = (SRS.get(card.id) || { lv: 1 }).lv;
-    if (lv >= 3) return 'recall';
-    if (lv === 2 && Speech.canSpeak(card.lang)) return 'listen';
+    if (lv >= 4) return 'recall';  // マスター済みは高速な想起で維持
+    if (lv === 3) {
+      // 🌸→⭐への昇格試験は「声に出して言う」。使えない環境では想起で維持
+      return (typeof SpeakCheck !== 'undefined' && SpeakCheck.available()) ? 'speak' : 'recall';
+    }
+    if (lv === 2 && canHearCard(card)) return 'listen';
     return 'read';
   },
 
@@ -454,9 +496,10 @@ const Learn = {
     return out;
   },
 
-  renderQuiz(card) {
-    const mode = this.quizMode(card);
+  renderQuiz(card, forceMode) {
+    const mode = forceMode || this.quizMode(card);
     this.locked = false;
+    if (mode === 'speak') { this.renderSpeakQuiz(card); return; }
     const stage = document.getElementById('learn-stage');
     const lv = (SRS.get(card.id) || { lv: 1 }).lv;
 
@@ -510,11 +553,125 @@ const Learn = {
     });
 
     if (mode === 'listen') {
-      const play = () => Speech.speak(card.t, card.lang, 0.85);
+      const play = () => playCardAudio(card, 0.85);
       document.getElementById('btn-quiz-tts').addEventListener('click', play);
       setTimeout(play, 350);
     }
     if (mode === 'recall') this.startTimer(10, () => this.answer(card, mode, false, null));
+  },
+
+  /* ----- 発話クイズ(🌸→⭐の昇格試験) ----- */
+  renderSpeakQuiz(card) {
+    const stage = document.getElementById('learn-stage');
+    stage.innerHTML = `
+      <p class="quiz-kind">🎙️ 発話 — 声に出して言えたら ⭐マスター</p>
+      <div class="quiz-prompt card" style="text-align:center">
+        <p class="quiz-ja">${escapeHtml(card.ja)}</p>
+        <p class="field-note">この意味の${LEARN_LANGS[card.lang].label}を、マイクに向かって言いましょう</p>
+        <button class="tts-btn" id="btn-speak-hint">💡 ヒントを見る</button>
+        <div id="speak-hint" class="hidden">
+          <p class="phrase-target small">${escapeHtml(card.t)}</p>
+          <p class="phrase-kana">${escapeHtml(card.k)}</p>
+          <button class="tts-btn" id="btn-speak-listen">🔊 お手本を聞く</button>
+        </div>
+      </div>
+      <button class="btn-large primary speak-rec-btn" id="btn-speak-rec">🎤 タップして話す</button>
+      <button class="btn-large" id="btn-speak-text">✏️ 今日は文字で答える</button>
+      <p class="field-note" id="speak-status" style="text-align:center"></p>
+    `;
+
+    document.getElementById('btn-speak-hint').addEventListener('click', () => {
+      document.getElementById('speak-hint').classList.remove('hidden');
+      document.getElementById('btn-speak-hint').style.display = 'none';
+    });
+    document.getElementById('btn-speak-listen').addEventListener('click', () =>
+      playCardAudio(card, 0.85));
+    document.getElementById('btn-speak-text').addEventListener('click', () => {
+      MicRec.cancel();
+      this.renderQuiz(card, 'recall');  // 文字回答(⭐にはならないが復習は進む)
+    });
+
+    const recBtn = document.getElementById('btn-speak-rec');
+    const status = document.getElementById('speak-status');
+    let autoT = null;
+
+    const doJudge = async () => {
+      clearTimeout(autoT);
+      if (!MicRec.active || this.locked) return;
+      this.locked = true;
+      recBtn.disabled = true;
+      recBtn.classList.remove('recording');
+      recBtn.textContent = '🔎 判定中...';
+      status.textContent = 'Whisperが聞き取っています…';
+      const blob = await MicRec.stop();
+      try {
+        if (!blob || blob.size < 800) throw new Error('録音が短すぎました');
+        const result = await SpeakCheck.judge(blob, card);
+        this.finishSpeak(card, result);
+      } catch (err) {
+        this.locked = false;
+        recBtn.disabled = false;
+        recBtn.textContent = '🎤 もう一度話す';
+        status.textContent = `⚠ ${err.message} — もう一度試すか、「文字で答える」を選んでください`;
+      }
+    };
+
+    recBtn.addEventListener('click', async () => {
+      if (this.locked) return;
+      if (MicRec.active) { doJudge(); return; }
+      try {
+        await MicRec.start();
+      } catch (err) {
+        status.textContent = '⚠ マイクを使用できません: ' + err.message;
+        return;
+      }
+      recBtn.classList.add('recording');
+      recBtn.textContent = '🔴 録音中… タップで判定';
+      status.textContent = '発音してください(最長6秒)';
+      autoT = setTimeout(doJudge, 6000);
+    });
+  },
+
+  finishSpeak(card, result) {
+    const pass = result.stars >= 1;
+    let mastered = false;
+    if (this.firstTry[card.id]) {
+      this.firstTry[card.id] = false;
+      SRS.answer(card.id, pass);
+      this.answered++;
+      if (pass) this.correct++;
+      if (pass && SRS.get(card.id).lv === 3) mastered = SRS.master(card.id);
+    }
+    if (!pass && !this.queue.slice(this.idx + 1).some((q) => q.card.id === card.id)) {
+      this.queue.push({ type: 'quiz', card, retry: true });
+    }
+    const rec = SRS.get(card.id) || { lv: 3 };
+    const starStr = '⭐'.repeat(result.stars) + '☆'.repeat(3 - result.stars);
+    const stage = document.getElementById('learn-stage');
+    const fb = document.createElement('div');
+    fb.className = `learn-fb ${pass ? 'good' : 'bad'}`;
+    fb.innerHTML = `
+      <p class="fb-verdict">${pass ? '⭕ 通じました!' : '❌ うまく聞き取れませんでした'}</p>
+      <p class="speak-stars">${starStr}</p>
+      ${result.text ? `<p class="field-note" style="text-align:center">聞こえた音: 「${escapeHtml(result.text)}」</p>` : ''}
+      <div class="fb-card">
+        <p class="phrase-target small">${escapeHtml(card.t)}</p>
+        <p class="phrase-kana">${escapeHtml(card.k)} <span class="phrase-roman">(${escapeHtml(card.r)})</span></p>
+        <p class="phrase-ja">${escapeHtml(card.ja)}</p>
+        <button class="tts-btn" id="btn-fb-tts">🔊 お手本を聞く</button>
+      </div>
+      ${mastered ? '<p class="fb-levelup">🎉 このカードを ⭐発話マスター しました!本番で使えます!</p>' : ''}
+      ${!pass ? '<p class="field-note" style="text-align:center">お手本を聞いてもう一度。判定は「通じるか」基準なので気楽に!</p>' : ''}
+      <p class="field-note" style="text-align:center">現在 ${SRS.stageIcon(rec.lv)} ${SRS.stageName(rec.lv)}</p>
+      <button class="btn-large primary" id="btn-learn-next">次へ</button>
+    `;
+    stage.appendChild(fb);
+    stage.querySelectorAll('.speak-rec-btn, #btn-speak-text').forEach((b) => { b.disabled = true; });
+    document.getElementById('btn-fb-tts').addEventListener('click', () => playCardAudio(card, 0.85));
+    document.getElementById('btn-learn-next').addEventListener('click', () => {
+      this.idx++; this.renderStep();
+    });
+    fb.scrollIntoView({ behavior: 'smooth', block: 'end' });
   },
 
   startTimer(limitSec, onTimeout) {
@@ -580,7 +737,7 @@ const Learn = {
     // 選択肢は押せないように
     stage.querySelectorAll('.learn-choice').forEach((b) => { b.disabled = true; });
     document.getElementById('btn-fb-tts').addEventListener('click', () =>
-      Speech.speak(card.t, card.lang, 0.85));
+      playCardAudio(card, 0.85));
     document.getElementById('btn-learn-next').addEventListener('click', () => {
       this.idx++; this.renderStep();
     });
@@ -641,6 +798,9 @@ const Learn = {
         <p class="field-note" style="margin-top:6px">ネイティブの方へ: フレーズ・カタカナ・解説を見て、左のマークをタップしてください。
         タップするたびに <strong>未確認 → ✅ 自然でOK → ⚠️ 要修正</strong> と切り替わります。
         ⚠️を付けてもらえれば、あとでまとめて修正できます。🔊で読み上げも確認できます。</p>
+        ${(typeof MediaRecorder !== 'undefined' && typeof VoiceStore !== 'undefined' && VoiceStore.supported()) ? `
+        <p class="field-note" style="margin-top:6px">🎤 さらに、<strong>お手本の声を吹き込めます</strong>。🎤をタップ→フレーズを発音→■で保存。
+        録音があるカードは、学習中の再生と聞き取り問題に合成音声の代わりにその声が使われます。</p>` : ''}
       </div>
       <div class="check-summary card">
         <span>✅ ${cnt.ok}</span><span>⚠️ ${cnt.fix}</span><span>未確認 ${cnt.none}</span>
@@ -659,7 +819,12 @@ const Learn = {
               <p class="check-ja">${escapeHtml(c.ja)}</p>
               ${c.note ? `<p class="check-note">💡 ${escapeHtml(c.note)}</p>` : ''}
             </div>
-            <button class="tts-btn" data-check-tts="${c.id}">🔊</button>
+            <div class="check-audio">
+              <button class="tts-btn" data-check-tts="${c.id}">🔊</button>
+              ${(typeof MediaRecorder !== 'undefined' && typeof VoiceStore !== 'undefined' && VoiceStore.supported()) ? `
+                ${VoiceStore.has(c.id) ? `<button class="tts-btn voice-play" data-check-play="${c.id}">▶ 声</button>` : ''}
+                <button class="tts-btn" data-check-rec="${c.id}">🎤</button>` : ''}
+            </div>
           </div>`;
         }).join('')}
       `).join('')}
@@ -686,6 +851,57 @@ const Learn = {
         const c = Phrases.byId(b.dataset.checkTts);
         Speech.speak(c.t, c.lang, 0.85);
       }));
+    el.querySelectorAll('[data-check-play]').forEach((b) =>
+      b.addEventListener('click', () => VoiceStore.play(b.dataset.checkPlay)));
+
+    // お手本の吹き込み: 🎤タップで録音開始 → ■タップで保存
+    let recId = null;
+    el.querySelectorAll('[data-check-rec]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const id = b.dataset.checkRec;
+        if (MicRec.active && recId === id) {
+          const blob = await MicRec.stop();
+          recId = null;
+          if (blob && blob.size > 500) {
+            await VoiceStore.put(id, blob);
+            if (typeof Achievements !== 'undefined') Achievements.unlock('lang-voice');
+            showToast('❤️ お手本の声を保存しました');
+          } else {
+            showToast('録音が短すぎたため保存しませんでした');
+          }
+          this.renderCheck();
+          return;
+        }
+        if (MicRec.active) { showToast('別のカードを録音中です'); return; }
+        try {
+          await MicRec.start();
+        } catch (err) {
+          appAlert('マイクを使用できませんでした: ' + err.message, '🎤 録音');
+          return;
+        }
+        recId = id;
+        b.classList.add('recording');
+        b.textContent = '■ 保存';
+      }));
+  },
+
+  /* ----- 学会攻略のお宝クイズ用の問題生成(SRSと共有) ----- */
+  runQuizQuestion() {
+    const introduced = Phrases.all().filter((c) => SRS.isIntroduced(c.id));
+    if (introduced.length < 4) return null;
+    const due = SRS.dueCards();
+    const pool = due.length ? due.slice(0, 8) : introduced;
+    const card = pool[Math.floor(Math.random() * pool.length)];
+    const wrong = this.distractors(card, 'ja');
+    if (wrong.length < 3) return null;
+    return {
+      lang: LEARN_LANGS[card.lang].label,
+      cardId: card.id,
+      q: `「${card.t}(${card.k})」の意味は?`,
+      choices: [card.ja, ...wrong.map((c) => c.ja)],
+      correct: 0,
+      note: `${card.ja}。${card.note || ''} 回答はLanguage Questの復習にも記録されます。`
+    };
   },
 
   /* ----- フレーズ図鑑 ----- */
@@ -734,7 +950,7 @@ const Learn = {
           appAlert('まだ学習していないカードです。ユニットから学ぶと図鑑に記録されます。', '🔒 未習得');
           return;
         }
-        Speech.speak(c.t, c.lang, 0.85);
+        playCardAudio(c, 0.85);
         appAlert(
           `${c.k}(${c.r})\n${c.ja}\n\n${c.note || ''}\n\n` +
           `育成段階: ${SRS.stageIcon(r.lv)} ${SRS.stageName(r.lv)} ・ 正解 ${r.ok}/${r.n}回\n次の復習: ${r.due}`,

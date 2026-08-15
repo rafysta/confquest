@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,17 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.9.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '🎙️発話チェックを追加(Language Quest Phase 2)。🌸まで育ったカードは「声に出して言う」昇格試験になり、録音をWhisperが聞き取って⭐1〜3で判定。合格で⭐発話マスターに(OpenAI APIキーが必要)' },
+      { type: 'new', text: '判定は「通じるか」基準の甘め設計。ヒント表示・お手本再生・「今日は文字で答える」逃げ道つき。広東語はzh指定+簡体字正規化で照合します' },
+      { type: 'new', text: '❤️パートナー録音: ✍️監修画面の🎤からフレーズごとにお手本の声を吹き込めます。録音があるカードは学習中の再生・聞き取り問題に合成音声の代わりにその声を使用(広東語TTSが無い端末の切り札)' },
+      { type: 'new', text: '学会攻略のお宝の語学クイズが、Language Questで学習中のカードから出題されるように。正解・不正解は復習スケジュール(SRS)にも記録されます' },
+      { type: 'new', text: '実績2種追加: 🎙️声に出して言えた、❤️ふたりの教科書' }
+    ]
+  },
   {
     version: '1.8.0',
     date: '2026-08-15',
