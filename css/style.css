@@ -763,6 +763,26 @@ audio { width: 100%; margin-bottom: 12px; }
 .choice-btn:active { transform: scale(0.98); }
 .choice-btn:hover { border-color: var(--accent); }
 
+.fb-situation {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #334155; border-radius: 12px;
+  padding: 10px 14px; margin-bottom: 12px;
+  font-size: 0.88rem;
+}
+.fb-situation summary {
+  cursor: pointer; color: var(--text-dim);
+  font-size: 0.78rem; list-style: none;
+}
+.fb-situation summary::-webkit-details-marker { display: none; }
+.fb-situation summary::before { content: '📖 '; }
+.fb-situation[open] summary { margin-bottom: 8px; }
+.fb-situation .md-body { color: var(--text-dim); }
+.review-situation {
+  font-size: 0.82rem; color: var(--text-dim);
+  padding-bottom: 8px; margin-bottom: 8px;
+  border-bottom: 1px solid #334155;
+}
+
 .feedback {
   background: var(--bg-card); border-radius: 12px;
   padding: 16px; margin-bottom: 14px;
@@ -821,6 +841,17 @@ audio { width: 100%; margin-bottom: 12px; }
   animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .all-best { color: var(--success); font-weight: 700; margin: 16px 0; }
+.relic-bonus {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(192, 132, 252, 0.1);
+  border: 1px solid #c084fc; border-radius: 12px;
+  padding: 12px; margin-bottom: 10px;
+  text-align: left;
+  animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.relic-icon { font-size: 1.8rem; }
+.relic-text { font-size: 0.85rem; line-height: 1.5; }
+.relic-text strong { color: #c084fc; }
 .review-item {
   background: var(--bg-card); border-radius: 12px;
   padding: 13px; margin-bottom: 10px; text-align: left;

@@ -28,6 +28,16 @@ const RUN_ITEMS = {
               desc: '使うと、🧠が15回復する' },
   invite:   { icon: '🍀', name: '招待状', price: 35, kind: 'drink',
               desc: '研究者ノードに入るとき、会話を1回スキップできる(自動で確認されます)' },
+  // レリック: 効果は地味だが、学会を完走したとき特別ボーナスをくれる
+  notebook: { icon: '📓', name: 'research notebook', price: 90, kind: 'relic',
+              desc: '学会攻略をクリアしたとき ⭐+150 のボーナス(所持していること)',
+              clearBonus: { pt: 150, msg: '📓 ノートに書き溜めたアイデアが形になった' } },
+  passport: { icon: '🛂', name: 'よく使い込まれたパスポート', price: 110, kind: 'relic',
+              desc: '学会攻略をクリアしたとき 💎+15 のボーナス(所持していること)',
+              clearBonus: { gems: 15, msg: '🛂 旅の記録が次の招待につながった' } },
+  ribbon:   { icon: '🎀', name: 'Invited Speaker リボン', price: 130, kind: 'relic',
+              desc: '学会攻略をクリアしたとき ⭐+100 と 💎+10 のボーナス(所持していること)',
+              clearBonus: { pt: 100, gems: 10, msg: '🎀 招待講演者としての評判が広まった' } },
   // バッドアイテム(拾ってしまうことがある。お店で売って処分)
   jetlag:      { icon: '😪', name: '時差ボケ', price: 20, kind: 'bad', noShop: true,
                  desc: 'スピードゲージの減りが25%速くなる(バッドアイテム。お店で売って処分できます)' },
@@ -518,6 +528,7 @@ const Run = {
     if (dmg > 0) this.state.hp -= dmg;
 
     b.log.push({
+      situation: turn.situation,
       chosen: timedOut ? '(時間切れ)' : choice.text,
       why: timedOut ? '沈黙が長すぎました。完璧な一言より、すぐ返すことが大事な場面が多いです。' : choice.why,
       best: turn.choices.find((c) => c.best),
@@ -538,6 +549,10 @@ const Run = {
     const showBest = (timedOut || !choice.best);
     const best = turn.choices.find((c) => c.best);
     document.getElementById('run-battle-stage').innerHTML = `
+      <details class="fb-situation" open>
+        <summary>状況をもう一度読む</summary>
+        <div class="md-body">${renderMarkdown(turn.situation)}</div>
+      </details>
       <div class="feedback ${cls}">
         <div class="fb-head">
           ${dmg > 0 ? `<span class="fb-delta" style="color:var(--danger)">🧠 -${dmg}</span>` : `<span class="fb-delta">好感 +${Math.max(0, delta)}</span>`}
@@ -620,7 +635,8 @@ const Run = {
         ${levelUps.map((l) =>
           `<div class="levelup-box">🎉 <strong>${Stats.KEYS[l.key].label}</strong> が Lv.${l.level} に!</div>`).join('')}
         ${missed.length ? `<div class="review-item" style="margin-top:10px">
-          <p class="review-chosen">見直し: ${escapeHtml(missed[0].chosen)}</p>
+          <div class="md-body review-situation">${renderMarkdown(missed[0].situation)}</div>
+          <p class="review-chosen">選んだ: ${escapeHtml(missed[0].chosen)}</p>
           <p class="review-best">ベスト: ${escapeHtml(missed[0].best.text)}</p>
         </div>` : (b.turns.length === 1
           ? '<p class="all-best">ベストな返しができた!</p>'
@@ -686,6 +702,11 @@ const Run = {
       .filter((id) => RUN_ITEMS[id].kind === 'gadget' && !RUN_ITEMS[id].noShop);
     this.shopStock = gadgets.filter((id) => !this.hasItem(id))
       .sort(() => Math.random() - 0.5).slice(0, 3);
+    // レリックは1つだけ、たまに並ぶ(完走を狙う人向けの高額商品)
+    const relics = Object.keys(RUN_ITEMS)
+      .filter((id) => RUN_ITEMS[id].kind === 'relic' && !this.hasItem(id));
+    this.relicStock = (relics.length && Math.random() < 0.6)
+      ? [relics[Math.floor(Math.random() * relics.length)]] : [];
     showScreen('run-event');
     this.renderShop();
   },
@@ -711,6 +732,10 @@ const Run = {
       ${this.shopStock.length ? this.shopStock.map((id) =>
         row(id, `💰${this.priceBuy(id)}`, 'data-buy', s.funds >= this.priceBuy(id))).join('')
         : '<p class="field-note">在庫切れです</p>'}
+      ${this.relicStock && this.relicStock.length ? `
+        <h4 class="about-section">✨ レリック(完走ボーナス)</h4>
+        ${this.relicStock.map((id) =>
+          row(id, `💰${this.priceBuy(id)}`, 'data-buy', s.funds >= this.priceBuy(id))).join('')}` : ''}
       <h4 class="about-section">ドリンク(使い切り)</h4>
       ${drinks.map((id) =>
         row(id, `💰${this.priceBuy(id)}`, 'data-buy', s.funds >= this.priceBuy(id))).join('')}
@@ -732,6 +757,7 @@ const Run = {
         this.state.funds -= price;
         this.state.items.push(id);
         this.shopStock = this.shopStock.filter((x) => x !== id);
+        if (this.relicStock) this.relicStock = this.relicStock.filter((x) => x !== id);
         if (typeof Quests !== 'undefined') Quests.addSpend(price);
         this.save(); this.renderShop();
       });
@@ -1022,10 +1048,30 @@ const Run = {
   clearRun() {
     const funds = this.state.funds;
     const bonus = 100; // 完走ボーナス
+
+    // 所持しているレリックの完走ボーナスを精算
+    const relicRows = [];
+    let relicPt = 0, relicGems = 0;
+    for (const id of this.state.items) {
+      const it = RUN_ITEMS[id];
+      if (!it || !it.clearBonus) continue;
+      const cb = it.clearBonus;
+      relicPt += cb.pt || 0;
+      relicGems += cb.gems || 0;
+      relicRows.push(`<div class="relic-bonus">
+        <span class="relic-icon">${it.icon}</span>
+        <span class="relic-text">${escapeHtml(cb.msg)}<br>
+          <strong>${cb.pt ? `⭐+${cb.pt}` : ''}${cb.pt && cb.gems ? ' ・ ' : ''}${cb.gems ? `💎+${cb.gems}` : ''}</strong></span>
+      </div>`);
+    }
+
     Gami.recordPractice(100);
-    Gami.addPoints(funds + bonus);
-    if (typeof Achievements !== 'undefined') Achievements.unlock('run-clear');
-    if (typeof Gems !== 'undefined') Gems.add(5, '学会制覇');
+    Gami.addPoints(funds + bonus + relicPt);
+    if (typeof Achievements !== 'undefined') {
+      Achievements.unlock('run-clear');
+      if (relicRows.length >= 2) Achievements.unlock('relic-collector');
+    }
+    if (typeof Gems !== 'undefined') Gems.add(5 + relicGems, '学会制覇');
     this.end();
     showScreen('run-result');
     document.getElementById('run-result-content').innerHTML = `
@@ -1040,7 +1086,9 @@ const Run = {
       <div class="xp-gains">
         <span class="xp-chip points">💰 ${funds} → ⭐ ${funds} pt に換金</span>
         <span class="xp-chip points">🎓 完走ボーナス +${bonus} pt</span>
+        <span class="xp-chip">💎 +5</span>
       </div>
+      ${relicRows.length ? `<h3 class="about-section">✨ レリックボーナス</h3>${relicRows.join('')}` : ''}
       <button class="btn-large primary" id="btn-run-again" style="margin-top:14px">新しい学会に挑戦</button>
       <button class="btn-large" data-nav="home" style="margin-top:10px">ホームへ</button>`;
     this.wireResultButtons();

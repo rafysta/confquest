@@ -192,6 +192,10 @@ const Convo = {
     const showBest = !timedOut && !choice.best;
 
     document.getElementById('convo-stage').innerHTML = `
+      <details class="fb-situation" open>
+        <summary>状況をもう一度読む</summary>
+        <div class="md-body">${renderMarkdown(turn.situation)}</div>
+      </details>
       <div class="feedback ${cls}">
         <div class="fb-head">
           <span class="fb-delta">好感度 ${sign}${delta * 6}</span>
@@ -280,6 +284,7 @@ const Convo = {
           <h3 class="about-section">見直しポイント</h3>
           ${missed.map((l) => `
             <div class="review-item">
+              <div class="md-body review-situation">${renderMarkdown(l.situation)}</div>
               <p class="review-chosen">選んだ: ${escapeHtml(l.chosen)}</p>
               <div class="md-body review-why">${renderMarkdown(l.why)}</div>
               <p class="review-best">ベスト: ${escapeHtml(l.best.text)}</p>

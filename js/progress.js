@@ -164,7 +164,8 @@ const ACHIEVEMENT_DEFS = [
   { id: 'gameover',       icon: '💤', name: 'それも経験', desc: 'ゲームオーバーになった(失敗から学ぼう)' },
   { id: 'slot-jackpot',   icon: '🎰', name: '大当たり', desc: 'スロットで3つ揃えた' },
   { id: 'quest-all',      icon: '📋', name: '完全稼働', desc: 'デイリークエストを1日で全て達成した' },
-  { id: 'gem-100',        icon: '💎', name: 'コレクター', desc: 'ジェムを100個集めた' }
+  { id: 'gem-100',        icon: '💎', name: 'コレクター', desc: 'ジェムを100個集めた' },
+  { id: 'relic-collector', icon: '✨', name: '思い出の品', desc: 'レリックを2つ以上持って学会を制覇した' }
 ];
 const ACHIEVEMENT_GEMS = 10;
 
