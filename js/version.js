@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.10.3';
+const APP_VERSION = '1.11.0';
 const APP_BUILD = '2026-08-16';
 
 /**
@@ -9,6 +9,16 @@ const APP_BUILD = '2026-08-16';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.11.0',
+    date: '2026-08-16',
+    items: [
+      { type: 'new', text: '💒 Wedding Quest(Hong Kong Route)が開通!広東語タブから、結婚式までの物語を進む5駅: 💼顔合わせ→🥟飲茶の朝→🏠家族の食卓→🏙️街歩き→💒結婚式当日' },
+      { type: 'new', text: '💗パートナーヘルプ: Hong Kong Routeのボス戦では1戦闘3回まで、パートナーが「それは違うよ」と一番まずい選択肢を消して時間もリセットしてくれます — 本番でも隣にいてくれる人です' },
+      { type: 'new', text: 'ラスボスは「ご両親への誓い」。乾杯→ゲストへの感謝→育ててくれたことへの感謝(多謝你哋養大佢)→誓いの言葉(我會好好照顧佢)の4ターン。監修で学んだ表現がそのまま登場します' },
+      { type: 'new', text: '全駅制覇で💎15+実績「💒Wedding Quest制覇」。Korea Routeと進行は独立しています' }
+    ]
+  },
   {
     version: '1.10.3',
     date: '2026-08-16',
