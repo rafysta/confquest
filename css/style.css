@@ -78,6 +78,11 @@ body {
   50% { transform: scale(1.18); }
 }
 .points-badge { margin-left: auto; color: var(--warn); }
+button.points-badge {
+  background: none; border: none; font: inherit;
+  color: var(--warn); cursor: pointer; padding: 4px 2px;
+}
+button.points-badge:active { transform: scale(0.95); }
 .gems-badge {
   color: #c084fc; font-weight: 700;
   background: rgba(192, 132, 252, 0.12);
@@ -1564,3 +1569,46 @@ audio { width: 100%; margin-bottom: 12px; }
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* 🎓キャリア称号 */
+.career-card { border: 1px solid #334155; }
+.career-head { display: flex; align-items: center; gap: 12px; }
+.career-icon { font-size: 2.1rem; }
+.career-info { display: flex; flex-direction: column; gap: 2px; }
+.career-name { font-size: 1.1rem; }
+.career-pts { color: var(--text-dim); font-size: 0.82rem; }
+.career-bar-track {
+  height: 8px; background: #1e293b; border-radius: 4px;
+  margin-top: 12px; overflow: hidden;
+}
+.career-bar {
+  height: 100%; background: var(--warn); border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.career-next { font-size: 0.8rem; color: var(--text-dim); margin-top: 6px; }
+.career-history { margin-top: 10px; }
+.career-history summary {
+  font-size: 0.82rem; color: var(--accent); cursor: pointer;
+  list-style-position: inside;
+}
+.career-rank-row {
+  display: grid; grid-template-columns: 30px 1fr auto;
+  gap: 8px; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid #1e293b;
+  font-size: 0.85rem; opacity: 0.45;
+}
+.career-rank-row.reached { opacity: 1; }
+.career-rank-row:last-child { border-bottom: none; }
+.career-rank-row .cr-when { color: var(--text-dim); font-size: 0.76rem; }
+
+/* 昇格のお祝い */
+.rankup-box { text-align: center; }
+.rankup-icon {
+  font-size: 3.2rem;
+  animation: popIn 0.5s cubic-bezier(0.34, 1.6, 0.64, 1);
+}
+.rankup-title { color: var(--text-dim); font-size: 0.85rem; margin-top: 8px; }
+.rankup-name { font-size: 1.55rem; font-weight: 800; margin: 4px 0 2px; }
+.rankup-gems { color: #c084fc; font-weight: 700; font-size: 1.05rem; margin: 8px 0 0; }
+.rankup-box .btn-large { margin-top: 14px; }
+

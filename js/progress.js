@@ -350,3 +350,83 @@ const Achievements = {
     return true;
   }
 };
+
+/* ---------- 🎓キャリア称号(⭐pt累計による生涯業績ランク) ----------
+ * 設計: docs/pt-career-design.md
+ * 称号は lq_gami.points から毎回導出する(Single Source of Truth)。
+ * 保存するのは「どこまで報酬を受け取ったか」(claimedIdx)と到達日(log)のみ。
+ */
+const CAREER_RANKS = [
+  { id: 'b4',       icon: '🎒', name: '学部生',   need: 0,     gems: 0  },
+  { id: 'master',   icon: '📖', name: '修士課程', need: 150,   gems: 5  },
+  { id: 'doctor',   icon: '🔬', name: '博士課程', need: 400,   gems: 5  },
+  { id: 'postdoc',  icon: '🎓', name: 'ポスドク', need: 800,   gems: 8  },
+  { id: 'jokyo',    icon: '🧑‍🏫', name: '助教',     need: 1400,  gems: 10 },
+  { id: 'koshi',    icon: '📝', name: '講師',     need: 2200,  gems: 10 },
+  { id: 'junkyoju', icon: '🏛️', name: '准教授',   need: 3200,  gems: 12 },
+  { id: 'kyoju',    icon: '👑', name: '教授',     need: 4500,  gems: 15 },
+  { id: 'meiyo',    icon: '🌟', name: '名誉教授', need: 7000,  gems: 20 },
+  { id: 'kaicho',   icon: '🏆', name: '学会長',   need: 10000, gems: 30 }
+];
+
+const CareerRank = {
+  data() {
+    try {
+      const d = JSON.parse(localStorage.getItem('lq_career') || 'null');
+      if (d && typeof d.claimedIdx === 'number') { if (!d.log) d.log = {}; return d; }
+    } catch (_) { /* 破損時は初期化 */ }
+    return { claimedIdx: -1, log: {} };
+  },
+  save(d) { localStorage.setItem('lq_career', JSON.stringify(d)); },
+  points() { return (typeof Gami !== 'undefined') ? (Gami.data().points || 0) : 0; },
+
+  /** 累計ptから現在のランクindexを導出 */
+  index(pts) {
+    const p = (pts === undefined) ? this.points() : pts;
+    let i = 0;
+    for (let k = 0; k < CAREER_RANKS.length; k++) {
+      if (p >= CAREER_RANKS[k].need) i = k;
+    }
+    return i;
+  },
+  current() { return CAREER_RANKS[this.index()]; },
+  next() {
+    const i = this.index();
+    return i < CAREER_RANKS.length - 1 ? CAREER_RANKS[i + 1] : null;
+  },
+  /** 次ランクへの進捗 {into, span, pct}。最高位ならnull */
+  progress() {
+    const nxt = this.next();
+    if (!nxt) return null;
+    const base = CAREER_RANKS[this.index()].need;
+    const span = nxt.need - base;
+    const into = this.points() - base;
+    return { into, span, pct: Math.max(0, Math.min(100, Math.round(into / span * 100))) };
+  },
+
+  /** 未受け取りの昇格を精算する。昇格していれば {rank, gems, count, retro} を返す。
+   *  複数ランク同時昇格はまとめて💎付与し、演出は最終到達ランクのみ。
+   *  初回(claimedIdx=-1)は導入時の遡及付与(retro=true)。 */
+  checkUp() {
+    const d = this.data();
+    const idx = this.index();
+    if (idx <= d.claimedIdx) return null;
+    const retro = d.claimedIdx < 0;
+    let gems = 0, count = 0;
+    const now = new Date().toISOString();
+    for (let k = Math.max(0, d.claimedIdx + 1); k <= idx; k++) {
+      gems += CAREER_RANKS[k].gems || 0;
+      if (!d.log[CAREER_RANKS[k].id]) d.log[CAREER_RANKS[k].id] = now;
+      count++;
+    }
+    d.claimedIdx = idx;
+    this.save(d);
+    if (gems > 0 && typeof Gems !== 'undefined') Gems.add(gems, 'キャリア昇格');
+    // 学部生(idx0)どまりなら記録だけして演出はしない
+    if (idx === 0) return null;
+    return { rank: CAREER_RANKS[idx], gems, count, retro };
+  },
+
+  /** ランクの到達日(未到達ならnull) */
+  reachedAt(id) { return this.data().log[id] || null; }
+};

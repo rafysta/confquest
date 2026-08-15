@@ -91,6 +91,11 @@ const Gami = {
     d.points += n;
     this.save(d);
     if (typeof PointsLog !== 'undefined') PointsLog.add(n);
+    // キャリア称号: 昇格していたらお祝い(判定・💎付与はCareerRank側)
+    if (typeof CareerRank !== 'undefined') {
+      const up = CareerRank.checkUp();
+      if (up) showRankUp(up);
+    }
   },
   /** 練習完了時に呼ぶ。獲得ポイントを返す */
   recordPractice(score) {
@@ -116,7 +121,9 @@ function renderHome() {
   const effective = (d.lastDay === today || d.lastDay === yesterday) ? d.streak : 0;
   document.getElementById('streak-text').textContent =
     d.lastDay === today ? `連続 ${effective} 日 (今日クリア!)` : `連続 ${effective} 日`;
-  document.getElementById('points-badge').textContent = `⭐ ${d.points} pt`;
+  const rank = (typeof CareerRank !== 'undefined') ? CareerRank.current() : null;
+  document.getElementById('points-badge').textContent =
+    rank ? `${rank.icon} ⭐ ${d.points} pt` : `⭐ ${d.points} pt`;
   if (typeof Gems !== 'undefined') {
     document.getElementById('gems-badge').textContent = `💎 ${Gems.get()}`;
     Quests.refreshHomeCard();
@@ -985,6 +992,71 @@ function renderConvoList() {
   });
 }
 
+/* ---------- 🎓キャリア称号のUI ---------- */
+
+/** 昇格のお祝いオーバーレイ(どの画面の上にも出せる。#modal-overlayとは独立) */
+function showRankUp(up) {
+  const old = document.getElementById('career-rankup-overlay');
+  if (old) old.remove();
+  const r = up.rank;
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'career-rankup-overlay';
+  ov.innerHTML = `
+    <div class="modal-box rankup-box">
+      <div class="rankup-icon">${r.icon}</div>
+      <p class="rankup-title">${up.retro
+        ? 'これまでの積み重ねで、あなたはすでに…'
+        : '🎉 キャリア昇格!'}</p>
+      <p class="rankup-name">${r.name}</p>
+      <p class="field-note">⭐${r.need}pt 達成${up.count > 1 ? ` ・ ${up.count}ランク昇格` : ''}</p>
+      ${up.gems ? `<p class="rankup-gems">💎 +${up.gems}</p>` : ''}
+      <button class="btn-large primary" id="btn-rankup-close">これからも研究がんばろう</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.querySelector('#btn-rankup-close').addEventListener('click', close);
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+}
+
+/** ステータス画面用のキャリアカードHTML */
+function careerCardHtml() {
+  if (typeof CareerRank === 'undefined') return '';
+  const rank = CareerRank.current();
+  const nxt = CareerRank.next();
+  const prog = CareerRank.progress();
+  const pts = CareerRank.points();
+  const idx = CareerRank.index();
+  return `
+    <div class="career-card card">
+      <div class="career-head">
+        <span class="career-icon">${rank.icon}</span>
+        <div class="career-info">
+          <strong class="career-name">${rank.name}</strong>
+          <span class="career-pts">⭐ ${pts} pt(生涯業績)</span>
+        </div>
+      </div>
+      ${nxt ? `
+        <div class="career-bar-track"><div class="career-bar" style="width:${prog.pct}%"></div></div>
+        <p class="career-next">${nxt.icon} ${nxt.name}まで あと⭐${nxt.need - pts}pt</p>`
+        : '<p class="career-next">🏆 最高位に到達!それでも業績は積み上がり続けます</p>'}
+      <details class="career-history">
+        <summary>📜 キャリア年表を見る</summary>
+        ${CAREER_RANKS.map((r, i) => {
+          const reached = i <= idx;
+          const when = CareerRank.reachedAt(r.id);
+          return `<div class="career-rank-row ${reached ? 'reached' : ''}">
+            <span class="cr-icon">${r.icon}</span>
+            <span class="cr-name">${r.name}</span>
+            <span class="cr-when">${reached
+              ? (when ? when.slice(0, 10) + ' 到達' : '到達済み')
+              : `⭐${r.need}pt`}</span>
+          </div>`;
+        }).join('')}
+      </details>
+    </div>`;
+}
+
 function renderStatus() {
   const d = Stats.data();
   const el = document.getElementById('status-content');
@@ -995,6 +1067,7 @@ function renderStatus() {
   const maxPts = Math.max(1, ...week.map((w) => w.pts));
 
   el.innerHTML = `
+    ${careerCardHtml()}
     <div class="status-top-grid">
       <div class="stat-box">
         <div class="val">${Stats.totalLevel()}</div>
@@ -1357,4 +1430,9 @@ if (typeof Login !== 'undefined') {
   Quests.onLogin();
 }
 renderHome();
+// キャリア称号: 導入時の遡及付与と、加算時に拾えなかった昇格の精算
+if (typeof CareerRank !== 'undefined') {
+  const up = CareerRank.checkUp();
+  if (up) showRankUp(up);
+}
 ConfMode.maybeSuggest();
