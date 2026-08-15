@@ -945,6 +945,9 @@ document.getElementById('btn-run-retire').addEventListener('click', async () => 
   Run.retire();
 });
 
+// マップ画面のアイコン凡例
+document.getElementById('btn-run-legend').addEventListener('click', () => Run.showLegend());
+
 function updateRunMenuDesc() {
   const el = document.getElementById('menu-run-desc');
   if (el) el.textContent = Run.hasActive()

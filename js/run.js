@@ -46,13 +46,20 @@ const RUN_ITEMS = {
 };
 
 const NODE_TYPES = {
-  researcher: { icon: '💬', label: '研究者' },
-  treasure:   { icon: '🎁', label: 'お宝' },
-  shop:       { icon: '🛒', label: 'お店' },
-  rest:       { icon: '☕', label: '休憩所' },
-  random:     { icon: '❓', label: 'ランダム' },
-  elite:      { icon: '⭐', label: 'エリート' },
-  boss:       { icon: '👑', label: 'ボス' }
+  researcher: { icon: '💬', label: '研究者',
+                desc: '会話バトル。良い返しを選ぶと💰研究費とXPがもらえる' },
+  treasure:   { icon: '🎁', label: 'お宝',
+                desc: 'スロットやクイズなどのミニゲーム。💰やアイテムが手に入る' },
+  shop:       { icon: '🛒', label: 'お店',
+                desc: '💰研究費でアイテムを買える。不要なものは売って処分' },
+  rest:       { icon: '☕', label: '休憩所',
+                desc: '🧠を回復するか、好きな能力に+30XP。どちらか選べる' },
+  random:     { icon: '❓', label: 'ランダム',
+                desc: '何が起こるかお楽しみ。良い出来事も悪い出来事もある' },
+  elite:      { icon: '⭐', label: 'エリート',
+                desc: '強敵との会話。ダメージ大きめ、勝てば報酬も豪華(🏆)' },
+  boss:       { icon: '👑', label: 'ボス',
+                desc: 'その日の最後の関門。倒すと次の日へ進める' }
 };
 
 const Run = {
@@ -312,6 +319,64 @@ const Run = {
 
     const area = document.getElementById('run-map-area');
     area.scrollTop = area.scrollHeight;
+  },
+
+  /* ---------- アイコンの説明(凡例) ---------- */
+  showLegend() {
+    if (document.getElementById('run-legend-overlay')) return;
+    const nodeRows = Object.values(NODE_TYPES).map((t) => `
+      <div class="legend-row">
+        <span class="legend-icon">${t.icon}</span>
+        <span class="legend-body"><strong>${t.label}</strong>
+          <span>${t.desc}</span></span>
+      </div>`).join('');
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.id = 'run-legend-overlay';
+    ov.innerHTML = `
+      <div class="modal-box legend-box">
+        <p class="modal-title">🗺️ マップの見方</p>
+        <h4 class="about-section">マス(ノード)の種類</h4>
+        ${nodeRows}
+        <h4 class="about-section">マスの状態</h4>
+        <div class="legend-row">
+          <span class="legend-icon sample-reachable">💬</span>
+          <span class="legend-body"><strong>光っているマス</strong>
+            <span>いま進める場所。タップで入る</span></span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-icon sample-current">💬</span>
+          <span class="legend-body"><strong>黄色い枠のマス</strong>
+            <span>いまいる場所</span></span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-icon sample-visited">💬</span>
+          <span class="legend-body"><strong>薄いマス</strong>
+            <span>通過済み、または選ばなかった道</span></span>
+        </div>
+        <h4 class="about-section">画面上部の表示</h4>
+        <div class="legend-row">
+          <span class="legend-icon">🧠</span>
+          <span class="legend-body"><strong>メンタル</strong>
+            <span>会話の失敗で減り、0になるとゲームオーバー。休憩所などで回復</span></span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-icon">💰</span>
+          <span class="legend-body"><strong>研究費</strong>
+            <span>このラン中のお金。クリア時に⭐ptへ換金される</span></span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-icon">🎒</span>
+          <span class="legend-body"><strong>アイテム欄</strong>
+            <span>アイコンをタップすると効果を確認。ドリンクはタップで使える</span></span>
+        </div>
+        <p class="field-note" style="margin-top:10px">マップは下から上へ、線でつながったマスへ進めます。</p>
+        <button class="btn-large primary" id="btn-legend-close" style="margin-top:12px">閉じる</button>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    ov.querySelector('#btn-legend-close').addEventListener('click', close);
   },
 
   reachableNodes() {

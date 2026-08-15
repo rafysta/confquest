@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.11.1';
 const APP_BUILD = '2026-08-16';
 
 /**
@@ -9,6 +9,13 @@ const APP_BUILD = '2026-08-16';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.11.1',
+    date: '2026-08-16',
+    items: [
+      { type: 'new', text: '🗺️ 学会攻略のマップ画面に❓ボタンを追加。マス(ノード)のアイコンの意味、光っている/黄色い枠/薄いマスの見分け方、🧠メンタル・💰研究費・アイテム欄の説明をいつでも確認できます' }
+    ]
+  },
   {
     version: '1.11.0',
     date: '2026-08-16',
