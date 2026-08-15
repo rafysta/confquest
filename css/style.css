@@ -1333,3 +1333,35 @@ audio { width: 100%; margin-bottom: 12px; }
 .more-menu summary::after { content: ' ▾'; }
 .more-menu[open] summary::after { content: ' ▴'; }
 .more-menu[open] summary { color: var(--text); }
+
+/* ---- ホーム簡素化 v2 (v1.8.0) ---- */
+/* 学会モード枠内のボタンは横幅を揃える */
+.conf-mode-area { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.conf-mode-area::before { margin-bottom: 0; }
+.conf-mode-area .menu-btn { width: 100%; }
+
+/* チップを1行に並べる */
+.chip-row {
+  display: flex; justify-content: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.chip-row .conf-chip { margin: 0; }
+
+/* 発表練習画面の履歴への導線 */
+.subnav-btn {
+  display: block; width: 100%;
+  background: var(--bg-card); color: var(--text-dim);
+  border: 1px dashed #334155; border-radius: 10px;
+  padding: 10px 14px; font-size: 0.85rem; text-align: left;
+  cursor: pointer; margin-bottom: 14px;
+}
+.subnav-btn:active { background: var(--bg-card-hover); }
+
+/* アクションシート(appChoice) */
+.choice-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.choice-stack .btn-large { margin: 0; }
+.choice-stack-desc {
+  display: block; font-size: 0.75rem; font-weight: 400;
+  color: var(--text-dim); margin-top: 3px;
+}
+.choice-stack .btn-large.primary .choice-stack-desc { color: #bae6fd; }

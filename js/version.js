@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,16 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.8.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'change', text: 'ホームをさらに整理。「そのほかの機能」を廃止し、⚙️設定とℹ️アプリ情報は学会モードと同じ小さなチップになりました' },
+      { type: 'change', text: '録音・聴講した講演は学会モード内に集約(学会モードチップでON/OFF)。枠内のボタンの横幅も揃えました' },
+      { type: 'change', text: '📈練習履歴へは「発表練習」画面の上部から移動する方式に変更' },
+      { type: 'change', text: '🗺️学会攻略をタップすると「攻略に出る」「会話の練習をする」の2択が出るように。練習を選ぶと会話トレーニングが開きます' }
+    ]
+  },
   {
     version: '1.7.0',
     date: '2026-08-15',

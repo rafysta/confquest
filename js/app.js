@@ -177,13 +177,33 @@ const ConfMode = {
 {
   const chip = document.getElementById('btn-conf-mode');
   if (chip) chip.addEventListener('click', () => ConfMode.toggle());
-  // 「そのほか」の開閉状態を記憶
-  const more = document.getElementById('more-menu');
-  if (more) {
-    if (localStorage.getItem('lq_more_open') === '1') more.open = true;
-    more.addEventListener('toggle', () =>
-      localStorage.setItem('lq_more_open', more.open ? '1' : '0'));
-  }
+}
+
+/** 選択肢を並べる簡易アクションシート。選ばれたvalueを返す(キャンセルはnull) */
+function appChoice(title, options) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.innerHTML = `
+      <div class="modal-box">
+        <p class="modal-title">${title}</p>
+        <div class="choice-stack">
+          ${options.map((o, i) => `
+            <button class="btn-large ${o.primary ? 'primary' : ''}" data-ch="${i}">
+              ${o.label}
+              ${o.desc ? `<span class="choice-stack-desc">${o.desc}</span>` : ''}
+            </button>`).join('')}
+          <button class="btn-control" data-ch="-1">キャンセル</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.querySelectorAll('[data-ch]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const i = Number(b.dataset.ch);
+        ov.remove();
+        resolve(i >= 0 ? options[i].value : null);
+      }));
+  });
 }
 
 /** ホームのLanguage Questボタンに復習枚数とカウントダウンを表示 */
@@ -848,6 +868,15 @@ function renderItemDex() {
 
 /* ---------- 学会攻略モード ---------- */
 document.getElementById('menu-run').addEventListener('click', async () => {
+  // 攻略に出るか、会話トレーニングで練習するかを選ぶ
+  const mode = await appChoice('🗺️ 学会攻略', [
+    { label: '🗺️ 攻略に出る', value: 'run', primary: true,
+      desc: Run.hasActive() ? '進行中のランの続きから' : 'マップを進んで学会を攻略する' },
+    { label: '💬 会話の練習をする', value: 'convo',
+      desc: '懇親会シナリオでじっくり練習(ダメージなし)' }
+  ]);
+  if (!mode) return;
+  if (mode === 'convo') { showScreen('convo-list'); return; }
   if (Run.hasActive()) {
     if (Run.resume()) {
       showScreen('run-map');
@@ -1247,7 +1276,6 @@ document.getElementById('btn-force-reset').addEventListener('click', async () =>
 
 /* ---------- 初期化 ---------- */
 document.getElementById('version-footer').textContent = `ConfQuest v${APP_VERSION}`;
-document.getElementById('menu-version').textContent = `バージョン v${APP_VERSION}・更新履歴`;
 document.getElementById('status-summary').textContent = `総合レベル ${Stats.totalLevel()}・能力の成長`;
 
 /* 起動時にサーバーの最新版を静かに確認し、違えばホームに通知を出す */
