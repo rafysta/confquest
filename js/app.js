@@ -117,10 +117,32 @@ document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_stt_model', document.getElementById('stt-model').value);
   localStorage.setItem('lq_time_scale', document.getElementById('time-scale').value);
   localStorage.setItem('lq_fillers', document.getElementById('filler-words').value);
-  const note = document.getElementById('settings-saved');
-  note.style.display = 'block';
-  setTimeout(() => { note.style.display = 'none'; }, 2000);
+  // 保存されたことをはっきり示す: ボタンの見た目変化+トースト通知
+  const btn = document.getElementById('save-settings');
+  btn.textContent = '✓ 保存しました';
+  btn.classList.add('saved');
+  setTimeout(() => {
+    btn.textContent = '保存';
+    btn.classList.remove('saved');
+  }, 1800);
+  showToast('✓ 設定を保存しました');
 });
+
+/** 画面下部に短時間表示される通知 */
+function showToast(msg) {
+  let el = document.getElementById('app-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'app-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2200);
+}
 
 /* ---------- 練習セットアップ ---------- */
 document.getElementById('pdf-input').addEventListener('change', async (e) => {

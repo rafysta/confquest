@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.7.2';
+const APP_VERSION = '0.8.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,17 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.8.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '学会攻略Phase 2: お宝がミニゲームに! スロット・学会豆知識クイズ・韓国語/広東語クイズ' },
+      { type: 'new', text: '❓ランダムイベント追加(エレベーターで大御所と2人きり、コーヒーをこぼす、落とし物、抽選会、旧友と再会)' },
+      { type: 'new', text: 'ドリンク3種(コーヒー・栄養ドリンク・招待状)。HUDのアイコンをタップして使えます' },
+      { type: 'new', text: 'バッドアイテム(😪時差ボケ・📚分厚いプロシーディングス)。拾ってしまったらお店で売って処分' },
+      { type: 'fix', text: '設定の保存時にボタンが変化し通知が出るように。OpenAIキーの説明も補足' }
+    ]
+  },
   {
     version: '0.7.2',
     date: '2026-08-15',
