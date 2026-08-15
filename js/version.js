@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,15 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.7.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'change', text: 'ホーム画面を使用頻度で整理。毎日使う4つ(🎤発表練習・🗺️学会攻略・🇰🇷Language Quest・📊ステータス)を大きなタイルに' },
+      { type: 'change', text: '低頻度の機能(会話トレーニング・録音・練習履歴・設定など)は「📁 そのほかの機能」にたたんで収納。開閉状態は記憶されます' },
+      { type: 'new', text: '🎙️学会モードを追加。チップをタップでONにすると録音機能がホームの一番上に浮上します。ISSY39の前日には自動で提案されます' }
+    ]
+  },
   {
     version: '1.6.0',
     date: '2026-08-15',

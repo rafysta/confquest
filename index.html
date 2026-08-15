@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.6.0">
+<link rel="stylesheet" href="css/style.css?v=1.7.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -46,56 +46,79 @@ window.addEventListener('unhandledrejection', function (e) {
     <span class="quest-card-progress" id="daily-quest-summary">0/4 達成</span>
   </button>
   <nav class="home-menu">
-    <button class="menu-btn primary" data-nav="setup">
-      <span class="menu-icon">🎤</span>
-      <span class="menu-label">発表練習</span>
-      <span class="menu-desc">スライドを使ってプレゼン練習</span>
-    </button>
-    <button class="menu-btn" data-nav="talk-setup">
-      <span class="menu-icon">🎙️</span>
-      <span class="menu-label">講演を録音・要約</span>
-      <span class="menu-desc">学会で聴いた発表を記録してPCへ</span>
-    </button>
-    <button class="menu-btn" data-nav="history">
-      <span class="menu-icon">📈</span>
-      <span class="menu-label">練習履歴</span>
-      <span class="menu-desc">これまでの記録と改善の推移</span>
-    </button>
-    <button class="menu-btn" data-nav="talk-list">
-      <span class="menu-icon">📚</span>
-      <span class="menu-label">聴講した講演</span>
-      <span class="menu-desc">保存した要約を見る・送る</span>
-    </button>
-    <button class="menu-btn" id="menu-run">
-      <span class="menu-icon">🗺️</span>
-      <span class="menu-label">学会攻略 <span class="new-badge">NEW</span></span>
-      <span class="menu-desc" id="menu-run-desc">マップを進んで学会を攻略するゲーム</span>
-    </button>
-    <button class="menu-btn" data-nav="convo-list">
-      <span class="menu-icon">💬</span>
-      <span class="menu-label">会話トレーニング</span>
-      <span class="menu-desc">懇親会の立ち回りを鍛える</span>
-    </button>
-    <button class="menu-btn" data-nav="status">
-      <span class="menu-icon">📊</span>
-      <span class="menu-label">ステータス</span>
-      <span class="menu-desc" id="status-summary">能力の成長を見る</span>
-    </button>
-    <button class="menu-btn" data-nav="learn">
-      <span class="menu-icon">🇰🇷</span>
-      <span class="menu-label">Language Quest <span class="new-badge">NEW</span></span>
-      <span class="menu-desc" id="menu-learn-desc">韓国語・広東語をカードで育てて習得</span>
-    </button>
-    <button class="menu-btn" data-nav="settings">
-      <span class="menu-icon">⚙️</span>
-      <span class="menu-label">設定</span>
-      <span class="menu-desc">APIキー・言語など</span>
-    </button>
-    <button class="menu-btn" data-nav="about">
-      <span class="menu-icon">ℹ️</span>
-      <span class="menu-label">アプリ情報</span>
-      <span class="menu-desc" id="menu-version">バージョン・更新履歴</span>
-    </button>
+    <!-- 学会モード中だけ最上部に浮上する録音機能 -->
+    <div id="conf-mode-area" class="conf-mode-area hidden">
+      <button class="menu-btn primary" data-nav="talk-setup">
+        <span class="menu-icon">🎙️</span>
+        <span class="menu-label">講演を録音・要約</span>
+        <span class="menu-desc">学会で聴いた発表を記録してPCへ</span>
+      </button>
+      <button class="menu-btn" data-nav="talk-list">
+        <span class="menu-icon">📚</span>
+        <span class="menu-label">聴講した講演</span>
+        <span class="menu-desc">保存した要約を見る・送る</span>
+      </button>
+    </div>
+
+    <!-- 毎日使うメイン機能 -->
+    <div class="main-tiles">
+      <button class="main-tile" data-nav="setup">
+        <span class="tile-icon">🎤</span>
+        <span class="tile-label">発表練習</span>
+      </button>
+      <button class="main-tile" id="menu-run">
+        <span class="tile-icon">🗺️</span>
+        <span class="tile-label">学会攻略</span>
+        <span class="tile-desc" id="menu-run-desc"></span>
+      </button>
+      <button class="main-tile" data-nav="learn">
+        <span class="tile-icon">🇰🇷</span>
+        <span class="tile-label">Language Quest</span>
+        <span class="tile-desc" id="menu-learn-desc"></span>
+      </button>
+      <button class="main-tile" data-nav="status">
+        <span class="tile-icon">📊</span>
+        <span class="tile-label">ステータス</span>
+        <span class="tile-desc" id="status-summary"></span>
+      </button>
+    </div>
+
+    <button class="conf-chip" id="btn-conf-mode">🎙️ 学会モード</button>
+
+    <!-- 低頻度の機能はたたんで収納 -->
+    <details id="more-menu" class="more-menu">
+      <summary>📁 そのほかの機能</summary>
+      <button class="menu-btn" data-nav="convo-list">
+        <span class="menu-icon">💬</span>
+        <span class="menu-label">会話トレーニング</span>
+        <span class="menu-desc">懇親会の立ち回りを鍛える</span>
+      </button>
+      <button class="menu-btn" data-nav="talk-setup">
+        <span class="menu-icon">🎙️</span>
+        <span class="menu-label">講演を録音・要約</span>
+        <span class="menu-desc">学会で聴いた発表を記録してPCへ</span>
+      </button>
+      <button class="menu-btn" data-nav="talk-list">
+        <span class="menu-icon">📚</span>
+        <span class="menu-label">聴講した講演</span>
+        <span class="menu-desc">保存した要約を見る・送る</span>
+      </button>
+      <button class="menu-btn" data-nav="history">
+        <span class="menu-icon">📈</span>
+        <span class="menu-label">練習履歴</span>
+        <span class="menu-desc">これまでの記録と改善の推移</span>
+      </button>
+      <button class="menu-btn" data-nav="settings">
+        <span class="menu-icon">⚙️</span>
+        <span class="menu-label">設定</span>
+        <span class="menu-desc">APIキー・日付・音声など</span>
+      </button>
+      <button class="menu-btn" data-nav="about">
+        <span class="menu-icon">ℹ️</span>
+        <span class="menu-label">アプリ情報</span>
+        <span class="menu-desc" id="menu-version">バージョン・更新履歴</span>
+      </button>
+    </details>
   </nav>
   <p class="version-footer" id="version-footer"></p>
 </section>
@@ -585,19 +608,19 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.6.0"></script>
-<script src="js/ai.js?v=1.6.0"></script>
-<script src="js/practice.js?v=1.6.0"></script>
-<script src="js/talk.js?v=1.6.0"></script>
-<script src="js/scenarios.js?v=1.6.0"></script>
-<script src="js/convo.js?v=1.6.0"></script>
-<script src="js/cards.js?v=1.6.0"></script>
-<script src="js/minigames.js?v=1.6.0"></script>
-<script src="js/bosses.js?v=1.6.0"></script>
-<script src="js/run.js?v=1.6.0"></script>
-<script src="js/progress.js?v=1.6.0"></script>
-<script src="js/phrases.js?v=1.6.0"></script>
-<script src="js/learn.js?v=1.6.0"></script>
-<script src="js/app.js?v=1.6.0"></script>
+<script src="js/version.js?v=1.7.0"></script>
+<script src="js/ai.js?v=1.7.0"></script>
+<script src="js/practice.js?v=1.7.0"></script>
+<script src="js/talk.js?v=1.7.0"></script>
+<script src="js/scenarios.js?v=1.7.0"></script>
+<script src="js/convo.js?v=1.7.0"></script>
+<script src="js/cards.js?v=1.7.0"></script>
+<script src="js/minigames.js?v=1.7.0"></script>
+<script src="js/bosses.js?v=1.7.0"></script>
+<script src="js/run.js?v=1.7.0"></script>
+<script src="js/progress.js?v=1.7.0"></script>
+<script src="js/phrases.js?v=1.7.0"></script>
+<script src="js/learn.js?v=1.7.0"></script>
+<script src="js/app.js?v=1.7.0"></script>
 </body>
 </html>

@@ -128,6 +128,62 @@ function renderHome() {
   }
   updateRunMenuDesc();
   updateLearnMenuDesc();
+  if (typeof ConfMode !== 'undefined') ConfMode.applyHome();
+}
+
+/* ---------- 学会モード(録音機能をホーム最上部に浮上させる) ---------- */
+const ConfMode = {
+  KEY: 'lq_conf_mode',
+  PROMPTED_KEY: 'lq_conf_prompted',
+  on() { return localStorage.getItem(this.KEY) === '1'; },
+  set(v) { localStorage.setItem(this.KEY, v ? '1' : '0'); },
+
+  applyHome() {
+    const area = document.getElementById('conf-mode-area');
+    const chip = document.getElementById('btn-conf-mode');
+    if (!area || !chip) return;
+    const on = this.on();
+    area.classList.toggle('hidden', !on);
+    chip.textContent = on ? '🎙️ 学会モード ON — 終わったらタップでOFF' : '🎙️ 学会モード';
+    chip.classList.toggle('on', on);
+  },
+
+  toggle() {
+    this.set(!this.on());
+    this.applyHome();
+    showToast(this.on()
+      ? '🎙️ 学会モードON: 録音機能をホームの一番上に出しました'
+      : '学会モードをOFFにしました');
+  },
+
+  /** ISSY39の前日〜期間中に一度だけ提案する */
+  async maybeSuggest() {
+    if (this.on() || typeof EventDates === 'undefined') return;
+    if (localStorage.getItem(this.PROMPTED_KEY)) return;
+    const left = EventDates.daysLeft('ko');
+    if (left === null || left > 1 || left < -7) return;
+    localStorage.setItem(this.PROMPTED_KEY, '1');
+    const go = await appConfirm(
+      'ISSY39が近づいています!\n学会モードをONにすると、「講演を録音・要約」がホームの一番上に表示されます。\n(ホームのチップからいつでも切り替えられます)',
+      '🎙️ 学会モードにしますか?');
+    if (go) {
+      this.set(true);
+      this.applyHome();
+      showToast('🎙️ 学会モードON! 良い学会を!');
+    }
+  }
+};
+
+{
+  const chip = document.getElementById('btn-conf-mode');
+  if (chip) chip.addEventListener('click', () => ConfMode.toggle());
+  // 「そのほか」の開閉状態を記憶
+  const more = document.getElementById('more-menu');
+  if (more) {
+    if (localStorage.getItem('lq_more_open') === '1') more.open = true;
+    more.addEventListener('toggle', () =>
+      localStorage.setItem('lq_more_open', more.open ? '1' : '0'));
+  }
 }
 
 /** ホームのLanguage Questボタンに復習枚数とカウントダウンを表示 */
@@ -1241,3 +1297,4 @@ if (typeof Login !== 'undefined') {
   Quests.onLogin();
 }
 renderHome();
+ConfMode.maybeSuggest();
