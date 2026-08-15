@@ -190,6 +190,17 @@ const Run = {
     const i = this.state.items.indexOf(id);
     if (i >= 0) this.state.items.splice(i, 1);
   },
+  /** アイテム入手はすべてここを通す(図鑑に記録するため) */
+  gainItem(id) {
+    this.state.items.push(id);
+    if (typeof ItemDex !== 'undefined') {
+      ItemDex.record(id);
+      if (ItemDex.count() >= Object.keys(RUN_ITEMS).length &&
+          typeof Achievements !== 'undefined') {
+        Achievements.unlock('dex-complete');
+      }
+    }
+  },
 
   /* ---------- HUD ---------- */
   renderHud() {
@@ -599,13 +610,13 @@ const Run = {
     // 特別報酬
     let itemNote = '';
     if (b.isElite && !this.hasItem('trophy')) {
-      this.state.items.push('trophy');
+      this.gainItem('trophy');
       itemNote = `<div class="levelup-box">🏆 ${RUN_ITEMS.trophy.name} を手に入れた!(${RUN_ITEMS.trophy.desc})</div>`;
     }
     if (b.isBoss) {
       const bossItem = DAY_INFO[b.bossDay - 1].bossReward.item;
       if (bossItem && !this.hasItem(bossItem)) {
-        this.state.items.push(bossItem);
+        this.gainItem(bossItem);
         itemNote = `<div class="levelup-box">${RUN_ITEMS[bossItem].icon} ${RUN_ITEMS[bossItem].name} を手に入れた!(${RUN_ITEMS[bossItem].desc})</div>`;
       }
     }
@@ -755,7 +766,7 @@ const Run = {
         if (this.state.funds < this.priceBuy(id)) return;
         const price = this.priceBuy(id);
         this.state.funds -= price;
-        this.state.items.push(id);
+        this.gainItem(id);
         this.shopStock = this.shopStock.filter((x) => x !== id);
         if (this.relicStock) this.relicStock = this.relicStock.filter((x) => x !== id);
         if (typeof Quests !== 'undefined') Quests.addSpend(price);
@@ -940,7 +951,7 @@ const Run = {
         .filter((id) => RUN_ITEMS[id].kind === 'gadget' && !RUN_ITEMS[id].noShop && !this.hasItem(id));
       if (candidates.length) {
         const id = candidates[Math.floor(Math.random() * candidates.length)];
-        this.state.items.push(id);
+        this.gainItem(id);
         msg = `🎁 ${RUN_ITEMS[id].icon} ${RUN_ITEMS[id].name} をもらった!(${RUN_ITEMS[id].desc})`;
       } else {
         this.state.funds += 20;
@@ -1003,12 +1014,12 @@ const Run = {
       let msg;
       if (Math.random() < 0.3) {
         const badId = Math.random() < 0.5 ? 'jetlag' : 'proceedings';
-        this.state.items.push(badId);
+        this.gainItem(badId);
         msg = `📦 拾ったのは… ${RUN_ITEMS[badId].icon} ${RUN_ITEMS[badId].name} だった!\n${RUN_ITEMS[badId].desc}`;
       } else {
         const pool = ['coffee', 'energy', 'invite'];
         const id = pool[Math.floor(Math.random() * pool.length)];
-        this.state.items.push(id);
+        this.gainItem(id);
         msg = `📦 ${RUN_ITEMS[id].icon} ${RUN_ITEMS[id].name} を拾った。(受付に届けたら「どうぞ」と言われた)`;
       }
       this.save(); this.eventDone(msg);
@@ -1022,7 +1033,7 @@ const Run = {
         this.state.funds += amt;
         msg = `🎟️ 抽選券が当たった! 💰${amt} を獲得。`;
       } else {
-        this.state.items.push('coffee');
+        this.gainItem('coffee');
         msg = `🎟️ 景品は ☕ コーヒーだった。(${RUN_ITEMS.coffee.desc})`;
       }
       this.save(); this.eventDone(msg);
@@ -1089,6 +1100,30 @@ const Run = {
         <span class="xp-chip">💎 +5</span>
       </div>
       ${relicRows.length ? `<h3 class="about-section">✨ レリックボーナス</h3>${relicRows.join('')}` : ''}
+      <button class="btn-large primary" id="btn-run-again" style="margin-top:14px">新しい学会に挑戦</button>
+      <button class="btn-large" data-nav="home" style="margin-top:10px">ホームへ</button>`;
+    this.wireResultButtons();
+  },
+
+  /** 途中で切り上げる。ゲームオーバーより有利(研究費の40%を持ち帰り) */
+  retire() {
+    const keep = Math.round(this.state.funds * 0.4);
+    const day = this.state.day || 1;
+    Gami.addPoints(keep);
+    if (typeof Achievements !== 'undefined') Achievements.unlock('give-up');
+    this.end();
+    showScreen('run-result');
+    document.getElementById('run-result-content').innerHTML = `
+      <div class="rank-badge" style="color:var(--accent);border-color:var(--accent)">
+        <span class="rank-letter">🏳️</span></div>
+      <p class="rank-label">撤退</p>
+      <p class="field-note" style="margin-bottom:14px">
+        Day ${day} で学会を切り上げました。<br>
+        引き際を見極めるのも大事な判断です。獲得したXPはすべて残ります。
+      </p>
+      <div class="xp-gains">
+        <span class="xp-chip points">💰の40% → ⭐ ${keep} pt を持ち帰り</span>
+      </div>
       <button class="btn-large primary" id="btn-run-again" style="margin-top:14px">新しい学会に挑戦</button>
       <button class="btn-large" data-nav="home" style="margin-top:10px">ホームへ</button>`;
     this.wireResultButtons();

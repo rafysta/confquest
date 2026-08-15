@@ -150,6 +150,22 @@ const Quests = {
   }
 };
 
+/* ---------- アイテム図鑑(取得したことのあるアイテムの記録) ---------- */
+const ItemDex = {
+  data() { return JSON.parse(localStorage.getItem('lq_itemdex') || '{}'); },
+  has(id) { return !!this.data()[id]; },
+  count() { return Object.keys(this.data()).length; },
+  /** アイテム入手時に呼ぶ。初取得ならtrue */
+  record(id) {
+    const d = this.data();
+    if (d[id]) return false;
+    d[id] = new Date().toISOString();
+    localStorage.setItem('lq_itemdex', JSON.stringify(d));
+    return true;
+  },
+  recordAll(ids) { (ids || []).forEach((id) => this.record(id)); }
+};
+
 /* ---------- 実績 ---------- */
 const ACHIEVEMENT_DEFS = [
   { id: 'first-login',    icon: '🎉', name: 'はじめの一歩', desc: '初めてアプリを起動した' },
@@ -165,7 +181,9 @@ const ACHIEVEMENT_DEFS = [
   { id: 'slot-jackpot',   icon: '🎰', name: '大当たり', desc: 'スロットで3つ揃えた' },
   { id: 'quest-all',      icon: '📋', name: '完全稼働', desc: 'デイリークエストを1日で全て達成した' },
   { id: 'gem-100',        icon: '💎', name: 'コレクター', desc: 'ジェムを100個集めた' },
-  { id: 'relic-collector', icon: '✨', name: '思い出の品', desc: 'レリックを2つ以上持って学会を制覇した' }
+  { id: 'relic-collector', icon: '✨', name: '思い出の品', desc: 'レリックを2つ以上持って学会を制覇した' },
+  { id: 'dex-complete',   icon: '📖', name: '収集家', desc: 'すべてのアイテムを1度は手に入れた' },
+  { id: 'give-up',        icon: '🏳️', name: '撤退も戦術', desc: '学会攻略を途中で切り上げた' }
 ];
 const ACHIEVEMENT_GEMS = 10;
 

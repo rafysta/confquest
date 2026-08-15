@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.1.0">
+<link rel="stylesheet" href="css/style.css?v=1.2.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -108,6 +108,7 @@ window.addEventListener('unhandledrejection', function (e) {
   </header>
   <div class="run-hud"></div>
   <div id="run-map-area" class="run-map-area"></div>
+  <button class="btn-retire" id="btn-run-retire">🏳️ このランを切り上げる</button>
 </section>
 
 <!-- 学会攻略: 会話戦闘 -->
@@ -425,6 +426,16 @@ window.addEventListener('unhandledrejection', function (e) {
   <div id="achievements-content"></div>
 </section>
 
+<!-- アイテム図鑑 -->
+<section id="screen-itemdex" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="status">←</button>
+    <h2>アイテム図鑑</h2>
+  </header>
+  <p class="field-note" style="margin-bottom:12px" id="dex-summary"></p>
+  <div id="itemdex-content"></div>
+</section>
+
 <!-- 設定画面 -->
 <section id="screen-settings" class="screen">
   <header class="screen-header">
@@ -505,17 +516,17 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.1.0"></script>
-<script src="js/ai.js?v=1.1.0"></script>
-<script src="js/practice.js?v=1.1.0"></script>
-<script src="js/talk.js?v=1.1.0"></script>
-<script src="js/scenarios.js?v=1.1.0"></script>
-<script src="js/convo.js?v=1.1.0"></script>
-<script src="js/cards.js?v=1.1.0"></script>
-<script src="js/minigames.js?v=1.1.0"></script>
-<script src="js/bosses.js?v=1.1.0"></script>
-<script src="js/run.js?v=1.1.0"></script>
-<script src="js/progress.js?v=1.1.0"></script>
-<script src="js/app.js?v=1.1.0"></script>
+<script src="js/version.js?v=1.2.0"></script>
+<script src="js/ai.js?v=1.2.0"></script>
+<script src="js/practice.js?v=1.2.0"></script>
+<script src="js/talk.js?v=1.2.0"></script>
+<script src="js/scenarios.js?v=1.2.0"></script>
+<script src="js/convo.js?v=1.2.0"></script>
+<script src="js/cards.js?v=1.2.0"></script>
+<script src="js/minigames.js?v=1.2.0"></script>
+<script src="js/bosses.js?v=1.2.0"></script>
+<script src="js/run.js?v=1.2.0"></script>
+<script src="js/progress.js?v=1.2.0"></script>
+<script src="js/app.js?v=1.2.0"></script>
 </body>
 </html>

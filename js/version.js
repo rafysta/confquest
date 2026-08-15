@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,15 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.2.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '📖アイテム図鑑を追加。全アイテムのアイコンが並び、手に入れたものだけ明るく表示され効果を確認できます' },
+      { type: 'new', text: '学会攻略のマップ下部に「🏳️ このランを切り上げる」を追加。研究費の40%を持ち帰れます(ゲームオーバーは10%)' },
+      { type: 'new', text: '実績を2つ追加: 📖収集家(全アイテム発見)、🏳️撤退も戦術' }
+    ]
+  },
   {
     version: '1.1.0',
     date: '2026-08-15',

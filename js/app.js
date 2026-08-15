@@ -65,6 +65,7 @@ function showScreen(name) {
   if (name === 'run-map') Run.renderMap();
   if (name === 'quests' && typeof Quests !== 'undefined') renderQuests();
   if (name === 'achievements' && typeof Achievements !== 'undefined') renderAchievements();
+  if (name === 'itemdex' && typeof ItemDex !== 'undefined') renderItemDex();
 }
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
@@ -605,6 +606,52 @@ function renderAchievements() {
     }).join('');
 }
 
+/* ---------- アイテム図鑑 ---------- */
+const DEX_GROUPS = [
+  { kind: 'gadget', label: '🎒 ガジェット', note: '持っている間ずっと効果が続きます' },
+  { kind: 'relic',  label: '✨ レリック', note: '持ったまま学会を制覇するとボーナス' },
+  { kind: 'drink',  label: '🥤 ドリンク', note: '使い切り。HUDのアイコンをタップして使用' },
+  { kind: 'bad',    label: '😪 バッドアイテム', note: 'できれば持ちたくない。お店で売って処分' }
+];
+
+function renderItemDex() {
+  const all = Object.keys(RUN_ITEMS);
+  const found = all.filter((id) => ItemDex.has(id));
+  document.getElementById('dex-summary').textContent =
+    `${found.length} / ${all.length} 種類を発見 ・ 未発見のアイテムは効果が伏せられています`;
+
+  document.getElementById('itemdex-content').innerHTML = DEX_GROUPS.map((g) => {
+    const ids = all.filter((id) => RUN_ITEMS[id].kind === g.kind);
+    if (!ids.length) return '';
+    const gotCount = ids.filter((id) => ItemDex.has(id)).length;
+    return `
+      <h3 class="about-section">${g.label} <span class="dex-count">${gotCount}/${ids.length}</span></h3>
+      <p class="field-note" style="margin-bottom:8px">${g.note}</p>
+      <div class="dex-grid">
+        ${ids.map((id) => {
+          const got = ItemDex.has(id);
+          return `<button class="dex-cell ${got ? 'found' : 'unknown'}" data-dex="${id}"
+            aria-label="${got ? escapeHtml(RUN_ITEMS[id].name) : '未発見'}">
+            <span class="dex-icon">${RUN_ITEMS[id].icon}</span>
+          </button>`;
+        }).join('')}
+      </div>`;
+  }).join('');
+
+  document.querySelectorAll('[data-dex]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.dex;
+      const it = RUN_ITEMS[id];
+      if (ItemDex.has(id)) {
+        const when = new Date(ItemDex.data()[id]).toLocaleDateString('ja-JP');
+        appAlert(`${it.desc}\n\n初めて手に入れた日: ${when}`, `${it.icon} ${it.name}`);
+      } else {
+        appAlert('まだ手に入れたことがありません。\n学会攻略で見つけると、効果がここに記録されます。', '❔ 未発見のアイテム');
+      }
+    });
+  });
+}
+
 /* ---------- 学会攻略モード ---------- */
 document.getElementById('menu-run').addEventListener('click', async () => {
   if (Run.hasActive()) {
@@ -624,6 +671,16 @@ document.getElementById('menu-run').addEventListener('click', async () => {
     Run.newRun();
     showScreen('run-map');
   }
+});
+
+document.getElementById('btn-run-retire').addEventListener('click', async () => {
+  if (!Run.state) return;
+  const keep = Math.round(Run.state.funds * 0.4);
+  const go = await appConfirm(
+    `今回のランをここで終了します。\n\n💰${Run.state.funds} のうち ⭐${keep} pt を持ち帰れます。\n(獲得したXPと実績はすべて残ります)`,
+    '🏳️ ランを切り上げる');
+  if (!go) return;
+  Run.retire();
 });
 
 function updateRunMenuDesc() {
@@ -704,9 +761,14 @@ function renderStatus() {
         </div>`).join('')}
     </div>
 
-    <button class="btn-large" id="btn-achievements" style="margin-bottom:16px">
-      🏅 実績 (${hasProgress ? `${Achievements.count()}/${ACHIEVEMENT_DEFS.length}` : '-'})
-    </button>
+    <div class="collection-btns">
+      <button class="btn-large" id="btn-achievements">
+        🏅 実績<br><span class="coll-count">${hasProgress ? `${Achievements.count()}/${ACHIEVEMENT_DEFS.length}` : '-'}</span>
+      </button>
+      <button class="btn-large" id="btn-itemdex">
+        📖 アイテム図鑑<br><span class="coll-count">${hasProgress ? `${ItemDex.count()}/${Object.keys(RUN_ITEMS).length}` : '-'}</span>
+      </button>
+    </div>
 
     <h3 class="about-section">能力</h3>
     ${Object.entries(Stats.KEYS).map(([k, meta]) => {
@@ -723,6 +785,8 @@ function renderStatus() {
 
   document.getElementById('btn-achievements').addEventListener('click', () =>
     showScreen('achievements'));
+  document.getElementById('btn-itemdex').addEventListener('click', () =>
+    showScreen('itemdex'));
 
   const hist = JSON.parse(localStorage.getItem('lq_convo_history') || '[]');
   const hel = document.getElementById('convo-history-content');
