@@ -17,6 +17,10 @@ const RUN_ITEMS = {
               desc: 'メンタルが0になっても一度だけHP15で復活する(消滅)' },
   trophy:   { icon: '🏆', name: '記念トロフィー', price: 999, kind: 'gadget',
               desc: '効果はないが高く売れる(80pt)', sellValue: 80, noShop: true },
+  mic:      { icon: '🎤', name: '座長の推薦状', price: 999, kind: 'gadget', noShop: true,
+              desc: '会話で得られる研究費が15%増える(Day 1ボス撃破の証)', sellValue: 60 },
+  goldcard: { icon: '🥇', name: '大御所の名刺', price: 999, kind: 'gadget', noShop: true,
+              desc: '会話で受けるダメージが25%減る(Day 2ボス撃破の証)', sellValue: 70 },
   // ドリンク(使い切り。アイコンをタップして使用)
   coffee:   { icon: '☕', name: 'コーヒー', price: 20, kind: 'drink',
               desc: '使うと、次の会話だけスピードゲージの減りが半分になる' },
@@ -37,7 +41,8 @@ const NODE_TYPES = {
   shop:       { icon: '🛒', label: 'お店' },
   rest:       { icon: '☕', label: '休憩所' },
   random:     { icon: '❓', label: 'ランダム' },
-  elite:      { icon: '⭐', label: 'エリート' }
+  elite:      { icon: '⭐', label: 'エリート' },
+  boss:       { icon: '👑', label: 'ボス' }
 };
 
 const Run = {
@@ -64,6 +69,7 @@ const Run = {
   newRun() {
     this.state = {
       active: true,
+      day: 1,
       hp: 50, maxHp: 50,
       funds: 30,
       items: [],
@@ -80,7 +86,7 @@ const Run = {
     const layers = [];
     for (let i = 0; i < LAYERS; i++) {
       let count;
-      if (i === LAYERS - 1) count = 1;                       // 最上段はエリート
+      if (i === LAYERS - 1) count = 1;                       // 最上段はボス
       else if (i === 0) count = 3;
       else count = 2 + Math.floor(Math.random() * 3);        // 2〜4
       const nodes = [];
@@ -89,15 +95,25 @@ const Run = {
       }
       layers.push(nodes);
     }
-    // お店と休憩所が1つも無いマップを防ぐ
+    // お店と休憩所が1つも無いマップを防ぐ / エリートは1つまで
     const flat = layers.slice(1, -1).flat();
-    if (!flat.some((n) => n.type === 'shop')) {
-      const l = 2 + Math.floor(Math.random() * 4);
-      layers[l][Math.floor(Math.random() * layers[l].length)].type = 'shop';
-    }
-    if (!flat.some((n) => n.type === 'rest')) {
-      const l = 4 + Math.floor(Math.random() * 3);
-      layers[l][Math.floor(Math.random() * layers[l].length)].type = 'rest';
+    const forceType = (type, minLayer, maxLayer, avoid) => {
+      if (flat.some((n) => n.type === type)) return;
+      // 上書きしてはいけないタイプを避けて配置する
+      for (let tries = 0; tries < 20; tries++) {
+        const l = minLayer + Math.floor(Math.random() * (maxLayer - minLayer + 1));
+        const node = layers[l][Math.floor(Math.random() * layers[l].length)];
+        if (!avoid.includes(node.type)) { node.type = type; return; }
+      }
+    };
+    forceType('shop', 2, 5, ['rest']);
+    forceType('rest', 4, 6, ['shop']);
+    let eliteSeen = false;
+    for (const n of flat) {
+      if (n.type === 'elite') {
+        if (eliteSeen) n.type = 'researcher';
+        eliteSeen = true;
+      }
     }
 
     // 層間の接続: 双方向に最低1本を保証
@@ -125,14 +141,15 @@ const Run = {
   },
 
   pickType(layerIdx, totalLayers) {
-    if (layerIdx === totalLayers - 1) return 'elite';
+    if (layerIdx === totalLayers - 1) return 'boss';
     if (layerIdx === 0) return 'researcher';               // 最初は必ず会話から
     const r = Math.random();
-    if (r < 0.44) return 'researcher';
-    if (r < 0.60) return 'treasure';
-    if (r < 0.74) return 'random';
-    if (r < 0.87) return 'rest';
-    return 'shop';
+    if (r < 0.42) return 'researcher';
+    if (r < 0.57) return 'treasure';
+    if (r < 0.70) return 'random';
+    if (r < 0.82) return 'rest';
+    if (r < 0.93) return 'shop';
+    return 'elite';                                        // 中盤に稀に出現(1つまで)
   },
 
   hasItem(id) { return this.state.items.includes(id); },
@@ -186,6 +203,9 @@ const Run = {
   /* ---------- マップ表示 ---------- */
   renderMap() {
     this.renderHud();
+    const dayInfo = DAY_INFO[(this.state.day || 1) - 1];
+    const h = document.querySelector('#screen-run-map h2');
+    if (h) h.textContent = dayInfo ? dayInfo.name : '学会攻略';
     const { layers, edges } = this.state.map;
     const W = 100, ROWH = 84;
     const H = layers.length * ROWH;
@@ -263,6 +283,7 @@ const Run = {
       this.startBattle(false);
     }
     else if (node.type === 'elite') this.startBattle(true);
+    else if (node.type === 'boss') this.startBossBattle();
     else if (node.type === 'shop') this.openShop();
     else if (node.type === 'rest') this.openRest();
     else if (node.type === 'treasure') this.openTreasure();
@@ -310,6 +331,7 @@ const Run = {
     }
     this.battle = {
       isElite, title, partner, turns, focus, coffee,
+      isBoss: false, bossDay: 0, timeMult: 1,
       rewardMult: rewardMult || 1,
       turnIndex: 0, totalDelta: 0, bestCount: 0,
       log: [], answered: false, timerId: null, startedAt: 0, curChoices: null
@@ -321,16 +343,44 @@ const Run = {
     else this.renderBattleTurn();
   },
 
-  /** エリート戦前の短い演出(タップでスキップ可) */
-  renderEliteIntro() {
+  /** その日のボス戦を開始 */
+  startBossBattle() {
+    const day = this.state.day || 1;
+    const boss = BOSSES[day - 1];
+    // コーヒーはボス戦でも消費される
+    let coffee = false;
+    if (this.state.coffeeBuff) {
+      coffee = true;
+      this.state.coffeeBuff = false;
+      this.save();
+    }
+    this.battle = {
+      isElite: false, isBoss: true, bossDay: day,
+      title: boss.title, partner: boss.partner,
+      turns: boss.turns, focus: boss.focus, coffee,
+      timeMult: boss.timeMult || 1,
+      rewardMult: 1,
+      turnIndex: 0, totalDelta: 0, bestCount: 0,
+      log: [], answered: false, timerId: null, startedAt: 0, curChoices: null
+    };
+    showScreen('run-battle');
+    document.getElementById('run-battle-title').textContent = boss.title;
+    document.getElementById('run-battle-partner').textContent = boss.partner;
+    this.renderEliteIntro(true);
+  },
+
+  /** エリート/ボス戦前の短い演出(タップでスキップ可) */
+  renderEliteIntro(isBoss) {
     const stage = document.getElementById('run-battle-stage');
     document.getElementById('run-battle-progress').textContent = '';
     stage.innerHTML = `
-      <div class="elite-intro">
-        <div class="elite-warning">⚠ 強敵出現 ⚠</div>
-        <div class="elite-star">⭐</div>
+      <div class="elite-intro ${isBoss ? 'boss' : ''}">
+        <div class="elite-warning">${isBoss ? '👑 BOSS 👑' : '⚠ 強敵出現 ⚠'}</div>
+        <div class="elite-star">${isBoss ? '👑' : '⭐'}</div>
         <p class="elite-name">${escapeHtml(this.battle.partner)}</p>
-        <p class="elite-hint">深呼吸して、会話に臨みましょう…</p>
+        <p class="elite-hint">${isBoss
+          ? (this.battle.timeMult < 1 ? '相手は容赦がない。考える時間も短い…' : 'この日の集大成。深呼吸して臨みましょう…')
+          : '深呼吸して、会話に臨みましょう…'}</p>
       </div>`;
     let started = false;
     const begin = () => {
@@ -348,6 +398,7 @@ const Run = {
     if (this.hasItem('jetlag')) ms *= 0.8;          // バッドアイテム
     if (this.battle && this.battle.coffee) ms *= 2; // コーヒー効果
     if (this.battle && this.battle.isElite) ms *= 0.9;
+    if (this.battle && this.battle.isBoss) ms *= 0.9 * (this.battle.timeMult || 1);
     return ms;
   },
 
@@ -436,6 +487,8 @@ const Run = {
     if (timedOut) dmg = 8;
     else if (choice.delta < 0) dmg = Math.abs(choice.delta) * 4;
     if (b.isElite) dmg = Math.round(dmg * 1.25);
+    if (b.isBoss) dmg = Math.round(dmg * 1.5);
+    if (this.hasItem('goldcard')) dmg = Math.round(dmg * 0.75); // 大御所の名刺
     if (dmg > 0) this.state.hp -= dmg;
 
     b.log.push({
@@ -490,29 +543,41 @@ const Run = {
     const b = this.battle;
     let reward = 8 + 3 * b.totalDelta;
     if (b.isElite) reward = Math.round(reward * 2.5) + 20;
+    if (b.isBoss) reward += DAY_INFO[b.bossDay - 1].bossReward.funds;
     reward = Math.round(reward * (b.rewardMult || 1));
     if (this.hasItem('shirt')) reward = Math.round(reward * 1.25);
+    if (this.hasItem('mic')) reward = Math.round(reward * 1.15);   // 座長の推薦状
     this.state.funds += reward;
 
     // XP(既存ステータスへ恒常的に加算)
-    const xp = 5 + b.bestCount * 5 + (b.isElite ? 15 : 0);
+    const xp = 5 + b.bestCount * 5 + (b.isElite ? 15 : 0) + (b.isBoss ? 25 : 0);
     const gains = {};
     (b.focus || ['network']).forEach((k) => { gains[k] = xp; });
     const levelUps = Stats.add(gains);
 
-    // エリート報酬: トロフィー
+    // 特別報酬
     let itemNote = '';
     if (b.isElite && !this.hasItem('trophy')) {
       this.state.items.push('trophy');
       itemNote = `<div class="levelup-box">🏆 ${RUN_ITEMS.trophy.name} を手に入れた!(${RUN_ITEMS.trophy.desc})</div>`;
     }
+    if (b.isBoss) {
+      const bossItem = DAY_INFO[b.bossDay - 1].bossReward.item;
+      if (bossItem && !this.hasItem(bossItem)) {
+        this.state.items.push(bossItem);
+        itemNote = `<div class="levelup-box">${RUN_ITEMS[bossItem].icon} ${RUN_ITEMS[bossItem].name} を手に入れた!(${RUN_ITEMS[bossItem].desc})</div>`;
+      }
+    }
     this.save();
     this.renderHud();
 
     const missed = b.log.filter((l) => !l.wasBest);
+    const nextLabel = b.isBoss
+      ? (b.bossDay >= 3 ? '🎓 学会を終える' : '次の日へ')
+      : 'マップに戻る';
     document.getElementById('run-battle-stage').innerHTML = `
       <div class="convo-result">
-        <p class="rank-label">会話終了</p>
+        <p class="rank-label">${b.isBoss ? '👑 ボス撃破!' : '会話終了'}</p>
         <div class="xp-gains">
           <span class="xp-chip points">💰 +${reward}</span>
           ${Object.entries(gains).map(([k, v]) =>
@@ -528,11 +593,44 @@ const Run = {
           ? '<p class="all-best">ベストな返しができた!</p>'
           : '<p class="all-best">全ターンでベスト選択!</p>')}
       </div>
-      <button class="btn-large primary" id="btn-run-battle-done">${b.isElite ? '結果へ' : 'マップに戻る'}</button>`;
+      <button class="btn-large primary" id="btn-run-battle-done">${nextLabel}</button>`;
 
     document.getElementById('btn-run-battle-done').addEventListener('click', () => {
-      if (b.isElite) this.clearRun();
-      else { showScreen('run-map'); }
+      if (b.isBoss) {
+        if (b.bossDay >= 3) this.clearRun();
+        else this.nextDay();
+      } else {
+        showScreen('run-map');
+      }
+    });
+  },
+
+  /** 次の日へ: マップを再生成し、一晩の休息で少し回復 */
+  nextDay() {
+    const s = this.state;
+    s.day = (s.day || 1) + 1;
+    s.hp = Math.min(s.maxHp, s.hp + 15);
+    s.layer = -1;
+    s.nodeIndex = -1;
+    s.map = this.genMap();
+    this.save();
+    showScreen('run-result');
+    const info = DAY_INFO[s.day - 1];
+    document.getElementById('run-result-content').innerHTML = `
+      <div class="rank-badge" style="color:var(--accent);border-color:var(--accent)">
+        <span class="rank-letter">🌅</span></div>
+      <p class="rank-label">Day ${s.day - 1} クリア!</p>
+      <p class="field-note" style="margin-bottom:14px">
+        ホテルでぐっすり眠った。🧠が15回復。<br>
+        明日は「${escapeHtml(info.name)}」— さらに手強い相手が待っている。
+      </p>
+      <div class="xp-gains">
+        <span class="xp-chip points">💰 ${s.funds} は持ち越し</span>
+        <span class="xp-chip">🎒 アイテムも持ち越し</span>
+      </div>
+      <button class="btn-large primary" id="btn-next-day" style="margin-top:14px">${escapeHtml(info.name)} を始める</button>`;
+    document.getElementById('btn-next-day').addEventListener('click', () => {
+      showScreen('run-map');
     });
   },
 
@@ -673,18 +771,18 @@ const Run = {
     const SYMBOLS = ['⭐', '💰', '🧬', '☕', '🏆', '📖'];
     const el = document.getElementById('run-event-content');
     el.innerHTML = `
-      ${this.eventHead('🎰', '展示ブースのスロット', '3つ揃えば大当たり! タップで1つずつ止めます')}
+      ${this.eventHead('🎰', '展示ブースのスロット', '3つ揃えば大当たり! 各リールの下のボタンで止めます')}
       <div class="slot-row">
-        <span class="slot-reel" id="reel-0">⭐</span>
-        <span class="slot-reel" id="reel-1">💰</span>
-        <span class="slot-reel" id="reel-2">🧬</span>
+        ${[0, 1, 2].map((i) => `
+          <div class="slot-col">
+            <span class="slot-reel" id="reel-${i}">${SYMBOLS[i]}</span>
+            <button class="btn-control primary slot-stop" data-stop="${i}">止める</button>
+          </div>`).join('')}
       </div>
-      <button class="btn-large primary" id="btn-slot-stop">止める!</button>
       <div id="slot-result"></div>`;
 
     const current = [0, 1, 2];
     const spinning = [true, true, true];
-    let stopIdx = 0;
     const timers = [0, 1, 2].map((i) =>
       setInterval(() => {
         if (!spinning[i]) return;
@@ -693,29 +791,31 @@ const Run = {
         if (reel) reel.textContent = SYMBOLS[current[i]];
       }, 90 + i * 25));
 
-    document.getElementById('btn-slot-stop').addEventListener('click', () => {
-      if (stopIdx >= 3) return;
-      spinning[stopIdx] = false;
-      clearInterval(timers[stopIdx]);
-      document.getElementById(`reel-${stopIdx}`).classList.add('stopped');
-      stopIdx++;
-      if (stopIdx < 3) return;
-      // 判定
-      document.getElementById('btn-slot-stop').style.display = 'none';
-      const [a, b, c] = current;
-      let msg;
-      if (a === b && b === c) {
-        this.state.funds += 40;
-        msg = `🎉 大当たり! ${SYMBOLS[a]}が3つ揃って 💰40 を獲得!`;
-      } else if (a === b || b === c || a === c) {
-        this.state.funds += 15;
-        msg = '✨ 2つ揃った! 💰15 を獲得。';
-      } else {
-        this.state.funds += 3;
-        msg = '残念、揃わず… 参加賞の💰3をもらった。';
-      }
-      this.save();
-      this.eventDone(msg);
+    document.querySelectorAll('[data-stop]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.stop);
+        if (!spinning[i]) return;
+        spinning[i] = false;
+        clearInterval(timers[i]);
+        btn.disabled = true;
+        document.getElementById(`reel-${i}`).classList.add('stopped');
+        if (spinning.some((x) => x)) return;
+        // 全リール停止 → 判定
+        const [a, b, c] = current;
+        let msg;
+        if (a === b && b === c) {
+          this.state.funds += 40;
+          msg = `🎉 大当たり! ${SYMBOLS[a]}が3つ揃って 💰40 を獲得!`;
+        } else if (a === b || b === c || a === c) {
+          this.state.funds += 15;
+          msg = '✨ 2つ揃った! 💰15 を獲得。';
+        } else {
+          this.state.funds += 3;
+          msg = '残念、揃わず… 参加賞の💰3をもらった。';
+        }
+        this.save();
+        this.eventDone(msg);
+      });
     });
   },
 
@@ -885,19 +985,25 @@ const Run = {
   /* ---------- 終了 ---------- */
   clearRun() {
     const funds = this.state.funds;
-    Gami.recordPractice(80);
-    const g = Gami.data(); g.points += funds; Gami.save(g);
+    const bonus = 100; // 完走ボーナス
+    Gami.recordPractice(100);
+    const g = Gami.data(); g.points += funds + bonus; Gami.save(g);
     this.end();
     showScreen('run-result');
     document.getElementById('run-result-content').innerHTML = `
       <div class="rank-badge" style="color:var(--success);border-color:var(--success)">
         <span class="rank-letter">🎓</span></div>
-      <p class="rank-label">Day 1 クリア!</p>
-      <p class="field-note" style="margin-bottom:14px">エリートとの会話を乗り切りました。<br>(Day 2以降はPhase 3で追加予定)</p>
+      <p class="rank-label">学会制覇!</p>
+      <p class="field-note" style="margin-bottom:14px">
+        座長、大御所、そして鋭いReviewer——<br>
+        3日間すべての会話を乗り切りました。<br>
+        あなたの学会は、確かな人脈と次の論文の約束とともに終わりました。
+      </p>
       <div class="xp-gains">
         <span class="xp-chip points">💰 ${funds} → ⭐ ${funds} pt に換金</span>
+        <span class="xp-chip points">🎓 完走ボーナス +${bonus} pt</span>
       </div>
-      <button class="btn-large primary" id="btn-run-again" style="margin-top:14px">もう一度挑戦</button>
+      <button class="btn-large primary" id="btn-run-again" style="margin-top:14px">新しい学会に挑戦</button>
       <button class="btn-large" data-nav="home" style="margin-top:10px">ホームへ</button>`;
     this.wireResultButtons();
   },

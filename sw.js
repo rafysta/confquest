@@ -5,7 +5,7 @@
  *       ネットワークが使えないときだけ Cache Storage を使う。
  *       CDN(pdf.js)はキャッシュ優先。
  */
-const CACHE_VERSION = 'cq-v14';
+const CACHE_VERSION = 'cq-v15';
 const APP_SHELL = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const APP_SHELL = [
   './js/convo.js',
   './js/cards.js',
   './js/minigames.js',
+  './js/bosses.js',
   './js/run.js',
   './js/ai.js',
   './manifest.json',

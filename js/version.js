@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.8.0';
+const APP_VERSION = '0.9.0';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,17 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.9.0',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '学会攻略Phase 3: 3日構成に! Day 1レセプション → Day 2本会議 → Day 3シンポジウム' },
+      { type: 'new', text: 'ボス3体を追加: 👑セッション座長、👑分野の大御所、👑鋭いReviewer(制限時間短め)。ダメージ1.5倍の高難度会話' },
+      { type: 'new', text: 'ボス撃破の特別アイテム: 🎤座長の推薦状(報酬+15%)、🥇大御所の名刺(被ダメージ-25%)' },
+      { type: 'new', text: '3日間完走で🎓学会制覇! 完走ボーナス+100pt。エリート(⭐)はマップ中盤に稀に出現するように' },
+      { type: 'fix', text: 'スロットのボタンを各リールの真下に配置。1つずつ狙って止められます' }
+    ]
+  },
   {
     version: '0.8.0',
     date: '2026-08-15',
