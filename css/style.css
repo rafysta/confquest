@@ -1390,3 +1390,8 @@ audio { width: 100%; margin-bottom: 12px; }
 }
 .check-audio .tts-btn { padding: 6px 10px; white-space: nowrap; }
 .check-audio .voice-play { border-color: #f472b6; color: #f9a8d4; }
+
+/* ---- v1.9.1: 録音削除と⚠️修正待ち ---- */
+.check-audio .voice-del { border-color: var(--danger); color: var(--danger); }
+.dex-phrase.fixwait { border-left: 3px solid var(--warn); opacity: 0.75; }
+.dex-phrase.fixwait .dex-ja { color: var(--warn); }

@@ -124,13 +124,15 @@ const SRS = {
     return { levelUp };
   },
 
-  /** 復習期限が来ているカード(言語で絞り込み、期限が古い順) */
+  /** 復習期限が来ているカード(言語で絞り込み、期限が古い順)
+   *  ⚠️要修正フラグのカードは、間違いを覚え込まないよう修正まで除外する */
   dueCards(lang, now) {
     const d = this.data();
     const today = localDayKey(now);
     return Phrases.all()
       .filter((c) => (!lang || c.lang === lang))
       .filter((c) => d.cards[c.id] && d.cards[c.id].due <= today)
+      .filter((c) => typeof ReviewFlags === 'undefined' || ReviewFlags.get(c.id) !== 'fix')
       .sort((a, b) => d.cards[a.id].due < d.cards[b.id].due ? -1 : 1);
   },
 
@@ -385,14 +387,26 @@ const Learn = {
 
   async startUnit(unitId) {
     const u = Phrases.unit(unitId);
-    const fresh = u.cards.filter((c) => !SRS.isIntroduced(c.id));
+    const notFixed = (c) => ReviewFlags.get(c.id) !== 'fix';
+    const fresh = u.cards.filter((c) => !SRS.isIntroduced(c.id)).filter(notFixed);
     const remain = SRS.newRemaining(u.lang);
-    if (!fresh.length) {
-      // 全カード導入済み → このユニットだけ総復習(期限前でもOK、SRSには初回のみ反映)
-      this.queue = u.cards.map((c) => ({
+    if (!u.cards.some((c) => !SRS.isIntroduced(c.id))) {
+      // 全カード導入済み → このユニットだけ総復習(⚠️修正待ちは除外)
+      const cards = u.cards.filter(notFixed);
+      if (!cards.length) {
+        await appAlert('このユニットのカードはすべて⚠️修正待ちです。監修画面でフラグを確認してください。', '⚠️ 修正待ち');
+        return;
+      }
+      this.queue = cards.map((c) => ({
         type: 'quiz', card: Object.assign({ unitId: u.id, lang: u.lang }, c)
       }));
       this.beginSession('unit-review', `${u.icon} ${u.title}(総復習)`);
+      return;
+    }
+    if (!fresh.length) {
+      await appAlert(
+        'このユニットの残りのカードは⚠️要修正フラグが付いているため、修正されるまで学習をスキップします。\n(監修画面でフラグを外すと再開できます)',
+        '⚠️ 修正待ちのためスキップ');
       return;
     }
     if (remain <= 0) {
@@ -797,7 +811,8 @@ const Learn = {
         <p><strong>${meta.flag} ${meta.label}の全${Phrases.byLang(lang).length}フレーズを、学習状況に関係なく表示しています。</strong></p>
         <p class="field-note" style="margin-top:6px">ネイティブの方へ: フレーズ・カタカナ・解説を見て、左のマークをタップしてください。
         タップするたびに <strong>未確認 → ✅ 自然でOK → ⚠️ 要修正</strong> と切り替わります。
-        ⚠️を付けてもらえれば、あとでまとめて修正できます。🔊で読み上げも確認できます。</p>
+        ⚠️を付けたカードは<strong>修正されるまで学習(新規・復習・クイズ)から自動的に外れます</strong>。
+        あとでまとめて修正し、直したらフラグをタップで戻してください。🔊で読み上げも確認できます。</p>
         ${(typeof MediaRecorder !== 'undefined' && typeof VoiceStore !== 'undefined' && VoiceStore.supported()) ? `
         <p class="field-note" style="margin-top:6px">🎤 さらに、<strong>お手本の声を吹き込めます</strong>。🎤をタップ→フレーズを発音→■で保存。
         録音があるカードは、学習中の再生と聞き取り問題に合成音声の代わりにその声が使われます。</p>` : ''}
@@ -822,7 +837,9 @@ const Learn = {
             <div class="check-audio">
               <button class="tts-btn" data-check-tts="${c.id}">🔊</button>
               ${(typeof MediaRecorder !== 'undefined' && typeof VoiceStore !== 'undefined' && VoiceStore.supported()) ? `
-                ${VoiceStore.has(c.id) ? `<button class="tts-btn voice-play" data-check-play="${c.id}">▶ 声</button>` : ''}
+                ${VoiceStore.has(c.id) ? `
+                  <button class="tts-btn voice-play" data-check-play="${c.id}">▶ 声</button>
+                  <button class="tts-btn voice-del" data-check-del="${c.id}">🗑</button>` : ''}
                 <button class="tts-btn" data-check-rec="${c.id}">🎤</button>` : ''}
             </div>
           </div>`;
@@ -853,6 +870,17 @@ const Learn = {
       }));
     el.querySelectorAll('[data-check-play]').forEach((b) =>
       b.addEventListener('click', () => VoiceStore.play(b.dataset.checkPlay)));
+    el.querySelectorAll('[data-check-del]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const c = Phrases.byId(b.dataset.checkDel);
+        const go = await appConfirm(
+          `「${c.t}」のお手本録音を削除しますか?\n(削除後は🎤で録り直せます)`,
+          '🗑 録音を削除');
+        if (!go) return;
+        await VoiceStore.remove(c.id);
+        showToast('録音を削除しました');
+        this.renderCheck();
+      }));
 
     // お手本の吹き込み: 🎤タップで録音開始 → ■タップで保存
     let recId = null;
@@ -887,7 +915,8 @@ const Learn = {
 
   /* ----- 学会攻略のお宝クイズ用の問題生成(SRSと共有) ----- */
   runQuizQuestion() {
-    const introduced = Phrases.all().filter((c) => SRS.isIntroduced(c.id));
+    const introduced = Phrases.all().filter((c) => SRS.isIntroduced(c.id))
+      .filter((c) => ReviewFlags.get(c.id) !== 'fix');
     if (introduced.length < 4) return null;
     const due = SRS.dueCards();
     const pool = due.length ? due.slice(0, 8) : introduced;
@@ -927,10 +956,11 @@ const Learn = {
         <div class="dex-list">
           ${u.cards.map((c) => {
             const r = SRS.get(c.id);
-            return `<button class="dex-phrase ${r ? (r.lv >= 3 ? 'bloomed' : 'growing') : 'locked'}" data-dex-card="${c.id}">
-              <span class="dex-stage">${r ? SRS.stageIcon(r.lv) : '🔒'}</span>
+            const fix = ReviewFlags.get(c.id) === 'fix';
+            return `<button class="dex-phrase ${r ? (r.lv >= 3 ? 'bloomed' : 'growing') : 'locked'} ${fix ? 'fixwait' : ''}" data-dex-card="${c.id}">
+              <span class="dex-stage">${fix ? '⚠️' : (r ? SRS.stageIcon(r.lv) : '🔒')}</span>
               <span class="dex-t">${escapeHtml(c.t)}</span>
-              <span class="dex-ja">${r ? escapeHtml(c.ja) : '???'}</span>
+              <span class="dex-ja">${fix ? '修正待ち' : (r ? escapeHtml(c.ja) : '???')}</span>
             </button>`;
           }).join('')}
         </div>`;

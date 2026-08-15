@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.9.1';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.9.1',
+    date: '2026-08-15',
+    items: [
+      { type: 'new', text: '✍️監修画面でパートナー録音を🗑削除できるように(確認つき)。間違えて録音してもすぐ録り直せます' },
+      { type: 'change', text: '⚠️要修正フラグに実際の効き目を持たせました。⚠️のカードは修正されるまで新規学習・復習・学会攻略のクイズから自動的に外れます(間違った表現を覚え込まないため)。図鑑では⚠️修正待ちと表示されます' }
+    ]
+  },
   {
     version: '1.9.0',
     date: '2026-08-15',
