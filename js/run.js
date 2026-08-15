@@ -53,9 +53,17 @@ const NODE_TYPES = {
   shop:       { icon: '🛒', label: 'お店',
                 desc: '💰研究費でアイテムを買える。不要なものは売って処分' },
   rest:       { icon: '☕', label: '休憩所',
-                desc: '🧠を回復するか、好きな能力に+30XP。どちらか選べる' },
+                desc: '🧠を回復するか、好きな能力に+30XP。たまに売店が出ていることも' },
   random:     { icon: '❓', label: 'ランダム',
                 desc: '何が起こるかお楽しみ。良い出来事も悪い出来事もある' },
+  topic:      { icon: '🎴', label: '話題トーク',
+                desc: '手札から話題を選んで相手との距離を縮めるカードバトル。地雷話題に注意' },
+  stroll:     { icon: '🚶', label: 'コーヒーブレイク',
+                desc: '15分の休憩時間。誰に・どの順で会いに行くか、動線を考える' },
+  badge:      { icon: '👥', label: '名刺交換',
+                desc: '新しい出会い。相手の名前は、あとで思い出すことになるかも…' },
+  qa:         { icon: '🛡️', label: '質疑応答',
+                desc: 'ボス前の関門。飛んでくる質問を「答える/確認/持ち帰る」で捌く' },
   elite:      { icon: '⭐', label: 'エリート',
                 desc: '強敵との会話。ダメージ大きめ、勝てば報酬も豪華(🏆)' },
   boss:       { icon: '👑', label: 'ボス',
@@ -90,6 +98,9 @@ const Run = {
       if (s.day > 3) s.day = 3;
       if (!Array.isArray(s.items)) s.items = [];
       if (!Array.isArray(s.usedCards)) s.usedCards = [];
+      if (!Array.isArray(s.qaUsed)) s.qaUsed = [];
+      if (!Array.isArray(s.topicUsed)) s.topicUsed = [];
+      if (!('badge' in s)) s.badge = null;
       if (typeof s.hp !== 'number' || typeof s.funds !== 'number') return false;
       // 旧形式(最上段がエリート)はボスに変換
       const top = s.map.layers[s.map.layers.length - 1];
@@ -126,8 +137,13 @@ const Run = {
       layer: -1,          // 現在の層(-1 = まだマップ上のどこにもいない)
       nodeIndex: -1,
       usedCards: [],
-      map: this.genMap()
+      qaUsed: [],         // 質疑応答で出題済みの質問ID
+      topicUsed: [],      // 話題トークで登場済みの相手ID
+      badge: null,        // 名刺交換の状態(1ランに1回だけ)
+      map: null
     };
+    // マップ生成はstate確定後に(名刺交換の出現判定がstateを見るため)
+    this.state.map = this.genMap();
     (perk.items || []).forEach((id) => this.gainItem(id));
     this.save();
   },
@@ -138,6 +154,7 @@ const Run = {
     for (let i = 0; i < LAYERS; i++) {
       let count;
       if (i === LAYERS - 1) count = 1;                       // 最上段はボス
+      else if (i === LAYERS - 2) count = 1;                  // ボス直前は🛡️質疑応答の関門
       else if (i === 0) count = 3;
       else count = 2 + Math.floor(Math.random() * 3);        // 2〜4
       const nodes = [];
@@ -146,19 +163,39 @@ const Run = {
       }
       layers.push(nodes);
     }
-    // お店と休憩所が1つも無いマップを防ぐ / エリートは1つまで
+    // 固定配置: 上書きしてはいけないタイプを避けつつ、必ず1つ置く
     const flat = layers.slice(1, -1).flat();
-    const forceType = (type, minLayer, maxLayer, avoid) => {
-      if (flat.some((n) => n.type === type)) return;
-      // 上書きしてはいけないタイプを避けて配置する
-      for (let tries = 0; tries < 20; tries++) {
-        const l = minLayer + Math.floor(Math.random() * (maxLayer - minLayer + 1));
-        const node = layers[l][Math.floor(Math.random() * layers[l].length)];
-        if (!avoid.includes(node.type)) { node.type = type; return; }
-      }
+    const SPECIAL = ['shop', 'rest', 'qa', 'stroll', 'badge', 'boss', 'elite'];
+    const place = (type, minLayer, maxLayer) => {
+      const range = layers.slice(minLayer, maxLayer + 1).flat();
+      let candidates = range.filter((n) => !SPECIAL.includes(n.type));
+      // 空きがなければエリートも上書き対象にする(qa/bossは不可侵)
+      if (!candidates.length) candidates = range.filter((n) => n.type === 'elite');
+      if (!candidates.length) return false;
+      candidates[Math.floor(Math.random() * candidates.length)].type = type;
+      return true;
     };
-    forceType('shop', 2, 5, ['rest']);
-    forceType('rest', 4, 6, ['shop']);
+    place('rest', 5, 5);                                     // 休憩所はボス2つ前に必ず1つ
+    place('shop', 2, 5);                                     // お店は1日1軒
+    place('stroll', 2, 5);                                   // コーヒーブレイクも1日1回
+    if (Math.random() < 0.5) place('rest', 2, 3);            // たまに序盤にもう1つ
+    // 名刺交換は1ランに1回だけ(まだ出会っていなければ序盤に配置)
+    if (!(this.state && this.state.badge && this.state.badge.met)) {
+      place('badge', 1, 3);
+    }
+    // 話題トークは2〜3回に揃える
+    const topics = flat.filter((n) => n.type === 'topic');
+    for (let i = 3; i < topics.length; i++) topics[i].type = 'researcher';
+    if (topics.length < 2) {
+      const mid = layers.slice(1, -2).flat();
+      const convertible = mid.filter((n) => n.type === 'researcher')
+        .concat(mid.filter((n) => n.type === 'random'))
+        .concat(mid.filter((n) => n.type === 'treasure'));
+      for (let i = 0; i < 2 - topics.length && i < convertible.length; i++) {
+        convertible[i].type = 'topic';
+      }
+    }
+    // エリートは1つまで
     let eliteSeen = false;
     for (const n of flat) {
       if (n.type === 'elite') {
@@ -193,14 +230,15 @@ const Run = {
 
   pickType(layerIdx, totalLayers) {
     if (layerIdx === totalLayers - 1) return 'boss';
+    if (layerIdx === totalLayers - 2) return 'qa';         // ボス直前は必ず質疑応答
     if (layerIdx === 0) return 'researcher';               // 最初は必ず会話から
     const r = Math.random();
     if (r < 0.42) return 'researcher';
-    if (r < 0.57) return 'treasure';
-    if (r < 0.70) return 'random';
-    if (r < 0.82) return 'rest';
-    if (r < 0.93) return 'shop';
+    if (r < 0.62) return 'treasure';                       // 豆知識・クイズ系は多めに
+    if (r < 0.76) return 'topic';                          // 話題トーク(後で2〜3個に調整)
+    if (r < 0.92) return 'random';
     return 'elite';                                        // 中盤に稀に出現(1つまで)
+    // お店・休憩所・コーヒーブレイク・名刺交換・質疑応答は genMap 側で固定配置
   },
 
   hasItem(id) { return this.state.items.includes(id); },
@@ -415,6 +453,10 @@ const Run = {
     else if (node.type === 'rest') this.openRest();
     else if (node.type === 'treasure') this.openTreasure();
     else if (node.type === 'random') this.openRandom();
+    else if (node.type === 'topic') this.startTopic();
+    else if (node.type === 'stroll') this.openStroll();
+    else if (node.type === 'badge') this.openBadgeMeet();
+    else if (node.type === 'qa') this.startQaDefense();
   },
 
   /* ---------- 会話戦闘 ---------- */
@@ -873,12 +915,47 @@ const Run = {
   openRest() {
     showScreen('run-event');
     this.renderHud();
+    // 名刺交換した相手との再会イベント(1ランに1回、少し時間が経ってから)
+    const b = this.state.badge;
+    if (b && b.met && !b.resolved &&
+        (this.state.day > b.day || this.state.layer >= b.layer + 2)) {
+      this.renderBadgeRecall();
+      return;
+    }
+    this._restKiosk = this.buildRestKiosk();
+    this.renderRestMenu();
+  },
+
+  /** 休憩所の売店の品揃え(半分の確率で出店。ドリンク2種+ガジェット1種) */
+  buildRestKiosk() {
+    if (Math.random() < 0.5) return null;
+    const drinks = mgShuffle(['coffee', 'energy', 'invite']).slice(0, 2);
+    const gadgets = Object.keys(RUN_ITEMS)
+      .filter((id) => RUN_ITEMS[id].kind === 'gadget' && !RUN_ITEMS[id].noShop && !this.hasItem(id));
+    return drinks.concat(gadgets.length
+      ? [gadgets[Math.floor(Math.random() * gadgets.length)]] : []);
+  },
+
+  renderRestMenu() {
+    this.renderHud();
+    const kiosk = this._restKiosk;
     document.getElementById('run-event-content').innerHTML = `
       <div class="convo-icon" style="text-align:center">☕</div>
       <h3 style="text-align:center;margin-bottom:4px">休憩スペース</h3>
       <p class="field-note" style="text-align:center;margin-bottom:16px">静かなソファを見つけました。どう過ごしますか?</p>
       <button class="btn-large primary" id="btn-rest-heal">☕ 休む(🧠を${Math.round(this.state.maxHp * 0.3)}回復)</button>
-      <button class="btn-large" id="btn-rest-study" style="margin-top:10px">📖 予習する(好きな能力に+30XP)</button>`;
+      <button class="btn-large" id="btn-rest-study" style="margin-top:10px">📖 予習する(好きな能力に+30XP)</button>
+      ${kiosk && kiosk.length ? `
+        <h4 class="about-section">🛍️ 小さな売店が出ている</h4>
+        ${kiosk.map((id) => `
+          <div class="shop-row">
+            <span class="shop-icon">${RUN_ITEMS[id].icon}</span>
+            <span class="shop-body"><strong>${RUN_ITEMS[id].name}</strong>
+              <span class="field-note">${RUN_ITEMS[id].desc}</span></span>
+            <button class="btn-control ${this.state.funds >= this.priceBuy(id) ? 'primary' : ''}" data-rest-buy="${id}"
+              ${this.state.funds >= this.priceBuy(id) ? '' : 'disabled'}>💰${this.priceBuy(id)}</button>
+          </div>`).join('')}
+        <p class="field-note" style="text-align:center">買い物をしても、休む/予習はそのまま選べます</p>` : ''}`;
 
     document.getElementById('btn-rest-heal').addEventListener('click', () => {
       this.state.hp = Math.min(this.state.maxHp,
@@ -900,6 +977,20 @@ const Run = {
         });
       });
     });
+    document.querySelectorAll('[data-rest-buy]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.restBuy;
+        const price = this.priceBuy(id);
+        if (this.state.funds < price) return;
+        this.state.funds -= price;
+        this.gainItem(id);
+        this._restKiosk = (this._restKiosk || []).filter((x) => x !== id);
+        if (typeof Quests !== 'undefined') Quests.addSpend(price);
+        this.save();
+        showToast(`${RUN_ITEMS[id].icon} ${RUN_ITEMS[id].name} を買った`);
+        this.renderRestMenu();
+      });
+    });
   },
 
   /* ---------- お宝(ミニゲーム) ---------- */
@@ -907,8 +998,8 @@ const Run = {
     showScreen('run-event');
     this.renderHud();
     const r = Math.random();
-    if (r < 0.30) this.miniSlot();
-    else if (r < 0.55) this.miniTrivia();
+    if (r < 0.22) this.miniSlot();
+    else if (r < 0.56) this.miniTrivia();                  // 豆知識クイズを多めに
     else if (r < 0.80) this.miniLang();
     else this.freeTreasure();
   },
@@ -1049,6 +1140,473 @@ const Run = {
     document.getElementById('run-event-content').innerHTML =
       this.eventHead('🎁', 'お宝発見', '');
     this.eventDone(msg);
+  },
+
+  /* ---------- 共通: ダメージ適用(名刺/お守り考慮) ---------- */
+  applyRunDamage(dmg) {
+    if (dmg <= 0) return { dmg: 0, revived: false, dead: false };
+    if (this.hasItem('goldcard')) dmg = Math.round(dmg * 0.75);
+    this.state.hp -= dmg;
+    let revived = false;
+    if (this.state.hp <= 0 && this.hasItem('charm')) {
+      this.state.items = this.state.items.filter((x) => x !== 'charm');
+      this.state.hp = 15;
+      revived = true;
+    }
+    return { dmg, revived, dead: this.state.hp <= 0 };
+  },
+
+  /* ---------- 🎴 話題トーク(話題の手札バトル) ---------- */
+  topicGame: null,
+
+  startTopic() {
+    const used = this.state.topicUsed || [];
+    let pool = TOPIC_PARTNERS.filter((p) => !used.includes(p.id));
+    if (!pool.length) { pool = TOPIC_PARTNERS.slice(); this.state.topicUsed = []; }
+    const partner = pool[Math.floor(Math.random() * pool.length)];
+    this.state.topicUsed = (this.state.topicUsed || []).concat(partner.id);
+    this.save();
+    this.topicGame = {
+      partner,
+      hand: Topic.dealHand(partner),
+      mood: 5, turn: 0, playedTags: [], lastLine: ''
+    };
+    showScreen('run-event');
+    this.renderHud();
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('🎴', '話題トーク', '手札から話題を選んで、相手との距離を縮めよう(3ターン・時間制限なし)')}
+      <div class="card">
+        <p><strong>${this.topicGame.partner.icon} ${escapeHtml(this.topicGame.partner.name)}</strong></p>
+        <p class="field-note" style="margin-top:6px">${escapeHtml(this.topicGame.partner.situation)}</p>
+        <p class="topic-hint">🔍 ${escapeHtml(this.topicGame.partner.hint)}</p>
+      </div>
+      <p class="field-note" style="text-align:center;margin-top:8px">ヒントから相手の好みを読み、話題を出す<strong>順番</strong>も考えましょう</p>
+      <button class="btn-large primary" style="margin-top:10px" id="btn-topic-go">会話を始める</button>`;
+    document.getElementById('btn-topic-go').addEventListener('click', () => this.renderTopicTurn());
+  },
+
+  renderTopicTurn() {
+    const g = this.topicGame;
+    this.renderHud();
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead(g.partner.icon, escapeHtml(g.partner.name), '')}
+      <div class="affinity-row" style="margin-bottom:4px">
+        <span class="affinity-label">機嫌</span>
+        <div class="affinity-track"><div class="affinity-bar" style="width:${g.mood * 10}%"></div></div>
+        <span class="affinity-value">${g.mood}/10</span>
+      </div>
+      <p class="field-note" style="text-align:center">ターン ${g.turn + 1} / 3 ・ 🔍 ${escapeHtml(g.partner.hint)}</p>
+      ${g.lastLine ? `<div class="card topic-line">${escapeHtml(g.lastLine)}</div>` : ''}
+      <p class="field-note" style="margin:8px 0 4px">どの話題を出す?</p>
+      <div class="topic-hand">
+        ${g.hand.map((c, i) => `
+          <button class="topic-card" data-topic-play="${i}">
+            <span class="t-icon">${c.icon}</span>
+            <span class="t-label">${escapeHtml(c.label)}</span>
+            <span class="t-desc">${escapeHtml(c.desc)}</span>
+          </button>`).join('')}
+      </div>`;
+    document.querySelectorAll('[data-topic-play]').forEach((btn) => {
+      btn.addEventListener('click', () => this.playTopicCard(Number(btn.dataset.topicPlay)));
+    });
+  },
+
+  playTopicCard(idx) {
+    const g = this.topicGame;
+    const card = g.hand[idx];
+    if (!card) return;
+    g.hand.splice(idx, 1);
+    const res = Topic.evalCard(card, g.partner, g.mood, g.playedTags);
+    g.playedTags.push(card.tag);
+    g.mood = Math.max(0, Math.min(10, g.mood + res.delta));
+    g.turn++;
+    const hit = this.applyRunDamage(res.dmg);
+    this.save();
+    this.renderHud();
+    g.lastLine = '';
+    const cls = res.delta > 0 ? 'good' : (res.dmg > 0 ? 'bad' : 'neutral');
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead(g.partner.icon, escapeHtml(g.partner.name), '')}
+      <div class="affinity-row" style="margin-bottom:4px">
+        <span class="affinity-label">機嫌</span>
+        <div class="affinity-track"><div class="affinity-bar" style="width:${g.mood * 10}%"></div></div>
+        <span class="affinity-value">${g.mood}/10</span>
+      </div>
+      <div class="feedback ${cls}">
+        <div class="fb-head">
+          ${res.dmg > 0
+            ? `<span class="fb-delta" style="color:var(--danger)">🧠 -${hit.dmg}</span>`
+            : `<span class="fb-delta">機嫌 ${res.delta >= 0 ? '+' : ''}${res.delta}</span>`}
+        </div>
+        <p class="fb-chosen">${card.icon} 「${escapeHtml(card.label)}」を切り出した</p>
+        <div class="fb-why">${escapeHtml(res.line)}</div>
+        ${hit.revived ? '<div class="levelup-box">🧿 お守りが砕けて、あなたを守った! (HP15で復活)</div>' : ''}
+      </div>
+      <button class="btn-large primary" id="btn-topic-next">
+        ${hit.dead ? '…' : (g.turn < 3 ? '次の話題へ' : '会話を締める')}
+      </button>`;
+    document.getElementById('btn-topic-next').addEventListener('click', () => {
+      if (hit.dead) { this.gameOver(); return; }
+      if (g.turn < 3) this.renderTopicTurn();
+      else this.endTopic();
+    });
+  },
+
+  endTopic() {
+    const g = this.topicGame;
+    let reward = 10 + g.mood * 3;
+    reward = Math.round(reward * (this.state.dailyMult || 1));
+    if (this.hasItem('shirt')) reward = Math.round(reward * 1.25);
+    if (this.hasItem('mic')) reward = Math.round(reward * 1.15);
+    this.state.funds += reward;
+    const gains = g.mood >= 8 ? { topic: 20, network: 10 }
+      : (g.mood >= 5 ? { topic: 12 } : { topic: 6 });
+    const levelUps = Stats.add(gains);
+    this.save();
+    this.renderHud();
+    if (typeof Quests !== 'undefined') Quests.tryComplete('play');
+    if (g.mood >= 10 && typeof Achievements !== 'undefined') Achievements.unlock('topic-heart');
+    const verdict = g.mood >= 8
+      ? '🎉 大盛り上がり!「また明日も話しましょう」と連絡先を交換した。'
+      : (g.mood >= 5
+        ? '😊 感じの良い雑談になった。顔を覚えてもらえたはず。'
+        : '😅 会話はぎこちないまま終わった。話題選びを振り返ろう。');
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead(g.partner.icon, '会話終了', '')}
+      <div class="convo-result">
+        <p class="rank-label">機嫌 ${g.mood}/10</p>
+        <p class="field-note" style="margin-bottom:10px">${verdict}</p>
+        <div class="xp-gains">
+          <span class="xp-chip points">💰 +${reward}</span>
+          ${Object.entries(gains).map(([k, v]) =>
+            `<span class="xp-chip">${Stats.KEYS[k].icon} ${Stats.KEYS[k].label} +${v}XP</span>`).join('')}
+        </div>
+        ${levelUps.map((l) =>
+          `<div class="levelup-box">🎉 <strong>${Stats.KEYS[l.key].label}</strong> が Lv.${l.level} に!</div>`).join('')}
+      </div>
+      <button class="btn-large primary" style="margin-top:12px" id="btn-topic-done">マップに戻る</button>`;
+    document.getElementById('btn-topic-done').addEventListener('click', () => showScreen('run-map'));
+    this.topicGame = null;
+  },
+
+  /* ---------- 🚶 コーヒーブレイク(動線パズル) ---------- */
+  strollGame: null,
+
+  openStroll() {
+    this.strollGame = {
+      spots: Stroll.gen(), elapsed: 0, visited: [],
+      funds: 0, hp: 0, xp: {}, items: [], lastNote: ''
+    };
+    showScreen('run-event');
+    this.renderStroll(true);
+  },
+
+  renderStroll(intro) {
+    const st = this.strollGame;
+    this.renderHud();
+    const left = Stroll.TIME_BUDGET - st.elapsed;
+    const anyLeft = st.spots.some((sp) =>
+      !st.visited.includes(sp.id) && Stroll.canVisit(sp, st.elapsed));
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('🚶', 'コーヒーブレイク',
+        intro ? '休憩は15分。全員には会えない — 誰に、どの順で会いに行く?' : '')}
+      <div class="stroll-clock card">⏰ 残り <strong>${left}</strong> 分</div>
+      ${st.lastNote ? `<div class="card topic-line">${st.lastNote}</div>` : ''}
+      ${st.spots.map((sp, i) => {
+        const done = st.visited.includes(sp.id);
+        const can = !done && Stroll.canVisit(sp, st.elapsed);
+        const gone = !done && st.elapsed >= sp.leaveBy;
+        return `
+        <div class="shop-row ${done ? 'stroll-done' : ''} ${gone ? 'stroll-gone' : ''}">
+          <span class="shop-icon">${sp.icon}</span>
+          <span class="shop-body"><strong>${escapeHtml(sp.name)}</strong>
+            <span class="field-note">${escapeHtml(sp.desc)} ・ ${sp.rewardLabel}</span>
+            <span class="field-note">⏱ 会話${sp.cost}分 ・ ${done ? '✅ 会えた' :
+              (gone ? '💨 もういない…' :
+                (sp.leaveBy < Stroll.TIME_BUDGET ? `⏳ ${sp.leaveBy}分までに行かないと離席` : '🪑 最後までいる'))}</span></span>
+          <button class="btn-control ${can ? 'primary' : ''}" data-stroll-visit="${i}"
+            ${can ? '' : 'disabled'}>${done ? '済' : '会う'}</button>
+        </div>`;
+      }).join('')}
+      <button class="btn-large ${anyLeft ? '' : 'primary'}" style="margin-top:12px" id="btn-stroll-end">
+        ${anyLeft ? '⏹ ここで休憩を終える' : '☕ 休憩を終える'}</button>`;
+    document.querySelectorAll('[data-stroll-visit]').forEach((btn) => {
+      btn.addEventListener('click', () => this.strollVisit(Number(btn.dataset.strollVisit)));
+    });
+    document.getElementById('btn-stroll-end').addEventListener('click', () => this.endStroll());
+  },
+
+  strollVisit(idx) {
+    const st = this.strollGame;
+    const sp = st.spots[idx];
+    if (!sp || st.visited.includes(sp.id) || !Stroll.canVisit(sp, st.elapsed)) return;
+    st.elapsed += sp.cost;
+    st.visited.push(sp.id);
+    const r = sp.reward;
+    const notes = [];
+    if (r.funds) { this.state.funds += r.funds; st.funds += r.funds; notes.push(`💰+${r.funds}`); }
+    if (r.hp) {
+      this.state.hp = Math.min(this.state.maxHp, this.state.hp + r.hp);
+      st.hp += r.hp; notes.push(`🧠+${r.hp}`);
+    }
+    if (r.xp) {
+      Object.entries(r.xp).forEach(([k, v]) => { st.xp[k] = (st.xp[k] || 0) + v; });
+      notes.push(Object.keys(r.xp).map((k) => `${Stats.KEYS[k].icon}XP`).join(''));
+    }
+    if (r.item) {
+      const pool = ['coffee', 'energy', 'invite'];
+      const id = pool[Math.floor(Math.random() * pool.length)];
+      this.gainItem(id);
+      st.items.push(id);
+      notes.push(`${RUN_ITEMS[id].icon} ${RUN_ITEMS[id].name}`);
+    }
+    st.lastNote = `${sp.icon} ${escapeHtml(sp.name)}と話せた! ${notes.join(' ・ ')}`;
+    this.save();
+    this.renderStroll(false);
+  },
+
+  endStroll() {
+    const st = this.strollGame;
+    let bonus = 0;
+    if (st.visited.length >= 3) {
+      bonus = 10;
+      this.state.funds += bonus;
+    }
+    const levelUps = Object.keys(st.xp).length ? Stats.add(st.xp) : [];
+    this.save();
+    this.renderHud();
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('🚶', '休憩終了', '')}
+      <div class="convo-result">
+        <p class="rank-label">${st.visited.length}人に会えた</p>
+        ${st.visited.length === 0
+          ? '<p class="field-note">誰にも会わずに終わった。次の休憩は動線を考えてみよう。</p>' : ''}
+        <div class="xp-gains">
+          ${st.funds ? `<span class="xp-chip points">💰 +${st.funds}</span>` : ''}
+          ${bonus ? `<span class="xp-chip points">🏃 3人達成ボーナス 💰+${bonus}</span>` : ''}
+          ${st.hp ? `<span class="xp-chip">🧠 +${st.hp}</span>` : ''}
+          ${Object.entries(st.xp).map(([k, v]) =>
+            `<span class="xp-chip">${Stats.KEYS[k].icon} ${Stats.KEYS[k].label} +${v}XP</span>`).join('')}
+        </div>
+        ${levelUps.map((l) =>
+          `<div class="levelup-box">🎉 <strong>${Stats.KEYS[l.key].label}</strong> が Lv.${l.level} に!</div>`).join('')}
+      </div>
+      <button class="btn-large primary" style="margin-top:12px" id="btn-stroll-done">マップに戻る</button>`;
+    document.getElementById('btn-stroll-done').addEventListener('click', () => showScreen('run-map'));
+    this.strollGame = null;
+  },
+
+  /* ---------- 🛡️ 質疑応答ディフェンス(ボス前の関門) ---------- */
+  qaGame: null,
+
+  startQaDefense() {
+    let pool = QA_QUESTIONS.filter((q) => !(this.state.qaUsed || []).includes(q.id));
+    if (pool.length < 5) { pool = QA_QUESTIONS.slice(); this.state.qaUsed = []; }
+    const qs = mgShuffle(pool).slice(0, 5);
+    this.state.qaUsed = (this.state.qaUsed || []).concat(qs.map((q) => q.id));
+    this.save();
+    this.qaGame = { qs, i: 0, score: 0, answered: false, timerId: null };
+    showScreen('run-event');
+    this.renderHud();
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('🛡️', '質疑応答ディフェンス', 'ボス前の関門!')}
+      <div class="card">
+        <p>ボスが待つ会場の前で、あなたの発表への質疑が始まった。<br>
+        飛んでくる5つの質問を、正しい対応で捌き切ろう。</p>
+        <div class="qa-legend">
+          <p>${QA_ACTIONS.answer.icon} <strong>答える</strong> — 知っていることは簡潔に即答</p>
+          <p>${QA_ACTIONS.clarify.icon} <strong>言い換えて確認</strong> — 曖昧・複数・攻撃的な質問に</p>
+          <p>${QA_ACTIONS.defer.icon} <strong>持ち帰る</strong> — 未実施の実験・うろ覚えの数値に</p>
+        </div>
+        <p class="field-note">全問正解なら🧠も回復してボス戦へ!</p>
+      </div>
+      <button class="btn-large primary" style="margin-top:10px" id="btn-qa-go">質疑を受ける</button>`;
+    document.getElementById('btn-qa-go').addEventListener('click', () => this.renderQaQuestion());
+  },
+
+  renderQaQuestion() {
+    const g = this.qaGame;
+    const q = g.qs[g.i];
+    g.answered = false;
+    this.renderHud();
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('🛡️', `質問 ${g.i + 1} / ${g.qs.length}`, '')}
+      <div class="situation">
+        <p class="field-note">🎙️ ${escapeHtml(q.speaker)}:</p>
+        <p class="qa-question">"${escapeHtml(q.q)}"</p>
+      </div>
+      <div class="timer-wrap"><div class="timer-bar" id="qa-timer-bar"></div></div>
+      <div class="choices">
+        ${Object.entries(QA_ACTIONS).map(([key, a]) =>
+          `<button class="choice-btn" data-qa-act="${key}">${a.icon} ${a.label}</button>`).join('')}
+      </div>`;
+    document.querySelectorAll('[data-qa-act]').forEach((btn) => {
+      btn.addEventListener('click', () => this.answerQa(btn.dataset.qaAct));
+    });
+    clearInterval(g.timerId);
+    const startedAt = Date.now();
+    const limitMs = 10000 * Convo.timeScale();
+    const bar = document.getElementById('qa-timer-bar');
+    g.timerId = setInterval(() => {
+      const left = limitMs - (Date.now() - startedAt);
+      const frac = Math.max(0, left / limitMs);
+      if (bar) {
+        bar.style.width = `${frac * 100}%`;
+        bar.className = 'timer-bar' + (frac < 0.3 ? ' urgent' : '');
+      }
+      if (left <= 0) {
+        clearInterval(g.timerId);
+        if (!g.answered) this.answerQa(null);
+      }
+    }, 100);
+  },
+
+  answerQa(action) {
+    const g = this.qaGame;
+    if (g.answered) return;
+    g.answered = true;
+    clearInterval(g.timerId);
+    const q = g.qs[g.i];
+    const timedOut = action === null;
+    const correct = !timedOut && action === q.a;
+    let hit = { dmg: 0, revived: false, dead: false };
+    if (correct) g.score++;
+    else hit = this.applyRunDamage(timedOut ? 8 : 5);
+    this.save();
+    this.renderHud();
+    const best = QA_ACTIONS[q.a];
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('🛡️', `質問 ${g.i + 1} / ${g.qs.length}`, '')}
+      <div class="feedback ${correct ? 'good' : 'bad'}">
+        <div class="fb-head">
+          ${correct ? '<span class="fb-delta">⭕ 見事な捌き!</span>'
+            : `<span class="fb-delta" style="color:var(--danger)">${timedOut ? '⏰ 時間切れ' : '❌'} 🧠 -${hit.dmg}</span>`}
+        </div>
+        <p class="fb-chosen">"${escapeHtml(q.q)}"</p>
+        ${!correct ? `<p class="fb-chosen">正解: ${best.icon} <strong>${best.label}</strong></p>` : ''}
+        <div class="fb-why">${escapeHtml(q.why)}</div>
+        ${hit.revived ? '<div class="levelup-box">🧿 お守りが砕けて、あなたを守った! (HP15で復活)</div>' : ''}
+      </div>
+      <button class="btn-large primary" id="btn-qa-next">
+        ${hit.dead ? '…' : (g.i < g.qs.length - 1 ? '次の質問' : '質疑を終える')}
+      </button>`;
+    document.getElementById('btn-qa-next').addEventListener('click', () => {
+      if (hit.dead) { this.gameOver(); return; }
+      if (g.i < g.qs.length - 1) { g.i++; this.renderQaQuestion(); }
+      else this.endQaDefense();
+    });
+  },
+
+  endQaDefense() {
+    const g = this.qaGame;
+    const perfect = g.score >= g.qs.length;
+    let funds = perfect ? 40 : (g.score >= 3 ? 20 : 5);
+    funds = Math.round(funds * (this.state.dailyMult || 1));
+    this.state.funds += funds;
+    let hpNote = '';
+    if (perfect) {
+      this.state.hp = Math.min(this.state.maxHp, this.state.hp + 10);
+      hpNote = '<span class="xp-chip">🧠 +10</span>';
+      if (typeof Achievements !== 'undefined') Achievements.unlock('qa-perfect');
+    }
+    const gains = perfect ? { confidence: 15, english: 15 }
+      : (g.score >= 3 ? { confidence: 10, english: 10 } : { english: 5 });
+    const levelUps = Stats.add(gains);
+    this.save();
+    this.renderHud();
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('🛡️', '質疑応答 終了', '')}
+      <div class="convo-result">
+        <p class="rank-label">${g.score} / ${g.qs.length} 問クリア</p>
+        <p class="field-note" style="margin-bottom:10px">${perfect
+          ? '完璧な受け答えに会場から拍手。最高の流れでボスの元へ!'
+          : (g.score >= 3 ? '危ない場面もあったが、なんとか捌き切った。'
+            : '質疑は課題が残った…。この経験がボス戦の糧になる。')}</p>
+        <div class="xp-gains">
+          <span class="xp-chip points">💰 +${funds}</span>
+          ${hpNote}
+          ${Object.entries(gains).map(([k, v]) =>
+            `<span class="xp-chip">${Stats.KEYS[k].icon} ${Stats.KEYS[k].label} +${v}XP</span>`).join('')}
+        </div>
+        ${levelUps.map((l) =>
+          `<div class="levelup-box">🎉 <strong>${Stats.KEYS[l.key].label}</strong> が Lv.${l.level} に!</div>`).join('')}
+      </div>
+      <button class="btn-large primary" style="margin-top:12px" id="btn-qa-done">ボスの待つマップへ</button>`;
+    document.getElementById('btn-qa-done').addEventListener('click', () => showScreen('run-map'));
+    this.qaGame = null;
+  },
+
+  /* ---------- 👥 名刺交換(名札記憶ゲーム。1ランに1回) ---------- */
+  openBadgeMeet() {
+    const people = mgShuffle(BADGE_PEOPLE).slice(0, 3);
+    this.state.badge = {
+      met: true, resolved: false,
+      day: this.state.day, layer: this.state.layer, people
+    };
+    this.save();
+    showScreen('run-event');
+    this.renderHud();
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('👥', '名刺交換', 'コーヒー待ちの列で、3人組の研究者と名刺交換をした')}
+      ${people.map((p) => `
+        <div class="card badge-card">
+          <p class="badge-name">${escapeHtml(p.name)}</p>
+          <p class="field-note">${escapeHtml(p.affil)} ・ ${escapeHtml(p.topic)}の研究</p>
+        </div>`).join('')}
+      <p class="field-note" style="text-align:center;margin-top:8px">
+        📇 名前と顔(所属・研究テーマ)をつなげて覚えましょう。<br>
+        <strong>この名前、あとで思い出すことになるかも…</strong></p>
+      <button class="btn-large primary" style="margin-top:10px" id="btn-badge-done">覚えた!(💰+5)</button>`;
+    document.getElementById('btn-badge-done').addEventListener('click', () => {
+      this.state.funds += 5;
+      this.save();
+      showScreen('run-map');
+    });
+  },
+
+  renderBadgeRecall() {
+    const b = this.state.badge;
+    const target = b.people[Math.floor(Math.random() * b.people.length)];
+    const metNames = b.people.map((p) => p.name);
+    const decoys = mgShuffle(BADGE_PEOPLE.filter((p) => !metNames.includes(p.name))).slice(0, 1);
+    const choices = mgShuffle(b.people.concat(decoys).map((p) => p.name));
+    document.getElementById('run-event-content').innerHTML = `
+      ${this.eventHead('👤', '見覚えのある顔!', '')}
+      <div class="situation">
+        休憩スペースに入ると、先日名刺交換した研究者が笑顔で近づいてきた。<br><br>
+        <strong>${escapeHtml(target.affil)}</strong>で<strong>${escapeHtml(target.topic)}</strong>を研究している、あの人だ。<br>
+        「We met the other day!」 — さて、名前は…?
+      </div>
+      <div class="choices">
+        ${choices.map((name) =>
+          `<button class="choice-btn" data-badge-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join('')}
+      </div>`;
+    document.querySelectorAll('[data-badge-name]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        b.resolved = true;
+        const ok = btn.dataset.badgeName === target.name;
+        let msg;
+        if (ok) {
+          this.state.funds += 40;
+          this.state.hp = Math.min(this.state.maxHp, this.state.hp + 8);
+          if (typeof Achievements !== 'undefined') Achievements.unlock('badge-remember');
+          msg = `⭕ 「${target.name}さんですよね!」\n「覚えていてくれたんですね!」— 相手は明らかに嬉しそうだ。研究の話で盛り上がり、共同研究の芽が生まれた。💰+40 ・ 🧠+8`;
+        } else {
+          this.state.hp = Math.max(1, this.state.hp - 6);
+          msg = `❌ 「…私は ${target.name} です(苦笑)」\n名前を間違えるのは、覚えていないより気まずい…。🧠-6。\n(名刺交換のときは、名前+所属+テーマをセットで覚えるのがコツ)`;
+        }
+        this.save();
+        this.renderHud();
+        document.getElementById('run-event-content').innerHTML =
+          this.eventHead('👤', ok ? '再会成功!' : '気まずい再会…', '') +
+          `<div class="card" style="text-align:center;white-space:pre-line">${escapeHtml(msg)}</div>
+          <button class="btn-large primary" style="margin-top:12px" id="btn-badge-rest">☕ 休憩スペースへ</button>`;
+        document.getElementById('btn-badge-rest').addEventListener('click', () => {
+          this._restKiosk = this.buildRestKiosk();
+          this.renderRestMenu();
+        });
+      });
+    });
   },
 
   /* ---------- ランダムイベント ---------- */

@@ -1495,3 +1495,72 @@ audio { width: 100%; margin-bottom: 12px; }
   opacity: 0.35; text-decoration: line-through;
   border-color: #f472b6;
 }
+
+/* ===== v1.12.0: 学会攻略ミニゲーム ===== */
+/* 🎴 話題トーク */
+.topic-hint {
+  margin-top: 8px; font-size: 0.88rem; color: var(--accent);
+  background: rgba(96, 165, 250, 0.08); border-radius: 8px; padding: 8px 10px;
+}
+.topic-line { text-align: center; font-size: 0.92rem; margin-bottom: 8px; }
+.topic-hand {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+}
+.topic-card {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 8px; border-radius: 12px; cursor: pointer;
+  background: var(--bg-card); border: 1px solid rgba(148, 163, 184, 0.25); color: var(--text);
+  transition: transform 0.1s, border-color 0.15s;
+}
+.topic-card:active { transform: scale(0.96); border-color: var(--accent); }
+.topic-card .t-icon { font-size: 1.6rem; }
+.topic-card .t-label { font-weight: 700; font-size: 0.92rem; }
+.topic-card .t-desc { font-size: 0.72rem; color: var(--text-dim); text-align: center; line-height: 1.35; }
+
+/* 🚶 コーヒーブレイク動線パズル */
+.stroll-clock { text-align: center; font-size: 1.05rem; margin-bottom: 10px; }
+.stroll-clock strong { font-size: 1.3rem; color: var(--accent); }
+.shop-row.stroll-done { opacity: 0.55; }
+.shop-row.stroll-gone { opacity: 0.45; }
+.shop-row.stroll-gone .shop-icon { filter: grayscale(1); }
+
+/* 🛡️ 質疑応答ディフェンス */
+.qa-legend { margin: 10px 0; }
+.qa-legend p { font-size: 0.85rem; margin: 4px 0; color: var(--text-dim); }
+.qa-legend strong { color: var(--text); }
+.qa-question { font-size: 1.02rem; font-weight: 600; margin-top: 6px; line-height: 1.5; }
+
+/* 👥 名刺交換 */
+.badge-card { text-align: center; padding: 12px; margin-bottom: 8px; }
+.badge-name { font-size: 1.1rem; font-weight: 700; }
+
+/* 🎧 聞き取りスナイパー */
+.sniper-cta { border-left: 3px solid var(--accent); }
+.sniper-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px; min-height: 28px;
+}
+.sniper-score { font-weight: 700; font-size: 1.05rem; }
+.sniper-combo { font-weight: 700; color: var(--text-dim); }
+.sniper-combo.hot {
+  color: var(--warn); animation: comboPulse 0.5s ease;
+}
+@keyframes comboPulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+.sniper-flash {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  margin-top: 12px; padding: 12px; border-radius: 12px;
+  animation: sniperIn 0.18s ease;
+}
+.sniper-flash.good { background: rgba(52, 211, 153, 0.12); }
+.sniper-flash.bad { background: rgba(248, 113, 113, 0.12); }
+.sniper-big { font-size: 1.5rem; font-weight: 800; }
+.sniper-flash.good .sniper-big { color: var(--success); }
+.sniper-flash.bad .sniper-big { color: var(--danger); }
+@keyframes sniperIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

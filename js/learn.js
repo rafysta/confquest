@@ -361,6 +361,20 @@ const Learn = {
         </div>
       </div>
 
+      ${(() => {
+        const pool = this.sniperPool();
+        if (pool.length < 4) return '';
+        const best = parseInt(localStorage.getItem('lq_sniper_best_' + lang) || '0', 10);
+        return `<button class="learn-cta card sniper-cta" id="btn-learn-sniper">
+          <span class="learn-cta-icon">🎧</span>
+          <span class="learn-cta-body">
+            <strong>聞き取りスナイパー</strong>
+            <span class="field-note">音声を聞いて即タップ・連続正解でコンボ!${best ? ` ・ 🏆ベスト ${best}点` : ''}</span>
+          </span>
+          <span class="learn-cta-go">▶</span>
+        </button>`;
+      })()}
+
       ${!ttsOk && lang === 'yue' ? (() => {
         const rec = (typeof VoiceStore !== 'undefined') ? VoiceStore.countByLang('yue') : 0;
         return rec > 0
@@ -404,6 +418,8 @@ const Learn = {
     });
     document.getElementById('btn-learn-dex').addEventListener('click', () => showScreen('learn-dex'));
     document.getElementById('btn-learn-check').addEventListener('click', () => showScreen('learn-check'));
+    const sn = document.getElementById('btn-learn-sniper');
+    if (sn) sn.addEventListener('click', () => this.startSniper());
     el.querySelectorAll('[data-learn-unit]').forEach((b) =>
       b.addEventListener('click', () => this.startUnit(b.dataset.learnUnit)));
   },
@@ -821,6 +837,162 @@ const Learn = {
 
     const more = document.getElementById('btn-learn-more');
     if (more) more.addEventListener('click', () => this.startReview());
+    document.querySelectorAll('#learn-stage [data-nav]').forEach((btn) =>
+      btn.addEventListener('click', () => showScreen(btn.dataset.nav)));
+  },
+
+  /* ----- 🎧 聞き取りスナイパー(音声→意味の高速4択。SRS連動) ----- */
+  sniper: null,
+
+  /** 出題できるカード: 学習済み・修正待ちでない・音声が聞ける */
+  sniperPool() {
+    return Phrases.byLang(this.lang)
+      .filter((c) => SRS.isIntroduced(c.id))
+      .filter((c) => ReviewFlags.get(c.id) !== 'fix')
+      .filter((c) => canHearCard(c));
+  },
+
+  /** 出題キュー: 復習期限のカードを優先しつつ、直近3問と重複しないように補充 */
+  buildSniperQueue(pool, n) {
+    const poolIds = new Set(pool.map((c) => c.id));
+    const due = SRS.dueCards(this.lang).filter((c) => poolIds.has(c.id));
+    const q = mgShuffle(due).slice(0, Math.min(4, due.length));
+    while (q.length < n) {
+      const recent = q.slice(-3).map((c) => c.id);
+      const rest = mgShuffle(pool.filter((c) => !recent.includes(c.id)));
+      for (const c of rest) {
+        if (q.length >= n) break;
+        q.push(c);
+      }
+    }
+    return q.slice(0, n);
+  },
+
+  async startSniper() {
+    const pool = this.sniperPool();
+    if (pool.length < 4) {
+      await appAlert(
+        '聞き取りスナイパーは、音声を再生できる学習済みカードが4枚以上必要です。\n' +
+        'まずユニットからカードを学びましょう(広東語は、お手本録音があるカードが対象になります)。',
+        '🎧 まだ準備中');
+      return;
+    }
+    this.sniper = {
+      queue: this.buildSniperQueue(pool, 10),
+      i: 0, score: 0, combo: 0, maxCombo: 0, correct: 0,
+      srsDone: {}, autoT: null
+    };
+    document.getElementById('learn-session-title').textContent = '🎧 聞き取りスナイパー';
+    showScreen('learn-session');
+    this.renderSniperQ();
+  },
+
+  renderSniperQ() {
+    const s = this.sniper;
+    if (!s) return;
+    clearTimeout(s.autoT);
+    clearInterval(this.timerId);
+    if (s.i >= s.queue.length) { this.finishSniper(); return; }
+    const card = s.queue[s.i];
+    this.locked = false;
+    document.getElementById('learn-progress').textContent = `${s.i + 1} / ${s.queue.length}`;
+    const wrong = this.distractors(card, 'ja');
+    const options = [{ v: card.ja, ok: true }]
+      .concat(wrong.map((c) => ({ v: c.ja, ok: false })));
+    for (let i = options.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [options[i], options[j]] = [options[j], options[i]];
+    }
+    document.getElementById('learn-stage').innerHTML = `
+      <div class="sniper-head">
+        <span class="sniper-score">🎯 ${s.score}</span>
+        <span class="sniper-combo ${s.combo >= 2 ? 'hot' : ''}">${s.combo >= 2 ? `🔥 ${s.combo}コンボ` : ''}</span>
+      </div>
+      <div class="quiz-prompt card" style="text-align:center">
+        <button class="tts-btn big" id="btn-sniper-tts">🔊 もう一度聞く</button>
+        <p class="field-note">聞こえたフレーズの意味を、素早くタップ!</p>
+      </div>
+      <div class="timer-wrap"><div class="timer-bar" id="learn-timer"></div></div>
+      <div class="choices">
+        ${options.map((o, i) =>
+          `<button class="choice-btn learn-choice" data-sniper="${i}">${escapeHtml(o.v)}</button>`).join('')}
+      </div>`;
+    const play = () => playCardAudio(card, 0.9);
+    document.getElementById('btn-sniper-tts').addEventListener('click', play);
+    setTimeout(play, 250);
+    document.querySelectorAll('[data-sniper]').forEach((btn) => {
+      btn.addEventListener('click', () =>
+        this.answerSniper(card, options[Number(btn.dataset.sniper)].ok, btn));
+    });
+    this.startTimer(7, () => this.answerSniper(card, false, null));
+  },
+
+  answerSniper(card, ok, btn) {
+    if (this.locked || !this.sniper) return;
+    this.locked = true;
+    clearInterval(this.timerId);
+    const s = this.sniper;
+    const elapsed = Date.now() - this.turnStartedAt;
+    // SRSには各カードの初回回答だけを反映(お宝クイズと同じ方式)
+    if (!s.srsDone[card.id]) {
+      s.srsDone[card.id] = true;
+      SRS.answer(card.id, ok);
+    }
+    let gained = 0;
+    if (ok) {
+      s.combo++;
+      s.correct++;
+      s.maxCombo = Math.max(s.maxCombo, s.combo);
+      gained = 10 + Math.min(s.combo, 5) * 2 + (elapsed < 2500 ? 5 : 0);
+      s.score += gained;
+    } else {
+      s.combo = 0;
+    }
+    if (btn) btn.classList.add(ok ? 'correct' : 'wrong');
+    const stage = document.getElementById('learn-stage');
+    stage.querySelectorAll('.learn-choice').forEach((b) => { b.disabled = true; });
+    const fb = document.createElement('div');
+    fb.className = `sniper-flash ${ok ? 'good' : 'bad'}`;
+    fb.innerHTML = ok
+      ? `<span class="sniper-big">⭕ +${gained}</span>
+         ${s.combo >= 2 ? `<span class="sniper-combo hot">🔥 ${s.combo}コンボ!</span>` : ''}
+         ${elapsed < 2500 ? '<span class="fb-bonus">⚡ 即答ボーナス</span>' : ''}`
+      : `<span class="sniper-big">❌</span>
+         <span class="field-note">${escapeHtml(card.t)}(${escapeHtml(card.k)})= ${escapeHtml(card.ja)}</span>`;
+    stage.appendChild(fb);
+    s.i++;
+    s.autoT = setTimeout(() => this.renderSniperQ(), ok ? 1100 : 2600);
+  },
+
+  finishSniper() {
+    const s = this.sniper;
+    const total = s.queue.length;
+    const earned = s.correct * 2 + s.maxCombo;
+    if (typeof Gami !== 'undefined' && earned) Gami.addPoints(earned);
+    if (typeof Quests !== 'undefined') Quests.tryComplete('study');
+    if (s.maxCombo >= 8 && typeof Achievements !== 'undefined') Achievements.unlock('sniper-combo8');
+    const key = 'lq_sniper_best_' + this.lang;
+    const best = parseInt(localStorage.getItem(key) || '0', 10);
+    const isBest = s.score > best;
+    if (isBest) localStorage.setItem(key, String(s.score));
+    document.getElementById('learn-stage').innerHTML = `
+      <div class="convo-result">
+        <div class="learn-result-icon">🎧</div>
+        <h3>スコア ${s.score}${isBest ? ' 🏆 自己ベスト更新!' : ''}</h3>
+        <p class="field-note">正解 ${s.correct} / ${total} ・ 最大コンボ 🔥${s.maxCombo}</p>
+        <div class="xp-gains">
+          <span class="xp-chip points">⭐ +${earned} pt</span>
+          ${!isBest && best ? `<span class="xp-chip">🏆 ベスト ${best}点</span>` : ''}
+        </div>
+        <p class="field-note" style="margin-top:10px">回答はSRS(復習間隔)にも記録されました</p>
+      </div>
+      <div class="results-actions">
+        <button class="btn-large primary" id="btn-sniper-again">🎧 もう一度</button>
+        <button class="btn-large" data-nav="learn">Language Questへ</button>
+        <button class="btn-large" data-nav="home">ホームへ</button>
+      </div>`;
+    this.sniper = null;
+    document.getElementById('btn-sniper-again').addEventListener('click', () => this.startSniper());
     document.querySelectorAll('#learn-stage [data-nav]').forEach((btn) =>
       btn.addEventListener('click', () => showScreen(btn.dataset.nav)));
   },
