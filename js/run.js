@@ -186,15 +186,17 @@ const Run = {
     const s = this.state;
     document.querySelectorAll('.run-hud').forEach((el) => {
       el.innerHTML = `
-        <div class="hud-hp">
-          <span>🧠</span>
-          <div class="hud-hp-track"><div class="hud-hp-fill ${s.hp <= s.maxHp * 0.3 ? 'low' : ''}"
-            style="width:${Math.max(0, s.hp / s.maxHp * 100)}%"></div></div>
-          <span class="hud-hp-num">${Math.max(0, s.hp)}/${s.maxHp}</span>
+        <div class="hud-row">
+          <div class="hud-hp">
+            <span>🧠</span>
+            <div class="hud-hp-track"><div class="hud-hp-fill ${s.hp <= s.maxHp * 0.3 ? 'low' : ''}"
+              style="width:${Math.max(0, s.hp / s.maxHp * 100)}%"></div></div>
+            <span class="hud-hp-num">${Math.max(0, s.hp)}/${s.maxHp}</span>
+          </div>
+          <span class="hud-funds">💰 ${s.funds}</span>
         </div>
-        <span class="hud-funds">💰 ${s.funds}</span>
-        <span class="hud-items">${s.items.map((id) =>
-          `<button class="hud-item" data-item-info="${id}">${RUN_ITEMS[id].icon}</button>`).join('') || '<span class="field-note">アイテムなし</span>'}</span>`;
+        <div class="hud-items-row">${s.items.map((id, i) =>
+          `<button class="hud-item" data-item-info="${id}" data-item-idx="${i}">${RUN_ITEMS[id].icon}</button>`).join('') || '<span class="field-note">アイテムなし</span>'}</div>`;
     });
     document.querySelectorAll('[data-item-info]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -595,7 +597,14 @@ const Run = {
     this.save();
     this.renderHud();
 
+    // デイリークエスト: 学会攻略で会話を1回終える
+    if (typeof Quests !== 'undefined') Quests.tryComplete('play');
+
     const missed = b.log.filter((l) => !l.wasBest);
+    // 実績: ボス戦を全ターンベストで制覇
+    if (b.isBoss && missed.length === 0 && typeof Achievements !== 'undefined') {
+      Achievements.unlock('boss-perfect');
+    }
     const nextLabel = b.isBoss
       ? (b.bossDay >= 3 ? '🎓 学会を終える' : '次の日へ')
       : 'マップに戻る';
@@ -719,9 +728,11 @@ const Run = {
       btn.addEventListener('click', () => {
         const id = btn.dataset.buy;
         if (this.state.funds < this.priceBuy(id)) return;
-        this.state.funds -= this.priceBuy(id);
+        const price = this.priceBuy(id);
+        this.state.funds -= price;
         this.state.items.push(id);
         this.shopStock = this.shopStock.filter((x) => x !== id);
+        if (typeof Quests !== 'undefined') Quests.addSpend(price);
         this.save(); this.renderShop();
       });
     });
@@ -830,6 +841,7 @@ const Run = {
         if (a === b && b === c) {
           this.state.funds += 40;
           msg = `🎉 大当たり! ${SYMBOLS[a]}が3つ揃って 💰40 を獲得!`;
+          if (typeof Achievements !== 'undefined') Achievements.unlock('slot-jackpot');
         } else if (a === b || b === c || a === c) {
           this.state.funds += 15;
           msg = '✨ 2つ揃った! 💰15 を獲得。';
@@ -1011,7 +1023,9 @@ const Run = {
     const funds = this.state.funds;
     const bonus = 100; // 完走ボーナス
     Gami.recordPractice(100);
-    const g = Gami.data(); g.points += funds + bonus; Gami.save(g);
+    Gami.addPoints(funds + bonus);
+    if (typeof Achievements !== 'undefined') Achievements.unlock('run-clear');
+    if (typeof Gems !== 'undefined') Gems.add(5, '学会制覇');
     this.end();
     showScreen('run-result');
     document.getElementById('run-result-content').innerHTML = `
@@ -1034,7 +1048,8 @@ const Run = {
 
   gameOver() {
     const keep = Math.round(this.state.funds * 0.1);
-    const g = Gami.data(); g.points += keep; Gami.save(g);
+    Gami.addPoints(keep);
+    if (typeof Achievements !== 'undefined') Achievements.unlock('gameover');
     this.end();
     showScreen('run-result');
     document.getElementById('run-result-content').innerHTML = `

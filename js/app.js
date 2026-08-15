@@ -63,6 +63,8 @@ function showScreen(name) {
   if (name === 'convo-list') renderConvoList();
   if (name === 'status') renderStatus();
   if (name === 'run-map') Run.renderMap();
+  if (name === 'quests') renderQuests();
+  if (name === 'achievements') renderAchievements();
 }
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
@@ -76,6 +78,14 @@ const Gami = {
       '{"points":0,"streak":0,"lastDay":""}');
   },
   save(d) { localStorage.setItem('lq_gami', JSON.stringify(d)); },
+  /** ポイント加算はすべてここを通す(週間グラフ用に日別ログも記録) */
+  addPoints(n) {
+    if (!n) return;
+    const d = this.data();
+    d.points += n;
+    this.save(d);
+    if (typeof PointsLog !== 'undefined') PointsLog.add(n);
+  },
   /** 練習完了時に呼ぶ。獲得ポイントを返す */
   recordPractice(score) {
     const d = this.data();
@@ -84,10 +94,10 @@ const Gami = {
       const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       d.streak = (d.lastDay === yesterday) ? d.streak + 1 : 1;
       d.lastDay = today;
+      this.save(d);
     }
     const earned = 10 + Math.round(score / 10) + Math.min(20, d.streak);
-    d.points += earned;
-    this.save(d);
+    this.addPoints(earned);
     return earned;
   }
 };
@@ -101,8 +111,11 @@ function renderHome() {
   document.getElementById('streak-text').textContent =
     d.lastDay === today ? `連続 ${effective} 日 (今日クリア!)` : `連続 ${effective} 日`;
   document.getElementById('points-badge').textContent = `⭐ ${d.points} pt`;
+  document.getElementById('gems-badge').textContent = `💎 ${Gems.get()}`;
+  document.getElementById('daily-quest-summary').textContent =
+    `${Quests.doneCount()}/${QUEST_DEFS.length} 達成`;
   const sum = document.getElementById('status-summary');
-  if (sum) sum.textContent = `総合レベル ${Stats.totalLevel()}・能力の成長`;
+  if (sum) sum.textContent = `総合レベル ${Stats.totalLevel()}・実績 ${Achievements.count()}/${ACHIEVEMENT_DEFS.length}`;
   updateRunMenuDesc();
 }
 
@@ -217,6 +230,7 @@ document.getElementById('btn-finish').addEventListener('click', async () => {
   }
   Practice.computeStats();
   saveHistory(session);
+  Achievements.unlock('first-practice');
   renderResults(session);
 });
 
@@ -541,6 +555,50 @@ function renderHistory() {
   }).join('');
 }
 
+/* ---------- デイリークエスト・実績 ---------- */
+function renderQuests() {
+  const d = Quests.data();
+  const el = document.getElementById('quests-content');
+  el.innerHTML = QUEST_DEFS.map((q) => {
+    const done = !!d.done[q.id];
+    const progress = (q.id === 'spend' && !done)
+      ? `<span class="field-note">(${Math.min(50, d.spent || 0)}/50)</span>` : '';
+    return `<div class="quest-row ${done ? 'done' : ''}">
+      <span class="quest-icon">${q.icon}</span>
+      <span class="quest-body">
+        <strong>${q.name}</strong> ${progress}
+        <span class="field-note">${q.desc}</span>
+      </span>
+      <span class="quest-reward">${done ? '✅' : `⭐${q.pt}<br>💎${q.gems}`}</span>
+    </div>`;
+  }).join('') + `
+    <div class="quest-row bonus ${QUEST_DEFS.every((q) => d.done[q.id]) ? 'done' : ''}">
+      <span class="quest-icon">🎯</span>
+      <span class="quest-body"><strong>全達成ボーナス</strong>
+        <span class="field-note">4つすべて達成する</span></span>
+      <span class="quest-reward">${QUEST_DEFS.every((q) => d.done[q.id]) ? '✅' : `💎${QUEST_ALL_BONUS_GEMS}`}</span>
+    </div>`;
+}
+
+function renderAchievements() {
+  const unlocked = Achievements.data();
+  document.getElementById('achv-summary').textContent =
+    `${Achievements.count()} / ${ACHIEVEMENT_DEFS.length} 個解除 ・ 解除ごとに💎${ACHIEVEMENT_GEMS}`;
+  document.getElementById('achievements-content').innerHTML =
+    ACHIEVEMENT_DEFS.map((a) => {
+      const got = unlocked[a.id];
+      const dateStr = got ? new Date(got).toLocaleDateString('ja-JP') : '';
+      return `<div class="achv-row ${got ? 'unlocked' : 'locked'}">
+        <span class="achv-icon">${got ? a.icon : '🔒'}</span>
+        <span class="achv-body">
+          <strong>${a.name}</strong>
+          <span class="field-note">${a.desc}</span>
+        </span>
+        ${got ? `<span class="achv-date">${dateStr}</span>` : ''}
+      </div>`;
+    }).join('');
+}
+
 /* ---------- 学会攻略モード ---------- */
 document.getElementById('menu-run').addEventListener('click', async () => {
   if (Run.hasActive()) {
@@ -602,11 +660,47 @@ function renderConvoList() {
 function renderStatus() {
   const d = Stats.data();
   const el = document.getElementById('status-content');
+  const login = Login.data();
+  const week = PointsLog.week();
+  const maxPts = Math.max(1, ...week.map((w) => w.pts));
+
   el.innerHTML = `
-    <div class="card" style="text-align:center">
-      <p class="field-note">総合レベル</p>
-      <p class="about-version">${Stats.totalLevel()}</p>
+    <div class="status-top-grid">
+      <div class="stat-box">
+        <div class="val">${Stats.totalLevel()}</div>
+        <div class="lbl">総合レベル</div>
+      </div>
+      <div class="stat-box">
+        <div class="val" style="color:var(--warn)">🔥 ${login.streak}</div>
+        <div class="lbl">連続学習日数</div>
+      </div>
+      <div class="stat-box">
+        <div class="val" style="color:#c084fc">💎 ${Gems.get()}</div>
+        <div class="lbl">ジェム</div>
+      </div>
+      <div class="stat-box">
+        <div class="val">${login.total || 0}</div>
+        <div class="lbl">累計学習日数</div>
+      </div>
     </div>
+
+    <h3 class="about-section">今週の獲得ポイント</h3>
+    <div class="week-chart card">
+      ${week.map((w) => `
+        <div class="week-col ${w.isToday ? 'today' : ''}">
+          <span class="week-pts">${w.pts > 0 ? w.pts : ''}</span>
+          <div class="week-bar-track">
+            <div class="week-bar" style="height:${Math.max(w.pts > 0 ? 8 : 2, Math.round(w.pts / maxPts * 100))}%"></div>
+          </div>
+          <span class="week-label">${w.label}</span>
+        </div>`).join('')}
+    </div>
+
+    <button class="btn-large" id="btn-achievements" style="margin-bottom:16px">
+      🏅 実績 (${Achievements.count()}/${ACHIEVEMENT_DEFS.length})
+    </button>
+
+    <h3 class="about-section">能力</h3>
     ${Object.entries(Stats.KEYS).map(([k, meta]) => {
       const lv = Stats.level(d[k] || 0);
       const pct = Math.round((lv.into / lv.need) * 100);
@@ -618,6 +712,9 @@ function renderStatus() {
         <span class="stat-xp">${lv.into} / ${lv.need} XP</span>
       </div>`;
     }).join('')}`;
+
+  document.getElementById('btn-achievements').addEventListener('click', () =>
+    showScreen('achievements'));
 
   const hist = JSON.parse(localStorage.getItem('lq_convo_history') || '[]');
   const hel = document.getElementById('convo-history-content');
@@ -678,6 +775,7 @@ document.getElementById('btn-talk-finish').addEventListener('click', async () =>
     el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">要約を作成中...</p>';
     await Talk.summarize();
     Talk.save();
+    Achievements.unlock('first-talk');
     renderTalkResult();
     actions.classList.remove('hidden');
   } catch (err) {
@@ -916,4 +1014,8 @@ if ('serviceWorker' in navigator) {
     location.reload();
   });
 }
+
+// ログイン記録とデイリークエスト判定
+Login.record();
+Quests.onLogin();
 renderHome();

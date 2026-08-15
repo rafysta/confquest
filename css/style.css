@@ -78,6 +78,81 @@ body {
   50% { transform: scale(1.18); }
 }
 .points-badge { margin-left: auto; color: var(--warn); }
+.gems-badge { color: #c084fc; font-weight: 700; }
+
+/* デイリークエスト */
+.quest-card {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  background: var(--bg-card); color: var(--text);
+  border: 1px solid #334155; border-radius: var(--radius);
+  padding: 12px 16px; margin-bottom: 12px;
+  font-size: 0.9rem; cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.quest-card:active { transform: scale(0.98); }
+.quest-card-icon { font-size: 1.2rem; }
+.quest-card-label { font-weight: 700; }
+.quest-card-progress { margin-left: auto; color: var(--accent); font-weight: 700; }
+
+.quest-row {
+  display: grid; grid-template-columns: 40px 1fr auto;
+  gap: 10px; align-items: center;
+  background: var(--bg-card); border-radius: 12px;
+  padding: 13px; margin-bottom: 10px;
+}
+.quest-row.done { opacity: 0.6; }
+.quest-row.bonus { border: 1px dashed var(--warn); }
+.quest-icon { font-size: 1.5rem; text-align: center; }
+.quest-body { display: flex; flex-direction: column; gap: 2px; font-size: 0.92rem; }
+.quest-reward {
+  font-size: 0.78rem; font-weight: 700; text-align: right;
+  color: var(--warn); line-height: 1.5;
+}
+
+/* 実績 */
+.achv-row {
+  display: grid; grid-template-columns: 44px 1fr auto;
+  gap: 10px; align-items: center;
+  background: var(--bg-card); border-radius: 12px;
+  padding: 13px; margin-bottom: 10px;
+}
+.achv-row.locked { opacity: 0.5; }
+.achv-row.unlocked { border-left: 3px solid var(--warn); }
+.achv-icon { font-size: 1.6rem; text-align: center; }
+.achv-body { display: flex; flex-direction: column; gap: 2px; font-size: 0.92rem; }
+.achv-date { font-size: 0.7rem; color: var(--text-dim); }
+
+/* ステータス画面の週間グラフ */
+.status-top-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-bottom: 4px;
+}
+.week-chart {
+  display: flex; justify-content: space-between;
+  align-items: flex-end; gap: 6px;
+  padding: 14px 12px 10px;
+}
+.week-col {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+}
+.week-pts { font-size: 0.65rem; color: var(--text-dim); min-height: 0.9em; }
+.week-bar-track {
+  width: 100%; max-width: 30px; height: 90px;
+  display: flex; align-items: flex-end;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+.week-bar {
+  width: 100%;
+  background: linear-gradient(180deg, #818cf8, var(--accent));
+  border-radius: 6px;
+  transition: height 0.5s ease;
+}
+.week-col.today .week-bar { background: linear-gradient(180deg, var(--warn), #f97316); }
+.week-col.today .week-label { color: var(--warn); font-weight: 800; }
+.week-label { font-size: 0.72rem; color: var(--text-dim); }
 
 .home-menu { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
 .menu-btn {
@@ -446,10 +521,15 @@ audio { width: 100%; margin-bottom: 12px; }
   vertical-align: middle;
 }
 .run-hud {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; flex-direction: column; gap: 8px;
   background: var(--bg-card); border-radius: 12px;
   padding: 9px 12px; margin-bottom: 12px;
   font-size: 0.85rem;
+}
+.hud-row { display: flex; align-items: center; gap: 12px; }
+.hud-items-row {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  align-items: center;
 }
 .hud-hp { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
 .hud-hp-track {

@@ -245,6 +245,9 @@ const Convo = {
     });
     localStorage.setItem('lq_convo_history', JSON.stringify(hist.slice(0, 100)));
 
+    if (rank.rank === 'S' && typeof Achievements !== 'undefined') {
+      Achievements.unlock('convo-s');
+    }
     this.renderResult(rank, bestCount, baseXp, gains, levelUps, earned);
   },
 

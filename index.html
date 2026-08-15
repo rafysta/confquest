@@ -38,7 +38,13 @@ window.addEventListener('unhandledrejection', function (e) {
     <span class="streak-flame">🔥</span>
     <span id="streak-text">連続 0 日</span>
     <span class="points-badge" id="points-badge">⭐ 0 pt</span>
+    <span class="gems-badge" id="gems-badge">💎 0</span>
   </div>
+  <button class="quest-card" data-nav="quests">
+    <span class="quest-card-icon">📋</span>
+    <span class="quest-card-label">今日のクエスト</span>
+    <span class="quest-card-progress" id="daily-quest-summary">0/4 達成</span>
+  </button>
   <nav class="home-menu">
     <button class="menu-btn primary" data-nav="setup">
       <span class="menu-icon">🎤</span>
@@ -399,6 +405,26 @@ window.addEventListener('unhandledrejection', function (e) {
   <div id="history-content"></div>
 </section>
 
+<!-- デイリークエスト画面 -->
+<section id="screen-quests" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>今日のクエスト</h2>
+  </header>
+  <p class="field-note" style="margin-bottom:12px">毎日0時に更新。達成すると⭐と💎が自動でもらえます。</p>
+  <div id="quests-content"></div>
+</section>
+
+<!-- 実績画面 -->
+<section id="screen-achievements" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="status">←</button>
+    <h2>実績</h2>
+  </header>
+  <p class="field-note" style="margin-bottom:12px" id="achv-summary"></p>
+  <div id="achievements-content"></div>
+</section>
+
 <!-- 設定画面 -->
 <section id="screen-settings" class="screen">
   <header class="screen-header">
@@ -489,6 +515,7 @@ window.addEventListener('unhandledrejection', function (e) {
 <script src="js/minigames.js"></script>
 <script src="js/bosses.js"></script>
 <script src="js/run.js"></script>
+<script src="js/progress.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
