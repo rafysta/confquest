@@ -57,8 +57,31 @@ const Run = {
     } catch (_) { return false; }
   },
   resume() {
-    this.state = JSON.parse(localStorage.getItem('lq_run'));
-    return !!this.state;
+    try {
+      this.state = JSON.parse(localStorage.getItem('lq_run'));
+    } catch (_) { this.state = null; }
+    if (!this.state) return false;
+    return this.migrate();
+  },
+
+  /** 旧バージョンのセーブデータを現行形式に補正する。修復不能ならfalse */
+  migrate() {
+    const s = this.state;
+    try {
+      if (!s.map || !Array.isArray(s.map.layers) || !Array.isArray(s.map.edges)) return false;
+      if (!s.day) s.day = 1;
+      if (s.day > 3) s.day = 3;
+      if (!Array.isArray(s.items)) s.items = [];
+      if (!Array.isArray(s.usedCards)) s.usedCards = [];
+      if (typeof s.hp !== 'number' || typeof s.funds !== 'number') return false;
+      // 旧形式(最上段がエリート)はボスに変換
+      const top = s.map.layers[s.map.layers.length - 1];
+      if (top && top[0] && top[0].type !== 'boss') top[0].type = 'boss';
+      // 存在しないアイテムIDを除去
+      s.items = s.items.filter((id) => RUN_ITEMS[id]);
+      this.save();
+      return true;
+    } catch (_) { return false; }
   },
   end() {
     if (this.state) this.state.active = false;
@@ -203,7 +226,8 @@ const Run = {
   /* ---------- マップ表示 ---------- */
   renderMap() {
     this.renderHud();
-    const dayInfo = DAY_INFO[(this.state.day || 1) - 1];
+    const dayInfo = (typeof DAY_INFO !== 'undefined')
+      ? DAY_INFO[(this.state.day || 1) - 1] : null;
     const h = document.querySelector('#screen-run-map h2');
     if (h) h.textContent = dayInfo ? dayInfo.name : '学会攻略';
     const { layers, edges } = this.state.map;

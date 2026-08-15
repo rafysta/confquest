@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '0.9.0';
+const APP_VERSION = '0.9.1';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '0.9.1',
+    date: '2026-08-15',
+    items: [
+      { type: 'fix', text: '学会攻略の画面が真っ暗になる問題への対処。旧バージョンのセーブデータを自動修復し、修復できない場合は案内を表示します' },
+      { type: 'new', text: 'エラーが起きたとき、画面上部に赤いバナーで内容を表示するように。不具合報告にお使いください' }
+    ]
+  },
   {
     version: '0.9.0',
     date: '2026-08-15',

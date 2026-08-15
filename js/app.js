@@ -1,6 +1,33 @@
 /* ConfQuest - アプリ本体(画面遷移・設定・履歴・ゲーミフィケーション) */
 'use strict';
 
+/* ---------- エラーの可視化(真っ暗な画面の原因を表示する) ---------- */
+function showErrorBanner(msg) {
+  let el = document.getElementById('error-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'error-banner';
+    el.innerHTML = '<div id="error-banner-msgs"></div>' +
+      '<button id="error-banner-close">×</button>';
+    document.body.appendChild(el);
+    el.querySelector('#error-banner-close').addEventListener('click', () => el.remove());
+  }
+  const p = document.createElement('p');
+  p.textContent = '⚠ ' + msg;
+  el.querySelector('#error-banner-msgs').appendChild(p);
+}
+window.addEventListener('error', (e) => {
+  showErrorBanner((e.message || 'エラー') + ' @' +
+    String(e.filename || '').split('/').pop() + ':' + (e.lineno || 0));
+});
+window.addEventListener('unhandledrejection', (e) => {
+  showErrorBanner('Promise: ' + String((e.reason && e.reason.message) || e.reason));
+});
+// スクリプト読み込み中に発生していたエラーを表示
+if (window.__earlyErrors && window.__earlyErrors.length) {
+  window.__earlyErrors.forEach((m) => showErrorBanner(m));
+}
+
 /* ---------- アプリ内ダイアログ(ブラウザのalert/confirm代替) ---------- */
 function appDialog(msg, title, isConfirm) {
   return new Promise((resolve) => {
@@ -517,9 +544,15 @@ function renderHistory() {
 /* ---------- 学会攻略モード ---------- */
 document.getElementById('menu-run').addEventListener('click', async () => {
   if (Run.hasActive()) {
-    Run.resume();
-    showScreen('run-map');
-  } else {
+    if (Run.resume()) {
+      showScreen('run-map');
+      return;
+    }
+    // 旧バージョンのセーブが修復できない場合は破棄して新規開始を促す
+    Run.end();
+    await appAlert('以前のセーブデータが古い形式だったため、リセットしました。新しく始めてください。', '🗺️ 学会攻略');
+  }
+  {
     const go = await appConfirm(
       '学会1日分のマップに挑戦します。\n🧠メンタルが尽きるとゲームオーバーですが、獲得したXPは残ります。',
       '🗺️ 学会攻略を始める');

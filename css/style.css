@@ -383,6 +383,21 @@ table.slide-table {
 
 audio { width: 100%; margin-bottom: 12px; }
 
+/* エラーバナー */
+#error-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+  background: #7f1d1d; color: #fecaca;
+  padding: 10px 40px 10px 14px;
+  font-size: 0.8rem; line-height: 1.5;
+  max-height: 40vh; overflow-y: auto;
+}
+#error-banner p { margin: 2px 0; word-break: break-all; }
+#error-banner-close {
+  position: absolute; top: 6px; right: 8px;
+  background: none; border: none; color: #fecaca;
+  font-size: 1.2rem; cursor: pointer;
+}
+
 /* トースト通知と保存ボタン */
 #app-toast {
   position: fixed; left: 50%; bottom: 28px;
