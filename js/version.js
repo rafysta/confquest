@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 const APP_BUILD = '2026-08-15';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-15';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.0.1',
+    date: '2026-08-15',
+    items: [
+      { type: 'fix', text: '更新直後に「Login is not defined」エラーが出る問題を修正。新旧ファイルの混在を防ぐ仕組み(バージョン付きURL)を導入しました' },
+      { type: 'fix', text: '一部ファイルの読み込みに失敗しても、アプリ全体が止まらないようにしました' }
+    ]
+  },
   {
     version: '1.0.0',
     date: '2026-08-15',

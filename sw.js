@@ -5,7 +5,7 @@
  *       ネットワークが使えないときだけ Cache Storage を使う。
  *       CDN(pdf.js)はキャッシュ優先。
  */
-const CACHE_VERSION = 'cq-v17';
+const CACHE_VERSION = 'cq-v18';
 const APP_SHELL = [
   './',
   './index.html',
@@ -77,7 +77,9 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
         .catch(() =>
-          caches.match(event.request).then((c) => c || Response.error())
+          // ?v= 付きURLでもオフライン時にキャッシュへ届くよう、クエリを無視して照合
+          caches.match(event.request, { ignoreSearch: true })
+            .then((c) => c || Response.error())
         )
     );
   } else {

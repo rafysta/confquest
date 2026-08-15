@@ -63,8 +63,8 @@ function showScreen(name) {
   if (name === 'convo-list') renderConvoList();
   if (name === 'status') renderStatus();
   if (name === 'run-map') Run.renderMap();
-  if (name === 'quests') renderQuests();
-  if (name === 'achievements') renderAchievements();
+  if (name === 'quests' && typeof Quests !== 'undefined') renderQuests();
+  if (name === 'achievements' && typeof Achievements !== 'undefined') renderAchievements();
 }
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
@@ -111,11 +111,17 @@ function renderHome() {
   document.getElementById('streak-text').textContent =
     d.lastDay === today ? `連続 ${effective} 日 (今日クリア!)` : `連続 ${effective} 日`;
   document.getElementById('points-badge').textContent = `⭐ ${d.points} pt`;
-  document.getElementById('gems-badge').textContent = `💎 ${Gems.get()}`;
-  document.getElementById('daily-quest-summary').textContent =
-    `${Quests.doneCount()}/${QUEST_DEFS.length} 達成`;
+  if (typeof Gems !== 'undefined') {
+    document.getElementById('gems-badge').textContent = `💎 ${Gems.get()}`;
+    document.getElementById('daily-quest-summary').textContent =
+      `${Quests.doneCount()}/${QUEST_DEFS.length} 達成`;
+  }
   const sum = document.getElementById('status-summary');
-  if (sum) sum.textContent = `総合レベル ${Stats.totalLevel()}・実績 ${Achievements.count()}/${ACHIEVEMENT_DEFS.length}`;
+  if (sum) {
+    sum.textContent = `総合レベル ${Stats.totalLevel()}` +
+      (typeof Achievements !== 'undefined'
+        ? `・実績 ${Achievements.count()}/${ACHIEVEMENT_DEFS.length}` : '');
+  }
   updateRunMenuDesc();
 }
 
@@ -230,7 +236,7 @@ document.getElementById('btn-finish').addEventListener('click', async () => {
   }
   Practice.computeStats();
   saveHistory(session);
-  Achievements.unlock('first-practice');
+  if (typeof Achievements !== 'undefined') Achievements.unlock('first-practice');
   renderResults(session);
 });
 
@@ -660,8 +666,10 @@ function renderConvoList() {
 function renderStatus() {
   const d = Stats.data();
   const el = document.getElementById('status-content');
-  const login = Login.data();
-  const week = PointsLog.week();
+  const hasProgress = (typeof Login !== 'undefined');
+  const login = hasProgress ? Login.data() : { streak: 0, total: 0 };
+  const week = hasProgress ? PointsLog.week()
+    : Array.from({ length: 7 }, () => ({ label: '-', pts: 0, isToday: false }));
   const maxPts = Math.max(1, ...week.map((w) => w.pts));
 
   el.innerHTML = `
@@ -675,7 +683,7 @@ function renderStatus() {
         <div class="lbl">連続学習日数</div>
       </div>
       <div class="stat-box">
-        <div class="val" style="color:#c084fc">💎 ${Gems.get()}</div>
+        <div class="val" style="color:#c084fc">💎 ${hasProgress ? Gems.get() : 0}</div>
         <div class="lbl">ジェム</div>
       </div>
       <div class="stat-box">
@@ -697,7 +705,7 @@ function renderStatus() {
     </div>
 
     <button class="btn-large" id="btn-achievements" style="margin-bottom:16px">
-      🏅 実績 (${Achievements.count()}/${ACHIEVEMENT_DEFS.length})
+      🏅 実績 (${hasProgress ? `${Achievements.count()}/${ACHIEVEMENT_DEFS.length}` : '-'})
     </button>
 
     <h3 class="about-section">能力</h3>
@@ -775,7 +783,7 @@ document.getElementById('btn-talk-finish').addEventListener('click', async () =>
     el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">要約を作成中...</p>';
     await Talk.summarize();
     Talk.save();
-    Achievements.unlock('first-talk');
+    if (typeof Achievements !== 'undefined') Achievements.unlock('first-talk');
     renderTalkResult();
     actions.classList.remove('hidden');
   } catch (err) {
@@ -1015,7 +1023,9 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// ログイン記録とデイリークエスト判定
-Login.record();
-Quests.onLogin();
+// ログイン記録とデイリークエスト判定(progress.js未読込でも起動は継続)
+if (typeof Login !== 'undefined') {
+  Login.record();
+  Quests.onLogin();
+}
 renderHome();

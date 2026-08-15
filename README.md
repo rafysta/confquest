@@ -138,11 +138,11 @@ AIフィードバックのプロバイダは設定画面で切り替えられま
 ### リリース手順
 
 1. `js/version.js` の `APP_VERSION` を上げ、`CHANGELOG` の先頭に今回の変更を追加
-2. `node tools/sync-version.js` を実行(`version.json` に同期。不一致ならエラーで止まります)
+2. `node tools/sync-version.js` を実行(`version.json` への同期と、`index.html` の全JS/CSS参照への `?v=バージョン` 付与を行います)
 3. `sw.js` の `CACHE_VERSION` を上げる
 4. commit して push
 
-`version.json` はサーバー側の更新検出に使われるため、**手順2を飛ばすとアプリが更新に気づけません**。
+`version.json` はサーバー側の更新検出に、`?v=` はデプロイ直後の新旧ファイル混在の防止に使われるため、**手順2を飛ばすと更新まわりの不具合が起こります**。
 
 ## 今後の予定(クエスト構想)
 

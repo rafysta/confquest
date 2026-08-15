@@ -27,3 +27,14 @@ fs.writeFileSync(
   JSON.stringify({ version, build }, null, 2) + '\n'
 );
 console.log(`✓ version.json を v${version} (${build}) に更新しました`);
+
+// index.html のローカルJS/CSS参照に ?v=バージョン を付与する。
+// これにより「古いindex.html + 新しいJS」のような新旧混在が起こらなくなる
+// (古いHTMLは古いURLを、新しいHTMLは新しいURLを参照するため常に組み合わせが一致する)。
+const idxPath = path.join(root, 'index.html');
+let html = fs.readFileSync(idxPath, 'utf8');
+let stamped = 0;
+html = html.replace(/(src|href)="((?:js|css)\/[^"?]+)(?:\?v=[^"]*)?"/g,
+  (_, attr, file) => { stamped++; return `${attr}="${file}?v=${version}"`; });
+fs.writeFileSync(idxPath, html);
+console.log(`✓ index.html の ${stamped} 個のファイル参照に ?v=${version} を付与しました`);
