@@ -63,6 +63,7 @@ function showScreen(name) {
   if (name === 'convo-list') renderConvoList();
   if (name === 'status') renderStatus();
   if (name === 'run-map') Run.renderMap();
+  if (name === 'topics' && typeof Topics !== 'undefined') Topics.render();
   if (name === 'learn' && typeof Learn !== 'undefined') Learn.renderHome();
   if (name === 'learn-dex' && typeof Learn !== 'undefined') Learn.renderDex();
   if (name === 'learn-check' && typeof Learn !== 'undefined') Learn.renderCheck();
@@ -916,10 +917,13 @@ document.getElementById('menu-run').addEventListener('click', async () => {
     { label: '🗺️ 攻略に出る', value: 'run', primary: true,
       desc: Run.hasActive() ? '進行中のランの続きから' : 'マップを進んで学会を攻略する' },
     { label: '💬 会話の練習をする', value: 'convo',
-      desc: '懇親会シナリオでじっくり練習(ダメージなし)' }
+      desc: '懇親会シナリオでじっくり練習(ダメージなし)' },
+    { label: '🚗 雑談の準備', value: 'topics',
+      desc: 'ネタ帳で会話の武器を仕込む(車中2時間・Dinner対策)' }
   ]);
   if (!mode) return;
   if (mode === 'convo') { showScreen('convo-list'); return; }
+  if (mode === 'topics') { showScreen('topics'); return; }
   if (Run.hasActive()) {
     if (Run.resume()) {
       showScreen('run-map');

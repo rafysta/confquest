@@ -1663,3 +1663,42 @@ audio { width: 100%; margin-bottom: 12px; }
 }
 .speak-analysis .lang-help-row { margin-top: 0; }
 .speak-analysis #btn-speak-hint { margin-top: 8px; }
+
+/* 🚗 雑談クエスト: ネタ帳 */
+.topics-tabs { flex-wrap: wrap; margin-bottom: 10px; }
+.topic-card {
+  background: var(--bg-card); border: 1px solid #334155;
+  border-radius: 12px; margin-bottom: 8px; overflow: hidden;
+}
+.topic-card summary {
+  display: grid; grid-template-columns: 36px 1fr auto;
+  gap: 10px; align-items: center;
+  padding: 11px 12px; cursor: pointer; list-style: none;
+}
+.topic-card summary::-webkit-details-marker { display: none; }
+.topic-icon { font-size: 1.4rem; text-align: center; }
+.topic-title { display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; min-width: 0; }
+.topic-fav {
+  background: none; border: none; font-size: 1.2rem;
+  cursor: pointer; padding: 6px;
+}
+.topic-body { padding: 0 12px 12px; border-top: 1px solid #1e293b; }
+.topic-opener { margin-top: 10px; }
+.topic-en { font-size: 0.95rem; line-height: 1.55; color: var(--text); }
+.topic-ja { font-size: 0.8rem; color: var(--text-dim); margin: 2px 0 8px; line-height: 1.5; }
+.topic-label { font-size: 0.78rem; color: var(--accent); margin: 10px 0 4px; }
+.topic-follow { margin-bottom: 6px; padding-left: 10px; border-left: 2px solid #1e293b; }
+.topic-ko {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: rgba(56, 189, 248, 0.07); border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px; padding: 8px 10px; margin: 10px 0;
+  font-size: 0.85rem;
+}
+.topic-note {
+  font-size: 0.8rem; color: var(--text-dim); line-height: 1.55;
+  background: #020617; border-radius: 8px; padding: 8px 10px; margin-top: 8px;
+}
+.topic-caution {
+  font-size: 0.8rem; color: var(--warn); line-height: 1.5;
+  margin-top: 6px;
+}

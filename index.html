@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.17.3">
+<link rel="stylesheet" href="css/style.css?v=1.18.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -58,6 +58,11 @@ window.addEventListener('unhandledrejection', function (e) {
         <span class="menu-label">聴講した講演</span>
         <span class="menu-desc">保存した要約を見る・送る</span>
       </button>
+      <button class="menu-btn" data-nav="topics">
+        <span class="menu-icon">🚗</span>
+        <span class="menu-label">雑談の準備</span>
+        <span class="menu-desc">車中・懇親会・Dinnerのネタ帳</span>
+      </button>
     </div>
 
     <!-- 毎日使うメイン機能 -->
@@ -91,6 +96,16 @@ window.addEventListener('unhandledrejection', function (e) {
     </div>
   </nav>
   <p class="version-footer" id="version-footer"></p>
+</section>
+
+<!-- 🚗 雑談クエスト: ネタ帳 -->
+<section id="screen-topics" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>🚗 雑談クエスト — ネタ帳</h2>
+  </header>
+  <div class="learn-tabs topics-tabs" id="topics-tabs"></div>
+  <div id="topics-content"></div>
 </section>
 
 <!-- 学会攻略: マップ -->
@@ -610,21 +625,22 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.17.3"></script>
-<script src="js/ai.js?v=1.17.3"></script>
-<script src="js/practice.js?v=1.17.3"></script>
-<script src="js/talk.js?v=1.17.3"></script>
-<script src="js/scenarios.js?v=1.17.3"></script>
-<script src="js/convo.js?v=1.17.3"></script>
-<script src="js/cards.js?v=1.17.3"></script>
-<script src="js/minigames.js?v=1.17.3"></script>
-<script src="js/bosses.js?v=1.17.3"></script>
-<script src="js/run.js?v=1.17.3"></script>
-<script src="js/progress.js?v=1.17.3"></script>
-<script src="js/phrases.js?v=1.17.3"></script>
-<script src="js/voices.js?v=1.17.3"></script>
-<script src="js/learn.js?v=1.17.3"></script>
-<script src="js/route.js?v=1.17.3"></script>
-<script src="js/app.js?v=1.17.3"></script>
+<script src="js/version.js?v=1.18.0"></script>
+<script src="js/ai.js?v=1.18.0"></script>
+<script src="js/practice.js?v=1.18.0"></script>
+<script src="js/talk.js?v=1.18.0"></script>
+<script src="js/scenarios.js?v=1.18.0"></script>
+<script src="js/convo.js?v=1.18.0"></script>
+<script src="js/cards.js?v=1.18.0"></script>
+<script src="js/minigames.js?v=1.18.0"></script>
+<script src="js/bosses.js?v=1.18.0"></script>
+<script src="js/run.js?v=1.18.0"></script>
+<script src="js/progress.js?v=1.18.0"></script>
+<script src="js/phrases.js?v=1.18.0"></script>
+<script src="js/voices.js?v=1.18.0"></script>
+<script src="js/learn.js?v=1.18.0"></script>
+<script src="js/route.js?v=1.18.0"></script>
+<script src="js/topics.js?v=1.18.0"></script>
+<script src="js/app.js?v=1.18.0"></script>
 </body>
 </html>
