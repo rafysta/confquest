@@ -1702,3 +1702,20 @@ audio { width: 100%; margin-bottom: 12px; }
   font-size: 0.8rem; color: var(--warn); line-height: 1.5;
   margin-top: 6px;
 }
+
+/* 🎯 クエスト連動(ネタ帳・クエスト画面) */
+.topic-progress { color: var(--accent); margin-left: 6px; }
+.topic-card.quest-target {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.25);
+}
+.quest-nav {
+  align-self: flex-start;
+  margin-top: 6px;
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 8px;
+  padding: 6px 10px; font-size: 0.78rem; cursor: pointer;
+}
+.quest-nav:active { transform: scale(0.97); }

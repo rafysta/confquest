@@ -89,10 +89,17 @@ const Login = {
 const QUEST_DEFS = [
   { id: 'morning', icon: '🌅', name: '朝活', desc: '朝7時〜12時にアプリを開く', pt: 10, gems: 2 },
   { id: 'evening', icon: '🌆', name: '夜活', desc: '夜19時以降にアプリを開く', pt: 10, gems: 2 },
-  { id: 'spend',   icon: '💸', name: '投資家', desc: '学会攻略のお店で💰50以上使う', pt: 15, gems: 3 },
-  { id: 'play',    icon: '🗺️', name: '学会へ行こう', desc: '学会攻略で会話を1回終える', pt: 15, gems: 3 },
-  { id: 'study',   icon: '📖', name: 'ことばの習慣', desc: 'Language Questで復習か新カードを1セッション終える', pt: 15, gems: 3 }
+  { id: 'spend',   icon: '💸', name: '投資家', desc: '学会攻略のお店で💰50以上使う', pt: 15, gems: 3,
+    nav: 'run', navLabel: '🗺️ 学会攻略へ' },
+  { id: 'play',    icon: '🗺️', name: '学会へ行こう', desc: '学会攻略で会話を1回終える', pt: 15, gems: 3,
+    nav: 'run', navLabel: '🗺️ 学会攻略へ' },
+  { id: 'study',   icon: '📖', name: 'ことばの習慣', desc: 'Language Questで復習か新カードを1セッション終える', pt: 15, gems: 3,
+    nav: 'learn', navLabel: '🇰🇷 Language Questへ' }
 ];
+
+/** 変動クエストの抽選対象アイテム(入手しやすいものだけ: お店・売店・お宝・イベントで手に入る) */
+const QUEST_ITEM_POOL = ['shirt', 'earphone', 'cardcase', 'coupon', 'charm',
+                         'coffee', 'energy', 'invite', 'armband'];
 const QUEST_ALL_BONUS_GEMS = 5;
 
 const Quests = {
@@ -101,21 +108,61 @@ const Quests = {
     try { d = JSON.parse(localStorage.getItem('lq_quests') || 'null'); } catch (_) { d = null; }
     const today = localDayKey(now);
     if (!d || d.date !== today) {
-      d = { date: today, done: {}, ready: {}, spent: 0 };
+      d = { date: today, done: {}, ready: {}, spent: 0, vary: this.rollVary(today) };
       localStorage.setItem('lq_quests', JSON.stringify(d));
     }
     if (!d.ready) d.ready = {};  // v1.5.0以前のデータへの移行
+    if (!d.vary) {               // v1.18.0以前に作られた当日データへの補完
+      d.vary = this.rollVary(today);
+      localStorage.setItem('lq_quests', JSON.stringify(d));
+    }
     return d;
+  },
+
+  /** 日替わり変動クエストの抽選(日付から決定的: 同じ日は必ず同じお題) */
+  rollVary(dayKey) {
+    let seed = 0;
+    for (const ch of String(dayKey)) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const next = () => { seed = (seed * 1103515245 + 12345) >>> 0; return seed; };
+    const vary = {};
+    if (typeof TOPIC_DECK !== 'undefined' && TOPIC_DECK.length) {
+      const pool = TOPIC_DECK.filter((c) => !c.caution);
+      vary.topic = pool[next() % pool.length].id;
+    }
+    vary.item = QUEST_ITEM_POOL[next() % QUEST_ITEM_POOL.length];
+    return vary;
+  },
+
+  /** 今日の全クエスト定義(固定+変動) */
+  defs(now) {
+    const d = this.data(now);
+    const out = QUEST_DEFS.slice();
+    const v = d.vary || {};
+    if (v.topic && typeof TOPIC_DECK !== 'undefined') {
+      const c = TOPIC_DECK.find((x) => x.id === v.topic);
+      if (c) {
+        out.push({ id: 'topic-read', icon: '🚗', name: 'ネタを仕込む',
+          desc: `雑談ネタ「${c.icon} ${c.title}」を開いて読む`, pt: 10, gems: 2,
+          nav: 'topic', navLabel: '📖 このネタを開く' });
+      }
+    }
+    if (v.item && typeof RUN_ITEMS !== 'undefined' && RUN_ITEMS[v.item]) {
+      const it = RUN_ITEMS[v.item];
+      out.push({ id: 'item-get', icon: it.icon, name: '掘り出し物',
+        desc: `学会攻略で「${it.name}」を入手する(お店・お宝・イベントなど)`, pt: 15, gems: 3,
+        nav: 'run', navLabel: '🗺️ 学会攻略へ' });
+    }
+    return out;
   },
   save(d) { localStorage.setItem('lq_quests', JSON.stringify(d)); },
 
   doneCount(now) {
     const d = this.data(now);
-    return QUEST_DEFS.filter((q) => d.done[q.id]).length;
+    return this.defs(now).filter((q) => d.done[q.id]).length;
   },
   readyCount(now) {
     const d = this.data(now);
-    return QUEST_DEFS.filter((q) => d.ready[q.id] && !d.done[q.id]).length;
+    return this.defs(now).filter((q) => d.ready[q.id] && !d.done[q.id]).length;
   },
 
   /** ホーム画面のクエストカード表示を更新 */
@@ -125,7 +172,7 @@ const Quests = {
     const ready = this.readyCount(now);
     card.textContent = ready > 0
       ? `🎁 ${ready}件 受け取れます!`
-      : `${this.doneCount(now)}/${QUEST_DEFS.length} 達成`;
+      : `${this.doneCount(now)}/${this.defs(now).length} 達成`;
     const btn = card.closest('.quest-card');
     if (btn) btn.classList.toggle('has-ready', ready > 0);
   },
@@ -134,7 +181,7 @@ const Quests = {
   tryComplete(id, now) {
     const d = this.data(now);
     if (d.done[id] || d.ready[id]) return false;
-    const def = QUEST_DEFS.find((q) => q.id === id);
+    const def = this.defs(now).find((q) => q.id === id);
     if (!def) return false;
     d.ready[id] = new Date().toISOString();
     this.save(d);
@@ -149,7 +196,7 @@ const Quests = {
   claim(id, now) {
     const d = this.data(now);
     if (!d.ready[id] || d.done[id]) return null;
-    const def = QUEST_DEFS.find((q) => q.id === id);
+    const def = this.defs(now).find((q) => q.id === id);
     if (!def) return null;
     delete d.ready[id];
     d.done[id] = new Date().toISOString();
@@ -164,7 +211,7 @@ const Quests = {
   bonusState(now) {
     const d = this.data(now);
     if (d.bonus) return 'claimed';
-    return QUEST_DEFS.every((q) => d.done[q.id]) ? 'ready' : 'locked';
+    return this.defs(now).every((q) => d.done[q.id]) ? 'ready' : 'locked';
   },
   claimBonus(now) {
     if (this.bonusState(now) !== 'ready') return false;

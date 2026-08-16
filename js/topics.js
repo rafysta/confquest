@@ -392,6 +392,48 @@ const Topics = {
     return picks;
   },
 
+  READ_KEY: 'lq_topic_read',
+  reads() {
+    try { return new Set(JSON.parse(localStorage.getItem(this.READ_KEY) || '[]')); }
+    catch (_) { return new Set(); }
+  },
+  isRead(id) { return this.reads().has(id); },
+  markRead(id) {
+    const r = this.reads();
+    if (r.has(id)) return false;
+    r.add(id);
+    localStorage.setItem(this.READ_KEY, JSON.stringify([...r]));
+    return true;
+  },
+
+  /** 今日のクエスト対象カードID(なければnull) */
+  questTarget() {
+    if (typeof Quests === 'undefined') return null;
+    const d = Quests.data();
+    if (d.done['topic-read'] || d.ready['topic-read']) return null;   // 達成済みなら強調しない
+    return (d.vary || {}).topic || null;
+  },
+
+  /** カードを開いたときの処理: 読了記録+クエスト判定 */
+  onCardOpened(id) {
+    this.markRead(id);
+    if (typeof Quests !== 'undefined') {
+      const v = Quests.data().vary || {};
+      if (v.topic === id) Quests.tryComplete('topic-read');
+    }
+  },
+
+  /** クエスト画面などから特定カードへジャンプして開く */
+  focusCard(id) {
+    this.cat = 'all';
+    this.render();
+    const card = document.querySelector(`[data-topic-id="${id}"]`);
+    if (!card) return;
+    card.open = true;
+    this.onCardOpened(id);
+    try { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) { /* 古い端末 */ }
+  },
+
   cat: 'all',   // 表示中カテゴリ('all' | 'fav' | catキー)
 
   render() {
@@ -404,9 +446,11 @@ const Topics = {
       : TOPIC_DECK.filter((c) => c.cat === this.cat);
 
     const picks = this.todaysPicks();
+    const readCount = this.reads().size;
     el.innerHTML = `
       <p class="field-note" style="margin-bottom:10px">
         各ネタは「切り出し(opener)→深掘り(follow)」の会話設計図です。🔊で発音を確認、⭐で持ちネタに追加。
+        <span class="topic-progress">📖 読了 ${readCount}/${TOPIC_DECK.length}</span>
       </p>
       ${this.cat === 'all' ? `
         <h3 class="about-section">🎲 今日の3ネタ</h3>
@@ -439,6 +483,10 @@ const Topics = {
         if (typeof showToast === 'function') showToast(on ? '⭐ 持ちネタに追加しました' : '持ちネタから外しました');
         if (this.cat === 'fav' && !on) this.render();
       }));
+    el.querySelectorAll('details.topic-card[data-topic-id]').forEach((dt) =>
+      dt.addEventListener('toggle', () => {
+        if (dt.open) this.onCardOpened(dt.dataset.topicId);
+      }));
     el.querySelectorAll('[data-topic-say]').forEach((b) =>
       b.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -449,12 +497,14 @@ const Topics = {
   cardHtml(c, favs) {
     const cat = TOPIC_CATS[c.cat];
     const fav = favs.has(c.id);
+    const read = this.isRead(c.id);
+    const isQuest = this.questTarget() === c.id;
     return `
-      <details class="topic-card">
+      <details class="topic-card ${isQuest ? 'quest-target' : ''}" data-topic-id="${c.id}">
         <summary>
           <span class="topic-icon">${c.icon}</span>
-          <span class="topic-title"><strong>${c.title}</strong>
-            <span class="field-note">${cat.icon} ${cat.label}${c.caution ? ' ・ ⚠️注意あり' : ''}</span></span>
+          <span class="topic-title"><strong>${read ? '✓ ' : ''}${c.title}</strong>
+            <span class="field-note">${isQuest ? '🎯 今日のクエスト対象! ・ ' : ''}${cat.icon} ${cat.label}${c.caution ? ' ・ ⚠️注意あり' : ''}</span></span>
           <button class="topic-fav" data-topic-fav="${c.id}">${fav ? '⭐' : '☆'}</button>
         </summary>
         <div class="topic-body">

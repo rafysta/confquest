@@ -740,7 +740,8 @@ function renderQuests() {
   const el = document.getElementById('quests-content');
   const bonus = Quests.bonusState();
 
-  el.innerHTML = QUEST_DEFS.map((q) => {
+  const defs = Quests.defs();
+  el.innerHTML = defs.map((q) => {
     const done = !!d.done[q.id];
     const ready = !done && !!d.ready[q.id];
     const progress = (q.id === 'spend' && !done && !ready)
@@ -750,11 +751,14 @@ function renderQuests() {
       : (ready
         ? `<button class="quest-claim" data-claim="${q.id}">🎁 受け取る</button>`
         : `⭐${q.pt}<br>💎${q.gems}`);
+    const navBtn = (!done && !ready && q.nav)
+      ? `<button class="quest-nav" data-quest-nav="${q.nav}">${q.navLabel} →</button>` : '';
     return `<div class="quest-row ${done ? 'done' : ''} ${ready ? 'ready' : ''}" data-quest-row="${q.id}">
       <span class="quest-icon">${q.icon}</span>
       <span class="quest-body">
         <strong>${q.name}</strong> ${progress}
         <span class="field-note">${ready ? '達成! タップして報酬を受け取ろう' : q.desc}</span>
+        ${navBtn}
       </span>
       <span class="quest-reward">${reward}</span>
     </div>`;
@@ -762,10 +766,29 @@ function renderQuests() {
     <div class="quest-row bonus ${bonus === 'claimed' ? 'done' : ''} ${bonus === 'ready' ? 'ready' : ''}" data-quest-row="__bonus">
       <span class="quest-icon">🎯</span>
       <span class="quest-body"><strong>全達成ボーナス</strong>
-        <span class="field-note">${bonus === 'ready' ? '全クエスト達成! タップして受け取ろう' : `${QUEST_DEFS.length}つすべての報酬を受け取る`}</span></span>
+        <span class="field-note">${bonus === 'ready' ? '全クエスト達成! タップして受け取ろう' : `${defs.length}つすべての報酬を受け取る`}</span></span>
       <span class="quest-reward">${bonus === 'claimed' ? '✅'
         : (bonus === 'ready' ? `<button class="quest-claim" data-claim="__bonus">🎁 受け取る</button>` : `💎${QUEST_ALL_BONUS_GEMS}`)}</span>
     </div>`;
+
+  el.querySelectorAll('[data-quest-nav]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const nav = btn.dataset.questNav;
+      if (nav === 'learn') { showScreen('learn'); return; }
+      if (nav === 'topic') {
+        showScreen('topics');
+        const target = (Quests.data().vary || {}).topic;
+        if (target && typeof Topics !== 'undefined') Topics.focusCard(target);
+        return;
+      }
+      if (nav === 'run') {
+        // 学会攻略の通常の入口(続き/新規の確認ダイアログ)をそのまま通す
+        showScreen('home');
+        const mr = document.getElementById('menu-run');
+        if (mr) mr.click();
+      }
+    });
+  });
 
   el.querySelectorAll('[data-claim]').forEach((btn) => {
     btn.addEventListener('click', () => {

@@ -268,6 +268,11 @@ const Run = {
   /** アイテム入手はすべてここを通す(図鑑に記録するため) */
   gainItem(id) {
     this.state.items.push(id);
+    // 変動クエスト「掘り出し物」: 今日の対象アイテムなら達成
+    if (typeof Quests !== 'undefined') {
+      const v = Quests.data().vary || {};
+      if (v.item === id) Quests.tryComplete('item-get');
+    }
     if (typeof ItemDex !== 'undefined') {
       ItemDex.record(id);
       if (ItemDex.count() >= Object.keys(RUN_ITEMS).length &&
