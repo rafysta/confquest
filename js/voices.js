@@ -160,7 +160,29 @@ const SpeakCheck = {
     if (lang === 'yue') {
       t = [...t].map((ch) => this.TRAD2SIMP[ch] || ch).join('');
     }
+    if (lang === 'ko') t = this.toJamo(t);
     return t;
+  },
+
+  /** ハングル1文字を子音・母音(ジャモ)に分解する。
+   *  「감사」vs「감자」のような1音のズレを、文字単位(1字=丸ごと減点)ではなく
+   *  ジャモ単位で採点できるようになり、判定が実力に近づく */
+  toJamo(str) {
+    let out = '';
+    for (const ch of str) {
+      const c = ch.codePointAt(0);
+      if (c >= 0xAC00 && c <= 0xD7A3) {
+        const n = c - 0xAC00;
+        const cho = Math.floor(n / 588);
+        const jung = Math.floor((n % 588) / 28);
+        const jong = n % 28;
+        out += String.fromCharCode(0x1100 + cho) + String.fromCharCode(0x1161 + jung);
+        if (jong) out += String.fromCharCode(0x11A7 + jong);
+      } else {
+        out += ch;
+      }
+    }
+    return out;
   },
 
   /** レーベンシュタイン距離による類似度 (0〜1) */
@@ -196,7 +218,7 @@ const SpeakCheck = {
    */
   async judge(blob, card) {
     const langCode = card.lang === 'ko' ? 'ko' : 'zh';
-    const segs = await STT.transcribe(blob, langCode);
+    const segs = await STT.transcribe(blob, langCode, card.t);
     const text = segs.map((s) => s.text).join(' ').trim();
     const ratio = this.similarity(
       this.normalize(text, card.lang),

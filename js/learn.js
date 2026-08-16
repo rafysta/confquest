@@ -828,13 +828,14 @@ const Learn = {
             <button class="btn-control" id="btn-speak-hint" style="width:100%">🇯🇵 AIに改善ポイントを聞く</button>
             <div class="fb-explain-area hidden" id="speak-hint-area"></div>` : ''}
         </div>` : ''}
+      ${!pass && card.lang === 'yue' ? '<button class="btn-control" id="btn-partner-pass" style="width:100%">💗 隣のパートナーが「合ってる」と言ったので合格にする</button>' : ''}
       ${!pass ? '<button class="btn-large primary" id="btn-speak-retry">🔁 もう一度言ってみる</button>' : ''}
       <button class="btn-large ${pass ? 'primary' : ''}" id="btn-learn-next">次へ</button>
     `;
     stage.appendChild(fb);
     stage.querySelectorAll('.speak-rec-btn, #btn-speak-text').forEach((b) => { b.disabled = true; });
     document.getElementById('btn-fb-tts').addEventListener('click', () => playCardAudio(card, 0.85));
-    this.wireSpeakAnalysis(card, result);
+    this.wireSpeakAnalysis(fb, card, result);
     const retryBtn = document.getElementById('btn-speak-retry');
     if (retryBtn) {
       // 同じカードをその場で録り直す(idxは進めない)
@@ -849,48 +850,76 @@ const Learn = {
     fb.scrollIntoView({ behavior: 'smooth', block: 'end' });
   },
 
-  /** 🔬 発音ふりかえり: 自分の声・波形・聞こえた文・AIヒント */
-  wireSpeakAnalysis(card, result) {
+  /** 🔬 発音ふりかえり: 自分の声・波形・聞こえた文・AIヒント
+   *  どれか1つの失敗が他のボタンを殺さないよう、各配線は独立にtry/catchする */
+  wireSpeakAnalysis(fb, card, result) {
+    const $ = (id) => (fb ? fb.querySelector('#' + id) : document.getElementById(id));
+    // 🇯🇵 AIヒント(最優先で配線: 他の機能が失敗しても必ず生きるように)
+    try {
+      const hintBtn = $('btn-speak-hint');
+      const area = $('speak-hint-area');
+      if (hintBtn && area) {
+        hintBtn.addEventListener('click', async () => {
+          hintBtn.disabled = true;
+          area.classList.remove('hidden');
+          area.innerHTML = '<p class="field-note">🤖 発音を分析しています…</p>';
+          try {
+            if (typeof LangHelp === 'undefined' || !LangHelp.pronunciationHint) {
+              throw new Error('アプリの更新が完全に反映されていないようです。アプリ情報画面の「🔄 更新を確認」→ それでも直らなければ「🧹 完全リセット」をお試しください。');
+            }
+            const text = await LangHelp.pronunciationHint(card, result);
+            area.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
+          } catch (err) {
+            area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+            hintBtn.disabled = false;
+          }
+        });
+      }
+    } catch (_) { /* 配線失敗しても他へ */ }
+    // 💗 パートナー公認の合格(広東語のみ。判定器よりネイティブの耳を信じる)
+    try {
+      const pp = $('btn-partner-pass');
+      if (pp) {
+        pp.addEventListener('click', async () => {
+          const ok = await appConfirm(
+            '隣のパートナーが「合っている」と言ってくれた発音を、合格として記録します。\n(Whisperの聞き取りには限界があります — ネイティブの耳が最終判定です)',
+            '💗 パートナー公認');
+          if (!ok) return;
+          let mastered = false;
+          if ((SRS.get(card.id) || {}).lv === 3) mastered = SRS.master(card.id);
+          this.queue = this.queue.filter((q, i) =>
+            i <= this.idx || !(q.retry && q.card.id === card.id));
+          showToast(mastered ? '💗 パートナー公認で ⭐発話マスター!' : '💗 パートナー公認で合格!');
+          this.idx++; this.renderStep();
+        });
+      }
+    } catch (_) { /* 続行 */ }
     const blob = this._lastSpeakBlob;
     if (!blob) return;
     // 🎧 自分の声を再生
-    const mine = document.getElementById('btn-play-mine');
-    if (mine) {
-      mine.addEventListener('click', () => {
-        try {
-          if (this._mineUrl) URL.revokeObjectURL(this._mineUrl);
-          this._mineUrl = URL.createObjectURL(blob);
-          new Audio(this._mineUrl).play();
-        } catch (_) { showToast('この端末では再生できませんでした'); }
-      });
-    }
-    // 🗣 Whisperが聞き取った文を、お手本と同じ声で読み上げる
-    // (自分の発音が相手にどう聞こえたかを、正しい発音との対比で体感する)
-    const heard = document.getElementById('btn-play-heard');
-    if (heard) {
-      heard.addEventListener('click', () => {
-        if (typeof LangHelp !== 'undefined') LangHelp.speakMany([result.text, card.t]);
-      });
-    }
-    // 波形: 自分の声(+お手本録音があれば下段に比較表示)
-    this.drawWave(blob, card);
-    // 🇯🇵 AIヒント
-    const hintBtn = document.getElementById('btn-speak-hint');
-    const area = document.getElementById('speak-hint-area');
-    if (hintBtn && area) {
-      hintBtn.addEventListener('click', async () => {
-        hintBtn.disabled = true;
-        area.classList.remove('hidden');
-        area.innerHTML = '<p class="field-note">🤖 発音を分析しています…</p>';
-        try {
-          const text = await LangHelp.pronunciationHint(card, result);
-          area.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
-        } catch (err) {
-          area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
-          hintBtn.disabled = false;
-        }
-      });
-    }
+    try {
+      const mine = $('btn-play-mine');
+      if (mine) {
+        mine.addEventListener('click', () => {
+          try {
+            if (this._mineUrl) URL.revokeObjectURL(this._mineUrl);
+            this._mineUrl = URL.createObjectURL(blob);
+            new Audio(this._mineUrl).play();
+          } catch (_) { showToast('この端末では再生できませんでした'); }
+        });
+      }
+    } catch (_) { /* 続行 */ }
+    // 🗣 Whisperが聞き取った文 → お手本 の順に読み上げて聞き比べ
+    try {
+      const heard = $('btn-play-heard');
+      if (heard) {
+        heard.addEventListener('click', () => {
+          if (typeof LangHelp !== 'undefined') LangHelp.speakMany([result.text, card.t]);
+        });
+      }
+    } catch (_) { /* 続行 */ }
+    // 波形(失敗しても他の機能に影響しない)
+    try { this.drawWave(blob, card); } catch (_) { /* 非対応端末 */ }
   },
 
   /** 録音Blobの波形をcanvasに描く。お手本録音(VoiceStore)があれば上下2段で比較 */

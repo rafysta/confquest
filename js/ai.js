@@ -13,7 +13,7 @@ const STT = {
   /**
    * 音声Blobを文字起こしし、[{start, end, text}] (秒単位) を返す
    */
-  async transcribe(blob, lang) {
+  async transcribe(blob, lang, prompt) {
     const key = this.getKey();
     if (!key) {
       throw new Error('OpenAI APIキーが未設定です。設定画面で入力してください。');
@@ -31,6 +31,8 @@ const STT = {
       form.append('response_format', 'json');
     }
     if (lang) form.append('language', lang.split('-')[0]); // en-US -> en
+    // 期待するフレーズをヒントとして渡すと、短い発話の認識が目標語彙に寄る
+    if (prompt) form.append('prompt', prompt);
 
     const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
