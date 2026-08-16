@@ -941,9 +941,32 @@ const Learn = {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       const ac = new Ctx();
+      /** 前後の無音を検出して切り落とす(録音・お手本の開始位置をそろえる)。
+       *  10ms窓ごとの最大振幅を見て、全体ピークの8%を超えた最初/最後の窓で区切り、
+       *  立ち上がりを切らないよう前後に50msの余白を残す */
+      const trimSilence = (data, sampleRate) => {
+        const win = Math.max(1, Math.floor(sampleRate * 0.01));
+        let peak = 0;
+        for (let i = 0; i < data.length; i++) { const v = Math.abs(data[i]); if (v > peak) peak = v; }
+        const th = peak * 0.08;
+        const nWin = Math.ceil(data.length / win);
+        let first = -1, last = -1;
+        for (let w = 0; w < nWin; w++) {
+          let m = 0;
+          for (let j = w * win; j < Math.min(data.length, (w + 1) * win); j++) {
+            const v = Math.abs(data[j]); if (v > m) m = v;
+          }
+          if (m >= th) { if (first < 0) first = w; last = w; }
+        }
+        if (first < 0) return data;                    // 全編ほぼ無音ならそのまま
+        const margin = Math.floor(sampleRate * 0.05);  // 50ms
+        const s0 = Math.max(0, first * win - margin);
+        const e0 = Math.min(data.length, (last + 1) * win + margin);
+        return data.subarray(s0, e0);
+      };
       const peaks = async (b) => {
         const buf = await ac.decodeAudioData(await b.arrayBuffer());
-        const data = buf.getChannelData(0);
+        const data = trimSilence(buf.getChannelData(0), buf.sampleRate);
         const N = 120, step = Math.max(1, Math.floor(data.length / N)), out = [];
         for (let i = 0; i < N; i++) {
           let m = 0;
@@ -977,7 +1000,7 @@ const Learn = {
         const label = model.source === 'recording' ? '❤️ お手本(録音)' : '🎵 お手本(AI音声)';
         drawRow(modelPeaks, 0, H / 2, 'rgba(56,189,248,0.8)', label);
         drawRow(minePeaks, H / 2, H / 2, 'rgba(250,204,21,0.8)', '🎤 あなた');
-        if (note) note.textContent = '波形は「音のリズム・区切り」の比較用です(音量は正規化)。山の数と間を見比べてみましょう';
+        if (note) note.textContent = '前後の無音をそろえた比較です(音量も正規化)。山の数・間・長さの配分を見比べてみましょう';
       } else {
         drawRow(minePeaks, 0, H, 'rgba(250,204,21,0.8)', '🎤 あなた');
         if (note) note.textContent = card.lang === 'yue'

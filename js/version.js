@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.17.2';
+const APP_VERSION = '1.17.3';
 const APP_BUILD = '2026-08-16';
 
 /**
@@ -9,6 +9,13 @@ const APP_BUILD = '2026-08-16';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.17.3',
+    date: '2026-08-16',
+    items: [
+      { type: 'fix', text: '📊 波形比較の位置合わせを改善。お手本・自分の声それぞれの前後の無音を自動で切りそろえるので、両方の波形がほぼ同じ位置から始まり、リズムの比較がしやすくなりました(発音の立ち上がりを切らないよう50msの余白は残します)' }
+    ]
+  },
   {
     version: '1.17.2',
     date: '2026-08-16',
