@@ -134,6 +134,54 @@ const MicRec = {
 };
 
 /* ---------- 発話チェック (Whisper判定) ---------- */
+
+/* ---------- お手本音声の供給(波形比較・再生用) ----------
+ * 優先順: ①パートナーの録音(VoiceStore) ②AI生成TTSのキャッシュ ③OpenAI TTSで生成
+ * AI生成は韓国語のみ(OpenAI TTSは広東語を正しく読めないため。広東語は録音を推奨)。
+ * 生成した音声は 'tts:'+cardId のキーでVoiceStoreと同じIndexedDBに保存し、再取得しない。
+ */
+const ModelVoice = {
+  canGenerate(card) {
+    return card.lang === 'ko' && !!localStorage.getItem('lq_openai_key');
+  },
+
+  /** お手本音声のBlobを返す(取得できなければnull)。sourceも返す */
+  async get(card) {
+    try {
+      if (VoiceStore.supported() && VoiceStore.has(card.id)) {
+        const b = await VoiceStore.get(card.id);
+        if (b) return { blob: b, source: 'recording' };
+      }
+      const ttsKey = 'tts:' + card.id;
+      if (VoiceStore.supported() && VoiceStore.has(ttsKey)) {
+        const b = await VoiceStore.get(ttsKey);
+        if (b) return { blob: b, source: 'tts-cache' };
+      }
+      if (!this.canGenerate(card)) return null;
+      const blob = await this.generate(card.t);
+      if (blob && VoiceStore.supported()) await VoiceStore.put(ttsKey, blob);
+      return blob ? { blob, source: 'tts-new' } : null;
+    } catch (_) { return null; }
+  },
+
+  /** OpenAI TTSでお手本音声を生成する(約0.002円/フレーズ、キャッシュ後は無料) */
+  async generate(text) {
+    const key = localStorage.getItem('lq_openai_key');
+    if (!key) return null;
+    const res = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-tts', voice: 'nova',
+        input: text, response_format: 'mp3', speed: 0.95
+      })
+    });
+    if (!res.ok) return null;
+    return res.blob();
+  }
+};
+
+
 const SpeakCheck = {
   /** 発話チェックが使える端末・設定か */
   available() {

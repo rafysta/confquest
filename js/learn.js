@@ -914,7 +914,7 @@ const Learn = {
       const heard = $('btn-play-heard');
       if (heard) {
         heard.addEventListener('click', () => {
-          if (typeof LangHelp !== 'undefined') LangHelp.speakMany([result.text, card.t]);
+          if (typeof LangHelp !== 'undefined') LangHelp.speakMany([result.text]);
         });
       }
     } catch (_) { /* 続行 */ }
@@ -927,7 +927,17 @@ const Learn = {
     const canvas = document.getElementById('speak-wave');
     const note = document.getElementById('speak-wave-note');
     if (!canvas) return;
-    const hasModel = (typeof VoiceStore !== 'undefined') && VoiceStore.has(card.id);
+    // お手本音声: ①パートナー録音 ②生成済みTTSキャッシュ ③AI音声を生成(韓国語のみ)
+    let model = null;
+    try {
+      if (typeof ModelVoice !== 'undefined') {
+        if (note && !VoiceStore.has(card.id) && !VoiceStore.has('tts:' + card.id) &&
+            ModelVoice.canGenerate(card)) {
+          note.textContent = '🎵 お手本の波形をAI音声から生成しています…';
+        }
+        model = await ModelVoice.get(card);
+      }
+    } catch (_) { model = null; }
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       const ac = new Ctx();
@@ -946,7 +956,7 @@ const Learn = {
         return out.map((v) => v / mx);   // 音量差ではなくリズムを見るため正規化
       };
       const minePeaks = await peaks(blob);
-      const modelPeaks = hasModel ? await peaks(await VoiceStore.get(card.id)) : null;
+      const modelPeaks = model ? await peaks(model.blob) : null;
       ac.close();
 
       const g = canvas.getContext('2d');
@@ -964,12 +974,15 @@ const Learn = {
         g.fillText(label, 6, y0 + 13);
       };
       if (modelPeaks) {
-        drawRow(modelPeaks, 0, H / 2, 'rgba(56,189,248,0.8)', '❤️ お手本');
+        const label = model.source === 'recording' ? '❤️ お手本(録音)' : '🎵 お手本(AI音声)';
+        drawRow(modelPeaks, 0, H / 2, 'rgba(56,189,248,0.8)', label);
         drawRow(minePeaks, H / 2, H / 2, 'rgba(250,204,21,0.8)', '🎤 あなた');
         if (note) note.textContent = '波形は「音のリズム・区切り」の比較用です(音量は正規化)。山の数と間を見比べてみましょう';
       } else {
         drawRow(minePeaks, 0, H, 'rgba(250,204,21,0.8)', '🎤 あなた');
-        if (note) note.textContent = 'あなたの声のリズムです。お手本録音があると上下で比較できます';
+        if (note) note.textContent = card.lang === 'yue'
+          ? 'あなたの声のリズムです。パートナーのお手本録音があると上下で比較できます'
+          : 'あなたの声のリズムです。お手本録音があると上下で比較できます';
       }
     } catch (_) {
       canvas.style.display = 'none';   // 波形非対応の端末では隠すだけ
