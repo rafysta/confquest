@@ -1314,14 +1314,32 @@ document.getElementById('btn-talk-finish').addEventListener('click', async () =>
   Talk.current.note = document.getElementById('talk-note').value.trim();
   await Talk.stop();
   showScreen('talk-result');
+  document.getElementById('talk-share-status').textContent = '';
+  await talkTranscribeStep();
+});
+
+/** 文字起こし→(結果チェック)→要約。lang指定つきで呼ぶと言語を変えて再試行 */
+async function talkTranscribeStep(lang) {
+  const el = document.getElementById('talk-result-content');
+  document.getElementById('talk-actions').classList.add('hidden');
+  try {
+    if (lang !== undefined) Talk.current.lang = lang;
+    el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中...</p>';
+    await Talk.transcribe();
+    // ほぼ空なら黙って要約に進まず、原因と再試行の選択肢を出す
+    const len = Talk.current.transcript.trim().length;
+    if (len < 40) { renderTalkRetry(len); return; }
+    await talkSummarizeStep();
+  } catch (err) {
+    talkErrorView(err);
+  }
+}
+
+async function talkSummarizeStep() {
   const el = document.getElementById('talk-result-content');
   const actions = document.getElementById('talk-actions');
   actions.classList.add('hidden');
-  document.getElementById('talk-share-status').textContent = '';
-
   try {
-    el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中...</p>';
-    await Talk.transcribe();
     el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">要約を作成中...</p>';
     await Talk.summarize();
     Talk.save();
@@ -1329,19 +1347,58 @@ document.getElementById('btn-talk-finish').addEventListener('click', async () =>
     renderTalkResult();
     actions.classList.remove('hidden');
   } catch (err) {
-    el.innerHTML = `<p class="md-error">${escapeHtml(aiErrorText(err))}</p>`;
-    if (Talk.current && Talk.current.transcript) {
-      // 要約に失敗しても文字起こしは残す
-      Talk.save();
-      el.innerHTML += `<p class="field-note">文字起こしは保存しました。「聴講した講演」から確認できます。</p>
-        <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
-    }
-    if (Talk.audioUrl) {
-      el.innerHTML += `<p class="field-note" style="margin-top:12px">録音は再生できます:</p>
-        <audio controls src="${Talk.audioUrl}"></audio>`;
-    }
+    talkErrorView(err);
   }
-});
+}
+
+/** 文字起こしがほぼ空だったときの案内。録音は保持しているので言語を変えてやり直せる */
+function renderTalkRetry(len) {
+  const el = document.getElementById('talk-result-content');
+  const cur = Talk.current.lang || '';
+  const langNames = { '': '自動判定', en: '英語', ja: '日本語', ko: '韓国語' };
+  el.innerHTML = `
+    <div class="card">
+      <h3 style="font-size:1rem;margin-bottom:6px">⚠ 文字起こしがほぼ空でした(${len}文字)</h3>
+      <p class="field-note" style="margin-bottom:8px">
+        録音自体は残っています(下で再生できます)。よくある原因:
+      </p>
+      <p class="field-note" style="margin-bottom:8px">
+        ① <strong>言語設定のずれ</strong> — 今回は「${escapeHtml(langNames[cur] !== undefined ? langNames[cur] : cur)}」で文字起こししました。
+        指定した言語はWhisperに強制されるため、実際の音声と違うと空になることがあります。<br>
+        ② マイクから遠い・音が小さい(再生して確認を)<br>
+        ③ 大部分が無音・雑音だった
+      </p>
+      <label class="field">
+        <span>言語を選び直して再試行</span>
+        <select id="talk-retry-lang">
+          ${Object.entries(langNames).map(([v, n]) =>
+            `<option value="${v}" ${v === cur ? 'selected' : ''}>${n}</option>`).join('')}
+        </select>
+      </label>
+      <button class="btn-large primary" id="btn-talk-retry">🔁 もう一度文字起こしする</button>
+      ${len > 0 ? '<button class="btn-large" id="btn-talk-force">この結果のまま要約する</button>' : ''}
+    </div>
+    ${Talk.audioUrl ? `<p class="field-note">録音の確認:</p><audio controls src="${Talk.audioUrl}"></audio>` : ''}`;
+  el.querySelector('#btn-talk-retry').addEventListener('click', () =>
+    talkTranscribeStep(el.querySelector('#talk-retry-lang').value));
+  const force = el.querySelector('#btn-talk-force');
+  if (force) force.addEventListener('click', () => talkSummarizeStep());
+}
+
+function talkErrorView(err) {
+  const el = document.getElementById('talk-result-content');
+  el.innerHTML = `<p class="md-error">${escapeHtml(aiErrorText(err))}</p>`;
+  if (Talk.current && Talk.current.transcript) {
+    // 要約に失敗しても文字起こしは残す
+    Talk.save();
+    el.innerHTML += `<p class="field-note">文字起こしは保存しました。「聴講した講演」から確認できます。</p>
+      <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
+  }
+  if (Talk.audioUrl) {
+    el.innerHTML += `<p class="field-note" style="margin-top:12px">録音は再生できます:</p>
+      <audio controls src="${Talk.audioUrl}"></audio>`;
+  }
+}
 
 function renderTalkResult() {
   const c = Talk.current;
@@ -1356,6 +1413,11 @@ function renderTalkResult() {
     </div>
     ${Talk.audioUrl ? `<audio controls src="${Talk.audioUrl}"></audio>` : ''}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
+    ${c.transcript ? `
+      <details class="card" style="margin-top:10px">
+        <summary style="cursor:pointer">📝 文字起こし全文を見る(${c.transcript.length}文字)</summary>
+        <div class="transcript-box" style="margin-top:8px">${escapeHtml(c.transcript)}</div>
+      </details>` : ''}
   `;
 }
 

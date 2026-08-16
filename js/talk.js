@@ -36,7 +36,7 @@ const Talk = {
       title: meta.title || '無題の講演',
       speaker: meta.speaker || '',
       venue: meta.venue || '',
-      lang: meta.lang || 'en',
+      lang: meta.lang != null ? meta.lang : '',   // '' = Whisperの自動判定
       marks: [],
       note: '',
       transcript: '',

@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.23.1">
+<link rel="stylesheet" href="css/style.css?v=1.23.2">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -220,10 +220,12 @@ window.addEventListener('unhandledrejection', function (e) {
     <label class="field">
       <span>講演の言語</span>
       <select id="talk-lang">
-        <option value="en" selected>英語</option>
+        <option value="" selected>自動判定(おすすめ)</option>
+        <option value="en">英語</option>
         <option value="ja">日本語</option>
         <option value="ko">韓国語</option>
       </select>
+      <span class="field-note">指定した言語はWhisperに強制されます。実際の音声と違う言語を選ぶと文字起こしが空になることがあるため、迷ったら自動判定のままで。</span>
     </label>
     <p class="field-note">💡 個別の講演ごとに録音してください。30分程度までが目安です。</p>
     <button class="btn-large primary" id="btn-talk-start">● 録音を開始</button>
@@ -636,24 +638,24 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.23.1"></script>
-<script src="js/flags.js?v=1.23.1"></script>
-<script src="js/ai.js?v=1.23.1"></script>
-<script src="js/practice.js?v=1.23.1"></script>
-<script src="js/talk.js?v=1.23.1"></script>
-<script src="js/scenarios.js?v=1.23.1"></script>
-<script src="js/convo.js?v=1.23.1"></script>
-<script src="js/cards.js?v=1.23.1"></script>
-<script src="js/minigames.js?v=1.23.1"></script>
-<script src="js/bosses.js?v=1.23.1"></script>
-<script src="js/run.js?v=1.23.1"></script>
-<script src="js/progress.js?v=1.23.1"></script>
-<script src="js/phrases.js?v=1.23.1"></script>
-<script src="js/voices.js?v=1.23.1"></script>
-<script src="js/learn.js?v=1.23.1"></script>
-<script src="js/route.js?v=1.23.1"></script>
-<script src="js/topics.js?v=1.23.1"></script>
-<script src="js/drive.js?v=1.23.1"></script>
-<script src="js/app.js?v=1.23.1"></script>
+<script src="js/version.js?v=1.23.2"></script>
+<script src="js/flags.js?v=1.23.2"></script>
+<script src="js/ai.js?v=1.23.2"></script>
+<script src="js/practice.js?v=1.23.2"></script>
+<script src="js/talk.js?v=1.23.2"></script>
+<script src="js/scenarios.js?v=1.23.2"></script>
+<script src="js/convo.js?v=1.23.2"></script>
+<script src="js/cards.js?v=1.23.2"></script>
+<script src="js/minigames.js?v=1.23.2"></script>
+<script src="js/bosses.js?v=1.23.2"></script>
+<script src="js/run.js?v=1.23.2"></script>
+<script src="js/progress.js?v=1.23.2"></script>
+<script src="js/phrases.js?v=1.23.2"></script>
+<script src="js/voices.js?v=1.23.2"></script>
+<script src="js/learn.js?v=1.23.2"></script>
+<script src="js/route.js?v=1.23.2"></script>
+<script src="js/topics.js?v=1.23.2"></script>
+<script src="js/drive.js?v=1.23.2"></script>
+<script src="js/app.js?v=1.23.2"></script>
 </body>
 </html>
