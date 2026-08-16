@@ -1429,14 +1429,32 @@ function includeTranscript() {
 document.getElementById('btn-talk-share').addEventListener('click', async () => {
   const status = document.getElementById('talk-share-status');
   try {
-    const mode = await Talk.share(includeTranscript());
-    status.textContent = mode === 'cancelled' ? '共有をキャンセルしました'
-      : mode === 'download' ? '✓ この環境では共有が使えないため、ファイルとして保存しました(ダウンロードフォルダ)'
-      : (mode === 'file' ? '✓ ファイルとして共有しました' : '✓ テキストとして共有しました');
+    talkShareStatus(await Talk.share(includeTranscript()));
   } catch (err) {
     status.textContent = '⚠ ' + err.message;
   }
 });
+
+/** 共有結果の表示。ファイル共有が拒否されたときはテキスト共有のやり直しボタンを出す */
+function talkShareStatus(mode) {
+  const status = document.getElementById('talk-share-status');
+  if (mode === 'file-failed') {
+    // ブラウザの共有は1タップ1回まで。新しいタップならテキスト共有を試せる
+    status.innerHTML = `⚠ ファイルの共有がブラウザに拒否されました。
+      <button class="quest-nav" id="btn-talk-share-text">📤 テキストとして共有し直す</button>`;
+    status.querySelector('#btn-talk-share-text').addEventListener('click', async () => {
+      try {
+        talkShareStatus(await Talk.share(includeTranscript(), true));
+      } catch (err) {
+        status.textContent = '⚠ ' + err.message;
+      }
+    });
+    return;
+  }
+  status.textContent = mode === 'cancelled' ? '共有をキャンセルしました'
+    : mode === 'download' ? '✓ この環境では共有が使えないため、ファイルとして保存しました(ダウンロードフォルダ)'
+    : (mode === 'file' ? '✓ ファイルとして共有しました' : '✓ テキストとして共有しました');
+}
 
 document.getElementById('btn-talk-download').addEventListener('click', () => {
   Talk.download(includeTranscript());
