@@ -786,11 +786,19 @@ const Run = {
         ${showBest ? `<div class="fb-best-box"><p class="fb-best-label">この場面のベスト</p>
           <p class="fb-best-text">${escapeHtml(best.text)}</p></div>` : ''}
         ${revived ? '<div class="levelup-box">🧿 お守りが砕けて、あなたを守った! (HP15で復活)</div>' : ''}
+        ${typeof LangHelp !== 'undefined' ? LangHelp.buttonsHtml() : ''}
       </div>
       <button class="btn-large primary" id="btn-run-battle-next">
         ${this.state.hp <= 0 ? '…' : (b.turnIndex < b.turns.length - 1 ? '次へ' : '会話を終える')}
       </button>`;
 
+    if (typeof LangHelp !== 'undefined') {
+      LangHelp.wire(document.getElementById('run-battle-stage'), {
+        situation: turn.situation,
+        chosen: timedOut ? '' : choice.text,
+        best: best ? best.text : ''
+      });
+    }
     document.getElementById('btn-run-battle-next').addEventListener('click', () => {
       if (this.state.hp <= 0) { this.gameOver(); return; }
       if (b.turnIndex < b.turns.length - 1) {

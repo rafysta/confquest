@@ -184,3 +184,94 @@ TRANSCRIPT:
 ${session.fullTranscript.slice(0, 6000)}`;
   }
 };
+
+/* ---------- 会話バトルの言語ヘルプ(🔊読み上げ + 🇯🇵AI解説) ----------
+ * 学会攻略・会話トレーニングの解説画面から使う。
+ * 読み上げは端末のTTS(無料・オフライン可)、意味の解説はAI(APIキー必要)。
+ */
+const LangHelp = {
+  /** 文字種から読み上げ言語を推定 */
+  guessLang(text) {
+    const t = String(text || '');
+    if (/[가-힣]/.test(t)) return 'ko-KR';
+    if (/[一-鿿]/.test(t) && !/[ぁ-んァ-ン]/.test(t)) return 'zh-HK';
+    return 'en-US';
+  },
+  /** 外国語(英語・韓国語・広東語)を含むか。かなを含む文は日本語とみなす */
+  hasForeign(text) {
+    const t = String(text || '');
+    if (/[A-Za-z가-힣]/.test(t)) return true;
+    return /[一-鿿]/.test(t) && !/[ぁ-ゟァ-ヿ]/.test(t);
+  },
+  /** 複数テキストを順番に読み上げる */
+  speakMany(texts) {
+    try {
+      speechSynthesis.cancel();
+      const cleaned = texts.map((t) => String(t || '').replace(/[「」]/g, '').trim()).filter(Boolean);
+      [...new Set(cleaned)].forEach((clean) => {
+        const u = new SpeechSynthesisUtterance(clean);
+        u.lang = this.guessLang(clean);
+        u.rate = 0.92;
+        speechSynthesis.speak(u);
+      });
+    } catch (_) { /* TTS非対応端末では何もしない */ }
+  },
+
+  /** 会話ターンの外国語文をAIが日本語で解説する */
+  async explainTurn(ctx) {
+    const sys = `あなたは日本人研究者の英語・韓国語学習を支えるコーチです。学会での会話ゲームの1場面について、外国語の文の意味を日本語で簡潔に解説してください。
+
+出力形式(Markdown、全体で12行以内。スマホの狭い画面で読みます):
+## 訳
+- 出てきた英文(や外国語文)それぞれの自然な日本語訳を1行ずつ
+## ポイント
+- 重要な単語・イディオム・ニュアンスを2〜3個(用語は\`バッククォート\`、強調は**太字**)`;
+    const parts = [`場面(状況説明):\n${ctx.situation || '(なし)'}`];
+    if (ctx.chosen) parts.push(`わたしが選んだ返答: ${ctx.chosen}`);
+    if (ctx.best && ctx.best !== ctx.chosen) parts.push(`ベストとされた返答: ${ctx.best}`);
+    parts.push('これらに含まれる外国語文の意味とニュアンスを教えてください。');
+    return AI.chat(sys, [{ role: 'user', content: parts.join('\n\n') }], 700);
+  },
+
+  /** 解説画面に埋め込むボタン行のHTML */
+  buttonsHtml() {
+    return `
+      <div class="lang-help-row">
+        <button class="btn-control" data-lh="speak">🔊 発音を聞く</button>
+        <button class="btn-control" data-lh="explain">🇯🇵 意味を教えて</button>
+      </div>
+      <div class="fb-explain-area hidden" data-lh-area></div>`;
+  },
+
+  /** buttonsHtml()を含むコンテナにイベントを配線する */
+  wire(root, ctx) {
+    if (!root) return;
+    const speakBtn = root.querySelector('[data-lh="speak"]');
+    const exBtn = root.querySelector('[data-lh="explain"]');
+    const area = root.querySelector('[data-lh-area]');
+    if (speakBtn) {
+      speakBtn.addEventListener('click', () => {
+        const texts = [ctx.chosen, ctx.best].filter((t) => t && this.hasForeign(t));
+        if (!texts.length) {
+          if (typeof showToast === 'function') showToast('読み上げる英文がこの場面にはありません');
+          return;
+        }
+        this.speakMany(texts);
+      });
+    }
+    if (exBtn && area) {
+      exBtn.addEventListener('click', async () => {
+        exBtn.disabled = true;
+        area.classList.remove('hidden');
+        area.innerHTML = '<p class="field-note">🤖 解説を考えています…</p>';
+        try {
+          const text = await this.explainTurn(ctx);
+          area.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
+        } catch (err) {
+          area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+          exBtn.disabled = false;
+        }
+      });
+    }
+  }
+};

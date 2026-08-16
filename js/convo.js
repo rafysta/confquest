@@ -211,11 +211,19 @@ const Convo = {
             <p class="fb-best-label">この場面のベスト</p>
             <p class="fb-best-text">${escapeHtml(best.text)}</p>
           </div>` : ''}
+        ${typeof LangHelp !== 'undefined' ? LangHelp.buttonsHtml() : ''}
       </div>
       <button class="btn-large primary" id="btn-convo-next">
         ${this.turnIndex < this.scenario.turns.length - 1 ? '次へ' : '結果を見る'}
       </button>`;
 
+    if (typeof LangHelp !== 'undefined') {
+      LangHelp.wire(document.getElementById('convo-stage'), {
+        situation: turn.situation,
+        chosen: timedOut ? '' : choice.text,
+        best: best ? best.text : ''
+      });
+    }
     document.getElementById('btn-convo-next').addEventListener('click', () => {
       if (this.turnIndex < this.scenario.turns.length - 1) {
         this.turnIndex++;
