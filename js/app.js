@@ -56,11 +56,13 @@ function appConfirm(msg, title) { return appDialog(msg, title, true); }
 /**
  * APIキーの取得手順を表示し、設定画面へ案内する。
  * provider: 'claude' | 'openai' / what: 使おうとした機能名(任意)
+ * reason: 'invalid' なら「設定済みだが認証エラー」向けの文言になる
  */
-function showApiKeyHelp(provider, what) {
+function showApiKeyHelp(provider, what, reason) {
   const info = (typeof API_KEY_INFO !== 'undefined' && API_KEY_INFO[provider]) ||
     (typeof API_KEY_INFO !== 'undefined' ? API_KEY_INFO.claude : null);
   if (!info) { appAlert('設定画面でAPIキーを登録してください。', '🔑 APIキーが必要'); return; }
+  const invalid = reason === 'invalid';
   const old = document.getElementById('apikey-help-overlay');
   if (old) old.remove();
   const ov = document.createElement('div');
@@ -68,18 +70,22 @@ function showApiKeyHelp(provider, what) {
   ov.id = 'apikey-help-overlay';
   ov.innerHTML = `
     <div class="modal-box apikey-box">
-      <h3>🔑 APIキーの設定が必要です</h3>
+      <h3>${invalid ? '🔑 APIキーが認証エラーです' : '🔑 APIキーの設定が必要です'}</h3>
       <p class="field-note">
-        ${escapeHtml(what || 'この機能')}はAIを使うため、<strong>${escapeHtml(info.name)}</strong> のAPIキーが必要です。
-        キーはこの端末にだけ保存され、外部には送られません。
+        ${invalid
+          ? `登録されている <strong>${escapeHtml(info.name)}</strong> のAPIキーが認証エラーになりました。
+             キーの無効化・失効、または貼り付け時に一部が欠けた可能性があります。
+             新しいキーを作り直して貼り直すのが確実です。`
+          : `${escapeHtml(what || 'この機能')}はAIを使うため、<strong>${escapeHtml(info.name)}</strong> のAPIキーが必要です。
+             キーはこの端末にだけ保存され、外部には送られません。`}
       </p>
       <ol class="apikey-steps">
         <li>${escapeHtml(info.site)}を開く<br>
           <a class="apikey-link" href="${info.url}" target="_blank" rel="noopener">${escapeHtml(info.url)}</a></li>
-        <li>ログイン(アカウントが無ければ新規登録)して、支払い方法かクレジットを登録する</li>
-        <li>「Create key」でキーを作り、<code>${escapeHtml(info.prefix)}…</code> で始まる文字列をコピーする
-          <br><span class="field-note">※キーは作成直後しか表示されません</span></li>
-        <li>下のボタンで設定画面を開き、「${escapeHtml(info.fieldLabel)}」に貼り付けて保存する</li>
+        <li>ログイン${invalid ? 'して、キーの状態を確認する(不安なら新しいキーを作る)' : '(アカウントが無ければ新規登録)して、支払い方法かクレジットを登録する'}</li>
+        <li>「Create key」でキーを作り、<code>${escapeHtml(info.prefix)}…</code> で始まる文字列を<strong>全部</strong>コピーする
+          <br><span class="field-note">※キーは作成直後しか表示されません${invalid ? '。長い文字列なので欠けやすい点に注意' : ''}</span></li>
+        <li>下のボタンで設定画面を開き、「${escapeHtml(info.fieldLabel)}」に貼り${invalid ? '直して' : '付けて'}保存する</li>
       </ol>
       <p class="apikey-cost">💰 ${escapeHtml(info.cost)}</p>
       <button class="btn-large primary" id="btn-apikey-settings">⚙️ 設定画面を開いて入力する</button>
@@ -115,6 +121,10 @@ function aiErrorText(err) {
   if (err && err.noKey) {
     showApiKeyHelp(err.provider, err.what);
     return '🔑 APIキーが未設定です。表示された手順に沿って設定画面で登録してください。';
+  }
+  if (err && err.badKey) {
+    showApiKeyHelp(err.provider, err.what, 'invalid');
+    return '🔑 APIキーが認証エラーになりました(無効・失効・貼り付けミスの可能性)。表示された手順でキーを作り直して貼り直してください。';
   }
   return '⚠ ' + ((err && err.message) || '不明なエラー');
 }
@@ -561,7 +571,8 @@ function renderResults(s) {
   `;
 
   const keyBtn = document.getElementById('btn-transcript-key');
-  if (keyBtn) keyBtn.addEventListener('click', () => showApiKeyHelp('openai', '録音の文字起こし'));
+  if (keyBtn) keyBtn.addEventListener('click', () =>
+    showApiKeyHelp('openai', '録音の文字起こし', /認証エラー/.test(s.transcriptError || '') ? 'invalid' : undefined));
 
   // スコアのカウントアップアニメーション
   animateScore(score);

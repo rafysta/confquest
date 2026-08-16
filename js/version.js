@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.23.0';
+const APP_VERSION = '1.23.1';
 const APP_BUILD = '2026-08-16';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-08-16';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.23.1',
+    date: '2026-08-16',
+    items: [
+      { type: 'fix', text: '🔑 APIキーが「設定済みだけど無効」(認証エラー401)の場合にも、キーの作り直し手順の案内が出るようになりました。これまでは未設定の場合しか案内が出ず、生のエラーメッセージが表示されていました' },
+      { type: 'fix', text: '🌊 発話練習の波形比較で、前後の無音をそろえるトリム機能(v1.17.3)が誤って無効になっていたのを復元しました' }
+    ]
+  },
   {
     version: '1.23.0',
     date: '2026-08-16',

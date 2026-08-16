@@ -35,6 +35,16 @@ function apiKeyError(provider, what) {
   return err;
 }
 
+/** 「APIキーはあるが認証に失敗した(無効・失効)」エラーを作る。err.badKey で判別できる */
+function apiAuthError(provider, status) {
+  const info = API_KEY_INFO[provider] || API_KEY_INFO.claude;
+  const err = new Error(
+    `${info.name} のAPIキーが認証エラーになりました(${status})。キーが無効か、失効しているか、貼り付け時に一部欠けた可能性があります。`);
+  err.badKey = true;
+  err.provider = provider;
+  return err;
+}
+
 /** OpenAIによる文字起こし */
 const STT = {
   getKey() {
@@ -72,6 +82,7 @@ const STT = {
       body: form
     });
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) throw apiAuthError('openai', res.status);
       const body = await res.text().catch(() => '');
       throw new Error(`文字起こしAPIエラー (${res.status}): ${body.slice(0, 200)}`);
     }
@@ -150,6 +161,7 @@ const AI = {
       })
     });
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) throw apiAuthError('claude', res.status);
       const body = await res.text().catch(() => '');
       throw new Error(`Claude APIエラー (${res.status}): ${body.slice(0, 300)}`);
     }
@@ -174,6 +186,7 @@ const AI = {
       })
     });
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) throw apiAuthError('openai', res.status);
       const body = await res.text().catch(() => '');
       throw new Error(`OpenAI APIエラー (${res.status}): ${body.slice(0, 300)}`);
     }
