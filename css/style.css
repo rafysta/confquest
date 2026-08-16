@@ -1810,3 +1810,18 @@ audio { width: 100%; margin-bottom: 12px; }
 .key-status { font-size: 0.78rem; margin-left: 6px; }
 .key-status.ok { color: var(--success); }
 .key-status.ng { color: var(--warn); }
+
+/* 🎭 AI自由会話: 場面選択 (v1.23.0) */
+.sim-scene-list { margin-bottom: 12px; }
+.sim-scene { position: relative; }
+.sim-scene.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: rgba(56, 189, 248, 0.08);
+}
+.sim-scene.selected::after {
+  content: '✓';
+  position: absolute; right: 12px; top: 10px;
+  color: var(--accent); font-weight: bold;
+}
+.sim-done { color: var(--success); font-size: 0.75rem; margin-left: 4px; }

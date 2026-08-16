@@ -458,7 +458,7 @@ const Topics = {
         </button>` : ''}
       ${this.cat === 'all' && typeof Drive !== 'undefined' ? `
         <button class="btn-large" id="btn-topics-drive" style="margin-bottom:12px">
-          🤖 AIとドライブ本番(自由英会話シミュレータ)
+          🤖 AIと自由会話(ドライブ・懇親会・Dinner)
         </button>` : ''}
       ${this.cat === 'all' ? `
         <h3 class="about-section">🎲 今日の3ネタ</h3>

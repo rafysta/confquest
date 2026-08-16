@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.22.0';
+const APP_VERSION = '1.23.0';
 const APP_BUILD = '2026-08-16';
 
 /**
@@ -9,6 +9,15 @@ const APP_BUILD = '2026-08-16';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.23.0',
+    date: '2026-08-16',
+    items: [
+      { type: 'new', text: '🎭 AI自由会話に場面が2つ追加!ドライブに加えて「🍻 ISSY39懇親会」(初対面のDr. Novakと立食で。相手は会話を引っ張ってくれないので、切り出し→深掘り→締めくくりを自分から)と「🍽️ シンポ後のDinner」(ホストのProf. LeeとKyoung-Dongに囲まれた着席の会食。간장게장の食べ方も教わります)を選べます' },
+      { type: 'new', text: '場面ごとに進行バーが変わります(懇親会: 乾杯→料理→歓談の輪→デザート→おひらき / Dinner: 乾杯→前菜→メイン→食後→お見送り)。XPの入り方も場面に合わせて変化(懇親会=🤝人脈+🔥自信、Dinner=💡話題力+🗣️英語)' },
+      { type: 'new', text: '実績「🎭 実戦フルコース」を追加: 3場面すべてを完走すると解除。開始画面に場面ごとの完走回数(✓完走n)が表示されます' }
+    ]
+  },
   {
     version: '1.22.0',
     date: '2026-08-16',
