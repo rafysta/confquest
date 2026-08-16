@@ -1719,3 +1719,57 @@ audio { width: 100%; margin-bottom: 12px; }
   padding: 6px 10px; font-size: 0.78rem; cursor: pointer;
 }
 .quest-nav:active { transform: scale(0.97); }
+
+/* 🤖 ドライブシミュレータ (v1.21.0) */
+.drive-setup { text-align: center; }
+.drive-setup .field { text-align: left; }
+.drive-passenger-row {
+  display: flex; align-items: center; gap: 8px;
+  text-align: left; font-size: 0.88rem;
+  margin: 10px 0 14px; cursor: pointer;
+}
+.drive-bar {
+  background: var(--bg-card);
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 10px 12px 18px;
+  margin-bottom: 10px;
+}
+.drive-bar-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 0.85rem; margin-bottom: 10px;
+}
+.drive-bar-count { color: var(--text-dim); font-size: 0.78rem; }
+.drive-track {
+  position: relative; height: 6px; border-radius: 3px;
+  background: var(--bg); margin: 0 10px;
+}
+.drive-track-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--success));
+  transition: width 0.4s ease;
+}
+.drive-track-dot {
+  position: absolute; top: -8px; transform: translateX(-50%);
+  font-size: 0.85rem; filter: grayscale(1) opacity(0.45);
+}
+.drive-track-dot.done { filter: none; }
+.drive-log { min-height: 180px; max-height: 46vh; }
+.drive-sos-row {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin: 8px 0;
+}
+.drive-sos-row .btn-control { flex: 1; min-width: 90px; font-size: 0.78rem; }
+.drive-topic-list { max-height: 50vh; overflow-y: auto; margin: 10px 0; }
+.drive-topic-row {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; text-align: left;
+  background: var(--bg-card); color: var(--text);
+  border: 1px solid #334155; border-radius: 10px;
+  padding: 9px 12px; margin-bottom: 6px;
+  font-size: 0.88rem; cursor: pointer;
+}
+.drive-topic-row:active { transform: scale(0.98); }
+.drive-result { text-align: center; margin-top: 12px; }
+.drive-result .btn-large { margin-top: 8px; }
+#drive-critique { text-align: left; margin: 12px 0; }

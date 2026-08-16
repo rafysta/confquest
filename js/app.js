@@ -64,6 +64,7 @@ function showScreen(name) {
   if (name === 'status') renderStatus();
   if (name === 'run-map') Run.renderMap();
   if (name === 'topics' && typeof Topics !== 'undefined') Topics.render();
+  if (name === 'drive' && typeof Drive !== 'undefined') Drive.render();
   if (name === 'learn' && typeof Learn !== 'undefined') Learn.renderHome();
   if (name === 'learn-dex' && typeof Learn !== 'undefined') Learn.renderDex();
   if (name === 'learn-check' && typeof Learn !== 'undefined') Learn.renderCheck();
@@ -76,6 +77,11 @@ function showScreen(name) {
 
 document.querySelectorAll('[data-nav]').forEach((btn) => {
   btn.addEventListener('click', () => showScreen(btn.dataset.nav));
+});
+const _driveBack = document.getElementById('btn-drive-back');
+if (_driveBack) _driveBack.addEventListener('click', () => {
+  if (typeof Drive !== 'undefined') Drive.backPressed();
+  else showScreen('topics');
 });
 
 /* ---------- ストリークとポイント ---------- */

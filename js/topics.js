@@ -453,8 +453,12 @@ const Topics = {
         <span class="topic-progress">📖 読了 ${readCount}/${TOPIC_DECK.length}</span>
       </p>
       ${this.cat === 'all' && typeof SMALLTALK_SCENARIOS !== 'undefined' ? `
-        <button class="btn-large" id="btn-topics-scenarios" style="margin-bottom:12px">
+        <button class="btn-large" id="btn-topics-scenarios" style="margin-bottom:8px">
           🎭 シナリオで実戦練習(車中2時間・懇親会・Dinner)
+        </button>` : ''}
+      ${this.cat === 'all' && typeof Drive !== 'undefined' ? `
+        <button class="btn-large" id="btn-topics-drive" style="margin-bottom:12px">
+          🤖 AIとドライブ本番(自由英会話シミュレータ)
         </button>` : ''}
       ${this.cat === 'all' ? `
         <h3 class="about-section">🎲 今日の3ネタ</h3>
@@ -494,6 +498,10 @@ const Topics = {
     const scenBtn = el.querySelector('#btn-topics-scenarios');
     if (scenBtn) scenBtn.addEventListener('click', () => {
       if (typeof showScreen === 'function') showScreen('convo-list');
+    });
+    const driveBtn = el.querySelector('#btn-topics-drive');
+    if (driveBtn) driveBtn.addEventListener('click', () => {
+      if (typeof showScreen === 'function') showScreen('drive');
     });
     el.querySelectorAll('[data-topic-say]').forEach((b) =>
       b.addEventListener('click', (e) => {
