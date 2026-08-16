@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.24.3';
+const APP_VERSION = '1.24.4';
 const APP_BUILD = '2026-08-16';
 
 /**
@@ -9,6 +9,13 @@ const APP_BUILD = '2026-08-16';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.24.4',
+    date: '2026-08-16',
+    items: [
+      { type: 'fix', text: '📤 メール共有で「文字起こし全文」が本文に見えないことがある問題への対策。原因の可能性が高いのは、区切り線「---」以降をGmailが署名とみなして「…」の裏に折りたたむ仕様です。区切り線を折りたたまれない形式(＝＝＝)に変更し、全文セクションの見出しに文字数も入れました' }
+    ]
+  },
   {
     version: '1.24.3',
     date: '2026-08-16',

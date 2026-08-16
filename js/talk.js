@@ -282,13 +282,16 @@ const Talk = {
     if (c.markedText && c.markedText.length) {
       doc += `\n## マークした箇所\n\n${c.markedText.map((t) => `- ${t}`).join('\n')}\n`;
     }
+    // 区切り線に「---」を使わない: Gmailなどのメールアプリは末尾の「--」風の
+    // 区切り以降を署名とみなして折りたたむ(「…」の裏に隠れて見えなくなる)ため
+    const HR = '\n\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n\n';
     if (includeTranscript && c.transcript) {
-      doc += `\n---\n\n## 文字起こし全文\n\n${c.transcript}\n`;
+      doc += `${HR}## 文字起こし全文(${c.transcript.length}文字)\n\n${c.transcript}\n`;
     } else if (includeTranscript) {
       // 「含める」指定なのに文字起こしが無い場合も、黙って省かず明記する
-      doc += `\n---\n\n## 文字起こし全文\n\n(この講演には文字起こしがありません)\n`;
+      doc += `${HR}## 文字起こし全文\n\n(この講演には文字起こしがありません)\n`;
     }
-    doc += `\n---\n_ConfQuest v${APP_VERSION} で作成_\n`;
+    doc += `${HR}ConfQuest v${APP_VERSION} で作成\n`;
     return doc;
   },
 
