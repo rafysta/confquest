@@ -57,7 +57,9 @@ const Convo = {
   answered: false,
 
   start(scenarioId) {
-    this.scenario = SCENARIOS.find((s) => s.id === scenarioId);
+    const pool = SCENARIOS.concat(
+      typeof SMALLTALK_SCENARIOS !== 'undefined' ? SMALLTALK_SCENARIOS : []);
+    this.scenario = pool.find((s) => s.id === scenarioId);
     if (!this.scenario) return false;
     this.turnIndex = 0;
     this.affinity = 50;

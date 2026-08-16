@@ -452,6 +452,10 @@ const Topics = {
         各ネタは「切り出し(opener)→深掘り(follow)」の会話設計図です。🔊で発音を確認、⭐で持ちネタに追加。
         <span class="topic-progress">📖 読了 ${readCount}/${TOPIC_DECK.length}</span>
       </p>
+      ${this.cat === 'all' && typeof SMALLTALK_SCENARIOS !== 'undefined' ? `
+        <button class="btn-large" id="btn-topics-scenarios" style="margin-bottom:12px">
+          🎭 シナリオで実戦練習(車中2時間・懇親会・Dinner)
+        </button>` : ''}
       ${this.cat === 'all' ? `
         <h3 class="about-section">🎲 今日の3ネタ</h3>
         <p class="field-note" style="margin-bottom:8px">毎日変わります。1日1ネタ、音読してから出かけましょう</p>
@@ -487,6 +491,10 @@ const Topics = {
       dt.addEventListener('toggle', () => {
         if (dt.open) this.onCardOpened(dt.dataset.topicId);
       }));
+    const scenBtn = el.querySelector('#btn-topics-scenarios');
+    if (scenBtn) scenBtn.addEventListener('click', () => {
+      if (typeof showScreen === 'function') showScreen('convo-list');
+    });
     el.querySelectorAll('[data-topic-say]').forEach((b) =>
       b.addEventListener('click', (e) => {
         e.stopPropagation();

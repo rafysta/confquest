@@ -1000,7 +1000,8 @@ function updateRunMenuDesc() {
 function renderConvoList() {
   const hist = JSON.parse(localStorage.getItem('lq_convo_history') || '[]');
   const el = document.getElementById('convo-list-content');
-  el.innerHTML = SCENARIOS.map((s) => {
+  const smalltalk = typeof SMALLTALK_SCENARIOS !== 'undefined' ? SMALLTALK_SCENARIOS : [];
+  const cardHtml = (s) => {
     const past = hist.filter((h) => h.scenarioId === s.id);
     const best = past.length ? Math.max(...past.map((h) => h.affinity)) : null;
     const badge = best !== null
@@ -1014,11 +1015,17 @@ function renderConvoList() {
       </span>
       ${badge}
     </button>`;
-  }).join('');
+  };
+  el.innerHTML = SCENARIOS.map(cardHtml).join('') + (smalltalk.length ? `
+    <h3 class="about-section" style="margin-top:18px">🚗 雑談シナリオ(韓国編・実戦練習)</h3>
+    <p class="field-note" style="margin-bottom:8px">
+      11月の韓国訪問の実際の場面を練習します。📚ネタ帳で覚えた切り出しが選択肢に登場します。
+    </p>
+    ${smalltalk.map(cardHtml).join('')}` : '');
 
   el.querySelectorAll('[data-scenario]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const s = SCENARIOS.find((x) => x.id === btn.dataset.scenario);
+      const s = SCENARIOS.concat(smalltalk).find((x) => x.id === btn.dataset.scenario);
       document.getElementById('convo-title').textContent = s.title;
       showScreen('convo-play');
       Convo.start(btn.dataset.scenario);
