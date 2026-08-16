@@ -1847,3 +1847,6 @@ audio { width: 100%; margin-bottom: 12px; }
   font-size: 0.78rem; color: var(--text-dim);
   text-align: center; margin-top: 5px; min-height: 1.2em;
 }
+
+/* 全文チェックボックスの無効状態 (v1.24.3) */
+.checkbox-field.disabled-field { opacity: 0.55; }

@@ -284,6 +284,9 @@ const Talk = {
     }
     if (includeTranscript && c.transcript) {
       doc += `\n---\n\n## 文字起こし全文\n\n${c.transcript}\n`;
+    } else if (includeTranscript) {
+      // 「含める」指定なのに文字起こしが無い場合も、黙って省かず明記する
+      doc += `\n---\n\n## 文字起こし全文\n\n(この講演には文字起こしがありません)\n`;
     }
     doc += `\n---\n_ConfQuest v${APP_VERSION} で作成_\n`;
     return doc;

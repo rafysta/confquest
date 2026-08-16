@@ -1345,6 +1345,7 @@ async function talkSummarizeStep() {
     Talk.save();
     if (typeof Achievements !== 'undefined') Achievements.unlock('first-talk');
     renderTalkResult();
+    updateTranscriptToggle();
     actions.classList.remove('hidden');
   } catch (err) {
     talkErrorView(err);
@@ -1426,6 +1427,32 @@ function includeTranscript() {
   return document.getElementById('include-transcript').checked;
 }
 
+/** いま共有・保存した内容に全文が入ったかどうかの注記(結果の透明化) */
+function docScopeNote() {
+  const has = !!(Talk.current && Talk.current.transcript);
+  const want = includeTranscript();
+  if (want && has) return `(📝 文字起こし全文つき・${Talk.current.transcript.length}文字)`;
+  if (want && !has) return '(⚠ この講演の文字起こしが空のため、実質は要約のみです)';
+  return '(要約のみ)';
+}
+
+/** 全文チェックボックスを現在の講演に合わせて有効/無効にする */
+function updateTranscriptToggle() {
+  const cb = document.getElementById('include-transcript');
+  if (!cb) return;
+  const has = !!(Talk.current && Talk.current.transcript);
+  cb.disabled = !has;
+  if (!has) cb.checked = false;
+  const label = cb.closest('label');
+  if (label) {
+    label.classList.toggle('disabled-field', !has);
+    const span = label.querySelector('span');
+    if (span) span.textContent = has
+      ? `文字起こし全文も含める(${Talk.current.transcript.length}文字)`
+      : '文字起こし全文も含める(この講演には文字起こしがありません)';
+  }
+}
+
 document.getElementById('btn-talk-share').addEventListener('click', async () => {
   const status = document.getElementById('talk-share-status');
   try {
@@ -1452,20 +1479,22 @@ function talkShareStatus(mode) {
     return;
   }
   status.textContent = mode === 'cancelled' ? '共有をキャンセルしました'
-    : mode === 'download' ? '✓ この環境では共有が使えないため、ファイルとして保存しました(ダウンロードフォルダ)'
-    : (mode === 'file' ? '✓ ファイルとして共有しました' : '✓ テキストとして共有しました');
+    : mode === 'download' ? `✓ この環境では共有が使えないため、ファイルとして保存しました ${docScopeNote()}`
+    : (mode === 'file' ? `✓ ファイルとして共有しました ${docScopeNote()}`
+      : `✓ テキストとして共有しました ${docScopeNote()}`);
 }
 
 document.getElementById('btn-talk-download').addEventListener('click', () => {
   Talk.download(includeTranscript());
-  document.getElementById('talk-share-status').textContent = '✓ ダウンロードフォルダに保存しました';
+  document.getElementById('talk-share-status').textContent =
+    `✓ ダウンロードフォルダに保存しました ${docScopeNote()}`;
 });
 
 document.getElementById('btn-talk-copy').addEventListener('click', async () => {
   const status = document.getElementById('talk-share-status');
   try {
     await Talk.copy(includeTranscript());
-    status.textContent = '✓ クリップボードにコピーしました';
+    status.textContent = `✓ クリップボードにコピーしました ${docScopeNote()}`;
   } catch (err) {
     status.textContent = '⚠ コピーできませんでした: ' + err.message;
   }
@@ -1495,6 +1524,7 @@ function renderTalkList() {
       showScreen('talk-result');
       document.getElementById('talk-share-status').textContent = '';
       document.getElementById('talk-actions').classList.remove('hidden');
+      updateTranscriptToggle();
       if (found.summary) {
         renderTalkResult();
       } else {
