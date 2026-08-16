@@ -1850,3 +1850,13 @@ audio { width: 100%; margin-bottom: 12px; }
 
 /* 全文チェックボックスの無効状態 (v1.24.3) */
 .checkbox-field.disabled-field { opacity: 0.55; }
+
+/* 🗑 録音一覧の削除ボタン (v1.25.0) */
+.talk-item-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: 8px; }
+.talk-item-row .talk-item { flex: 1; margin-bottom: 0; }
+.talk-del {
+  background: var(--bg-card); color: var(--text-dim);
+  border: 1px solid #334155; border-radius: 12px;
+  padding: 0 14px; font-size: 1rem; cursor: pointer;
+}
+.talk-del:active { transform: scale(0.95); color: var(--danger); }

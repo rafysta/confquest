@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.24.4">
+<link rel="stylesheet" href="css/style.css?v=1.25.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -206,12 +206,20 @@ window.addEventListener('unhandledrejection', function (e) {
   </header>
   <div class="setup-form">
     <label class="field">
-      <span>講演タイトル</span>
+      <span>録音の種類</span>
+      <select id="talk-kind">
+        <option value="talk" selected>🎓 講演・発表</option>
+        <option value="meeting">👥 ミーティング・打ち合わせ</option>
+      </select>
+      <span class="field-note">ミーティングは議事録形式で要約します(決定事項・TODO・話者ごとの発言をAIが文脈から推定)。</span>
+    </label>
+    <label class="field">
+      <span>タイトル</span>
       <input type="text" id="talk-title" placeholder="Chromatin organization in senescence">
     </label>
     <label class="field">
-      <span>発表者(任意)</span>
-      <input type="text" id="talk-speaker" placeholder="Prof. Kim">
+      <span>発表者・参加者(任意)</span>
+      <input type="text" id="talk-speaker" placeholder="Prof. Kim / 田中さん、佐藤さん">
     </label>
     <label class="field">
       <span>会場・セッション(任意)</span>
@@ -227,7 +235,7 @@ window.addEventListener('unhandledrejection', function (e) {
       </select>
       <span class="field-note">指定した言語はWhisperに強制されます。実際の音声と違う言語を選ぶと文字起こしが空になることがあるため、迷ったら自動判定のままで。</span>
     </label>
-    <p class="field-note">💡 個別の講演ごとに録音してください。30分程度までが目安です。</p>
+    <p class="field-note">💡 長い録音は10分ごとに自動で分割して文字起こしされるので、時間の制限はありません(2時間を超える場合は端末のメモリにご注意)。</p>
     <button class="btn-large primary" id="btn-talk-start">● 録音を開始</button>
   </div>
 </section>
@@ -249,7 +257,7 @@ window.addEventListener('unhandledrejection', function (e) {
     </div>
     <p class="field-note" id="talk-rec-title"></p>
     <p class="field-note" id="talk-mark-count">マークなし</p>
-    <p class="pace-warning hidden" id="talk-size-warn">⚠ 録音が長くなっています。そろそろ終了してください</p>
+    <p class="pace-warning hidden" id="talk-size-warn">⚠ 録音が2時間を超えました。端末メモリのため、そろそろ区切るのがおすすめです</p>
     <button class="mark-btn" id="btn-talk-mark">
       <span class="mark-icon">⭐</span>
       <span>ここは重要</span>
@@ -269,8 +277,8 @@ window.addEventListener('unhandledrejection', function (e) {
 <!-- 講演録音: 結果 -->
 <section id="screen-talk-result" class="screen">
   <header class="screen-header">
-    <button class="back-btn" data-nav="home">←</button>
-    <h2>講演の要約</h2>
+    <button class="back-btn" data-nav="talk-list">←</button>
+    <h2>録音の要約</h2>
   </header>
   <div id="talk-result-content"></div>
   <div class="results-actions" id="talk-actions">
@@ -289,7 +297,7 @@ window.addEventListener('unhandledrejection', function (e) {
 <section id="screen-talk-list" class="screen">
   <header class="screen-header">
     <button class="back-btn" data-nav="home">←</button>
-    <h2>聴講した講演</h2>
+    <h2>録音した講演・会議</h2>
   </header>
   <div id="talk-list-content"></div>
 </section>
@@ -646,24 +654,24 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.24.4"></script>
-<script src="js/flags.js?v=1.24.4"></script>
-<script src="js/ai.js?v=1.24.4"></script>
-<script src="js/practice.js?v=1.24.4"></script>
-<script src="js/talk.js?v=1.24.4"></script>
-<script src="js/scenarios.js?v=1.24.4"></script>
-<script src="js/convo.js?v=1.24.4"></script>
-<script src="js/cards.js?v=1.24.4"></script>
-<script src="js/minigames.js?v=1.24.4"></script>
-<script src="js/bosses.js?v=1.24.4"></script>
-<script src="js/run.js?v=1.24.4"></script>
-<script src="js/progress.js?v=1.24.4"></script>
-<script src="js/phrases.js?v=1.24.4"></script>
-<script src="js/voices.js?v=1.24.4"></script>
-<script src="js/learn.js?v=1.24.4"></script>
-<script src="js/route.js?v=1.24.4"></script>
-<script src="js/topics.js?v=1.24.4"></script>
-<script src="js/drive.js?v=1.24.4"></script>
-<script src="js/app.js?v=1.24.4"></script>
+<script src="js/version.js?v=1.25.0"></script>
+<script src="js/flags.js?v=1.25.0"></script>
+<script src="js/ai.js?v=1.25.0"></script>
+<script src="js/practice.js?v=1.25.0"></script>
+<script src="js/talk.js?v=1.25.0"></script>
+<script src="js/scenarios.js?v=1.25.0"></script>
+<script src="js/convo.js?v=1.25.0"></script>
+<script src="js/cards.js?v=1.25.0"></script>
+<script src="js/minigames.js?v=1.25.0"></script>
+<script src="js/bosses.js?v=1.25.0"></script>
+<script src="js/run.js?v=1.25.0"></script>
+<script src="js/progress.js?v=1.25.0"></script>
+<script src="js/phrases.js?v=1.25.0"></script>
+<script src="js/voices.js?v=1.25.0"></script>
+<script src="js/learn.js?v=1.25.0"></script>
+<script src="js/route.js?v=1.25.0"></script>
+<script src="js/topics.js?v=1.25.0"></script>
+<script src="js/drive.js?v=1.25.0"></script>
+<script src="js/app.js?v=1.25.0"></script>
 </body>
 </html>

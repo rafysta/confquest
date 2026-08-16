@@ -11,30 +11,36 @@ const Talk = {
   paused: false,
   pauseStartedAt: 0,
 
-  /* ---------- 録音 ---------- */
+  /* ---------- 録音 ----------
+   * 長時間対応: SEGMENT_SEC ごとに録音を「セグメント」として確定し、新しい
+   * MediaRecorderで続きを録る。各セグメントは独立した完全な音声ファイルに
+   * なるので、Whisperの25MB制限を気にせず何時間でも録音できる。
+   */
+  SEGMENT_SEC: 600,   // 10分ごとに区切る(32kbpsで1パート約2.4MB)
+  stream: null,
+  segments: [],       // 確定済みセグメント [{blob, startSec}]
+  segStartSec: 0,     // 現在録音中セグメントの開始位置(全体の経過秒)
+  audioUrls: [],      // 再生用URL(セグメントごと)
+
   async start(meta) {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: true, channelCount: 1 }
     });
+    this.stream = stream;
+    this.segments = [];
+    this.segStartSec = 0;
     this.chunks = [];
     this.audioBlob = null;
-    // 32kbps mono: 30分で約7MB。Whisperの25MB上限に余裕をもって収まる
-    let opts = { audioBitsPerSecond: 32000 };
-    try {
-      this.recorder = new MediaRecorder(stream, opts);
-    } catch (_) {
-      this.recorder = new MediaRecorder(stream);
-    }
-    this.recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) this.chunks.push(e.data);
-    };
-    this.recorder.start(5000); // 5秒ごとにデータを確保(長時間録音でのメモリ対策)
+    if (this.audioUrls) this.audioUrls.forEach((u) => { try { URL.revokeObjectURL(u); } catch (_) { /* 無視 */ } });
+    this.audioUrls = [];
+    this._startRecorder();
     this.setupMeter(stream);   // 🎙️ 音量インジケーター
 
     this.current = {
       id: Date.now(),
       date: new Date().toISOString(),
-      title: meta.title || '無題の講演',
+      kind: meta.kind === 'meeting' ? 'meeting' : 'talk',
+      title: meta.title || (meta.kind === 'meeting' ? '無題のミーティング' : '無題の講演'),
       speaker: meta.speaker || '',
       venue: meta.venue || '',
       lang: meta.lang != null ? meta.lang : '',   // '' = Whisperの自動判定
@@ -49,6 +55,36 @@ const Talk = {
     this.paused = false;
     this.timer = setInterval(() => this.updateUI(), 500);
     this.updateUI();
+  },
+
+  /** 現在のストリームで新しいMediaRecorderを開始する */
+  _startRecorder() {
+    this.chunks = [];
+    // 32kbps mono: 10分で約2.4MB。Whisperの25MB上限に余裕をもって収まる
+    try {
+      this.recorder = new MediaRecorder(this.stream, { audioBitsPerSecond: 32000 });
+    } catch (_) {
+      this.recorder = new MediaRecorder(this.stream);
+    }
+    this.recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) this.chunks.push(e.data);
+    };
+    this.recorder.start(5000); // 5秒ごとにデータを確保(長時間録音でのメモリ対策)
+  },
+
+  /** SEGMENT_SECを超えていたらセグメントを確定して録音を続ける(updateUIから呼ばれる) */
+  maybeRotate() {
+    if (!this.recorder || this.paused || this.recorder.state !== 'recording') return;
+    if (this.elapsedMs() / 1000 - this.segStartSec < this.SEGMENT_SEC) return;
+    const rec = this.recorder;
+    const chunks = this.chunks;
+    const startSec = this.segStartSec;
+    rec.onstop = () => {
+      this.segments.push({ blob: new Blob(chunks, { type: rec.mimeType }), startSec });
+    };
+    this.segStartSec = this.elapsedMs() / 1000;
+    rec.stop();
+    this._startRecorder();   // 同じストリームで即座に続きを録る
   },
 
   /* ---------- 🎙️ 音量インジケーター ---------- */
@@ -146,12 +182,11 @@ const Talk = {
       mk.textContent = this.current.marks.length
         ? `${this.current.marks.length}箇所にマーク` : 'マークなし';
     }
-    // 推定ファイルサイズ(Whisper上限の目安)
+    // 長時間録音: 10分ごとにセグメントを確定(Whisper 25MB制限の回避)
+    this.maybeRotate();
+    // メモリの目安として2時間で注意を出す(上限ではない)
     const warn = document.getElementById('talk-size-warn');
-    if (warn) {
-      const mb = (this.elapsedMs() / 60000) * 0.24; // 32kbps ≒ 0.24MB/分
-      warn.classList.toggle('hidden', mb < 22);
-    }
+    if (warn) warn.classList.toggle('hidden', this.elapsedMs() < 2 * 3600 * 1000);
   },
 
   /** 「今の話は重要」マークを打つ */
@@ -188,34 +223,48 @@ const Talk = {
       this.stopMeter();
       if (!this.recorder || this.recorder.state === 'inactive') { resolve(); return; }
       this.current.durationMs = this.elapsedMs();
-      this.recorder.onstop = () => {
-        this.audioBlob = new Blob(this.chunks, { type: this.recorder.mimeType });
-        if (this.audioUrl) URL.revokeObjectURL(this.audioUrl);
-        this.audioUrl = URL.createObjectURL(this.audioBlob);
-        this.recorder.stream.getTracks().forEach((t) => t.stop());
+      const rec = this.recorder;
+      const chunks = this.chunks;
+      const startSec = this.segStartSec;
+      rec.onstop = () => {
+        this.segments.push({ blob: new Blob(chunks, { type: rec.mimeType }), startSec });
+        // 再生用URL(セグメントごと)。audioBlob/audioUrlは互換のため先頭を指す
+        this.audioUrls = this.segments.map((s) => URL.createObjectURL(s.blob));
+        this.audioUrl = this.audioUrls[0] || null;
+        this.audioBlob = this.segments[0] ? this.segments[0].blob : null;
+        if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
         resolve();
       };
-      this.recorder.stop();
+      rec.stop();
     });
   },
 
   /* ---------- 文字起こし ---------- */
-  async transcribe() {
-    if (!this.audioBlob || this.audioBlob.size === 0) {
+  /** 全セグメントを順に文字起こしして結合する。onProgress(done, total)で進捗を通知 */
+  async transcribe(onProgress) {
+    const segs = (this.segments && this.segments.length)
+      ? this.segments
+      : (this.audioBlob ? [{ blob: this.audioBlob, startSec: 0 }] : []);
+    if (!segs.length || segs.every((s) => !s.blob || s.blob.size === 0)) {
       throw new Error('録音データがありません。');
     }
     const MAX = 24 * 1024 * 1024;
-    if (this.audioBlob.size > MAX) {
-      throw new Error(
-        `録音が大きすぎます (${(this.audioBlob.size / 1048576).toFixed(1)}MB)。` +
-        'APIの上限は25MBです。講演ごとに分けて録音してください。'
-      );
+    const all = [];
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (!s.blob || s.blob.size === 0) continue;
+      if (s.blob.size > MAX) {
+        throw new Error(`録音パート${i + 1}が大きすぎます (${(s.blob.size / 1048576).toFixed(1)}MB)。APIの上限は25MBです。`);
+      }
+      if (onProgress) onProgress(i + 1, segs.length);
+      const part = await STT.transcribe(s.blob, this.current.lang);
+      // セグメント内の相対時刻を、録音全体の時刻に直して結合する
+      part.forEach((sg) => all.push({ start: sg.start + s.startSec, end: sg.end + s.startSec, text: sg.text }));
     }
-    const segments = await STT.transcribe(this.audioBlob, this.current.lang);
-    this.current.transcript = segments.map((s) => s.text.trim()).join(' ');
+    this.current.transcript = all.map((s) => s.text.trim()).join(' ');
     // マーク時刻の前後を抜き出して「注目箇所」にする
     this.current.markedText = this.current.marks.map((t) => {
-      const near = segments.filter((s) => s.end >= t - 25 && s.start <= t + 10);
+      const near = all.filter((s) => s.end >= t - 25 && s.start <= t + 10);
       const txt = near.map((s) => s.text.trim()).join(' ');
       return `[${PracticeUtil.fmtTime(t * 1000)}] ${txt}`.trim();
     }).filter((s) => s.length > 12);
@@ -226,8 +275,54 @@ const Talk = {
   async summarize() {
     const c = this.current;
     if (!c.transcript) throw new Error('文字起こしがありません。');
+    const sys = c.kind === 'meeting' ? this._meetingPrompt() : this._talkPrompt();
 
-    const sys = `あなたは生命科学分野の研究者を補佐するアシスタントです。学会講演の文字起こしを読み、後でPCで整理しやすい要約を日本語で作成してください。
+    let user = `${c.kind === 'meeting' ? '会議名' : '講演タイトル'}: ${c.title}
+${c.kind === 'meeting' ? '参加者' : '発表者'}: ${c.speaker || '不明'}
+${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '不明'}
+録音時間: ${PracticeUtil.fmtTime(c.durationMs)}`;
+
+    if (c.markedText && c.markedText.length) {
+      user += `\n\n「重要」とマークした箇所(特に丁寧に反映してください):\n${c.markedText.join('\n')}`;
+    }
+    if (c.note) user += `\n\nメモ:\n${c.note}`;
+    user += `\n\n文字起こし:\n${c.transcript.slice(0, 40000)}`;
+
+    c.summary = await AI.chat(sys, [{ role: 'user', content: user }], 3000);
+    return c.summary;
+  },
+
+  /** 👥 ミーティング用: 議事録形式+話者のAI推定 */
+  _meetingPrompt() {
+    return `あなたは会議の議事録を作るアシスタントです。ミーティングの録音の文字起こしを読み、日本語で議事録を作成してください。
+
+注意: 文字起こしには話者の区別がありません。発言の内容・立場・口調の変化から話者を推定し、「話者A」「話者B」…と分けてください(参加者名が文脈から特定できる場合はその名前を使う)。推定なので間違いうることを議事録の冒頭に1行だけ注記し、確信の持てない発言は無理に割り当てないでください。
+
+出力はMarkdown形式で、以下の見出し構成に従ってください。該当が無い項目は「(なし)」と書いてください。
+
+## 概要
+この会議は何についてのものか、2〜3文で。
+
+## 議題と論点
+話し合われたトピックごとに、主な論点を箇条書きで。
+
+## 決定事項
+決まったことを箇条書きで。決まっていないが方向性が出たものは「(仮)」を付ける。
+
+## TODO・宿題
+誰が・何を・いつまでに(わかる範囲で)。
+
+## 話者ごとの主な発言
+- **話者A**: 主な発言・立場を2〜3行で
+- **話者B**: 同上(登場した人数分)
+
+## キーワード
+重要語を10個程度、カンマ区切りで。`;
+  },
+
+  /** 🎓 講演用(従来) */
+  _talkPrompt() {
+    return `あなたは生命科学分野の研究者を補佐するアシスタントです。学会講演の文字起こしを読み、後でPCで整理しやすい要約を日本語で作成してください。
 
 出力はMarkdown形式で、以下の見出し構成に従ってください。内容が読み取れない項目は「(聞き取れず)」と書いてください。専門用語・遺伝子名・手法名は英語のまま残してください。
 
@@ -250,20 +345,6 @@ const Talk = {
 
 ## キーワード
 重要語を10個程度、カンマ区切りで(英語)。`;
-
-    let user = `講演タイトル: ${c.title}
-発表者: ${c.speaker || '不明'}
-会場・セッション: ${c.venue || '不明'}
-録音時間: ${PracticeUtil.fmtTime(c.durationMs)}`;
-
-    if (c.markedText && c.markedText.length) {
-      user += `\n\n聴講者が「重要」とマークした箇所(特に丁寧に要約に反映してください):\n${c.markedText.join('\n')}`;
-    }
-    if (c.note) user += `\n\n聴講者のメモ:\n${c.note}`;
-    user += `\n\n文字起こし:\n${c.transcript.slice(0, 40000)}`;
-
-    c.summary = await AI.chat(sys, [{ role: 'user', content: user }], 3000);
-    return c.summary;
   },
 
   /* ---------- 共有 ---------- */
@@ -273,8 +354,8 @@ const Talk = {
     const d = new Date(c.date);
     const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     let doc = `# ${c.title}\n\n`;
-    doc += `- 発表者: ${c.speaker || '不明'}\n`;
-    if (c.venue) doc += `- 会場・セッション: ${c.venue}\n`;
+    doc += `- ${c.kind === 'meeting' ? '参加者' : '発表者'}: ${c.speaker || '不明'}\n`;
+    if (c.venue) doc += `- ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue}\n`;
     doc += `- 日時: ${dateStr}\n`;
     doc += `- 録音時間: ${PracticeUtil.fmtTime(c.durationMs)}\n`;
     if (c.note) doc += `\n## 自分のメモ\n\n${c.note}\n`;
@@ -365,7 +446,8 @@ const Talk = {
     const c = this.current;
     const list = JSON.parse(localStorage.getItem('lq_talks') || '[]');
     list.unshift({
-      id: c.id, date: c.date, title: c.title, speaker: c.speaker, venue: c.venue,
+      id: c.id, date: c.date, kind: c.kind || 'talk',
+      title: c.title, speaker: c.speaker, venue: c.venue,
       durationMs: c.durationMs, summary: c.summary, transcript: c.transcript,
       markedText: c.markedText || [], note: c.note
     });
@@ -377,8 +459,9 @@ const Talk = {
     const list = JSON.parse(localStorage.getItem('lq_talks') || '[]');
     const found = list.find((t) => t.id === id);
     if (found) {
-      this.current = Object.assign({ marks: [], lang: 'en' }, found);
+      this.current = Object.assign({ marks: [], lang: '', kind: 'talk' }, found);
       this.audioUrl = null;
+      this.audioUrls = [];
     }
     return found;
   }

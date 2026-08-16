@@ -1290,6 +1290,7 @@ function renderStatus() {
 document.getElementById('btn-talk-start').addEventListener('click', async () => {
   if (!AI.ensureKey('openai', '講演の録音・要約')) return;
   const meta = {
+    kind: document.getElementById('talk-kind').value,
     title: document.getElementById('talk-title').value.trim(),
     speaker: document.getElementById('talk-speaker').value.trim(),
     venue: document.getElementById('talk-venue').value.trim(),
@@ -1325,7 +1326,11 @@ async function talkTranscribeStep(lang) {
   try {
     if (lang !== undefined) Talk.current.lang = lang;
     el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中...</p>';
-    await Talk.transcribe();
+    await Talk.transcribe((done, total) => {
+      if (total > 1) {
+        el.innerHTML = `<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中... (パート ${done}/${total})</p>`;
+      }
+    });
     // ほぼ空なら黙って要約に進まず、原因と再試行の選択肢を出す
     const len = Talk.current.transcript.trim().length;
     if (len < 40) { renderTalkRetry(len); return; }
@@ -1379,7 +1384,7 @@ function renderTalkRetry(len) {
       <button class="btn-large primary" id="btn-talk-retry">🔁 もう一度文字起こしする</button>
       ${len > 0 ? '<button class="btn-large" id="btn-talk-force">この結果のまま要約する</button>' : ''}
     </div>
-    ${Talk.audioUrl ? `<p class="field-note">録音の確認:</p><audio controls src="${Talk.audioUrl}"></audio>` : ''}`;
+    ${talkAudioHtml() ? `<p class="field-note">録音の確認:</p>${talkAudioHtml()}` : ''}`;
   el.querySelector('#btn-talk-retry').addEventListener('click', () =>
     talkTranscribeStep(el.querySelector('#talk-retry-lang').value));
   const force = el.querySelector('#btn-talk-force');
@@ -1395,9 +1400,9 @@ function talkErrorView(err) {
     el.innerHTML += `<p class="field-note">文字起こしは保存しました。「聴講した講演」から確認できます。</p>
       <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
   }
-  if (Talk.audioUrl) {
-    el.innerHTML += `<p class="field-note" style="margin-top:12px">録音は再生できます:</p>
-      <audio controls src="${Talk.audioUrl}"></audio>`;
+  const audios = talkAudioHtml();
+  if (audios) {
+    el.innerHTML += `<p class="field-note" style="margin-top:12px">録音は再生できます:</p>${audios}`;
   }
 }
 
@@ -1412,7 +1417,7 @@ function renderTalkResult() {
         ${c.markedText && c.markedText.length ? ' · ⭐' + c.markedText.length : ''}
       </p>
     </div>
-    ${Talk.audioUrl ? `<audio controls src="${Talk.audioUrl}"></audio>` : ''}
+    ${talkAudioHtml()}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
     ${c.transcript ? `
       <details class="card" style="margin-top:10px">
@@ -1420,6 +1425,17 @@ function renderTalkResult() {
         <div class="transcript-box" style="margin-top:8px">${escapeHtml(c.transcript)}</div>
       </details>` : ''}
   `;
+}
+
+/** 録音の再生プレイヤーHTML(長時間録音はパートごとに分かれる) */
+function talkAudioHtml() {
+  const urls = (Talk.audioUrls && Talk.audioUrls.length)
+    ? Talk.audioUrls
+    : (Talk.audioUrl ? [Talk.audioUrl] : []);
+  if (!urls.length) return '';
+  return urls.map((u, i) => `
+    ${urls.length > 1 ? `<p class="field-note" style="margin:6px 0 2px">パート ${i + 1}(${i * 10}分〜)</p>` : ''}
+    <audio controls src="${u}"></audio>`).join('');
 }
 
 /* 共有・保存・コピー */
@@ -1511,11 +1527,31 @@ function renderTalkList() {
   el.innerHTML = list.map((t) => {
     const d = new Date(t.date);
     const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
-    return `<button class="talk-item" data-talk-id="${t.id}">
-      <span class="talk-item-title">${escapeHtml(t.title)}</span>
-      <span class="meta">${dateStr}${t.speaker ? ' · ' + escapeHtml(t.speaker) : ''} · ${PracticeUtil.fmtTime(t.durationMs)}${t.summary ? '' : ' · 要約なし'}</span>
-    </button>`;
+    return `<div class="talk-item-row">
+      <button class="talk-item" data-talk-id="${t.id}">
+        <span class="talk-item-title">${t.kind === 'meeting' ? '👥 ' : ''}${escapeHtml(t.title)}</span>
+        <span class="meta">${dateStr}${t.speaker ? ' · ' + escapeHtml(t.speaker) : ''} · ${PracticeUtil.fmtTime(t.durationMs)}${t.summary ? '' : ' · 要約なし'}</span>
+      </button>
+      <button class="talk-del" data-talk-del="${t.id}" aria-label="この要約を削除">🗑</button>
+    </div>`;
   }).join('');
+
+  // 🗑 削除
+  el.querySelectorAll('[data-talk-del]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = Number(btn.dataset.talkDel);
+      const item = list.find((t) => t.id === id);
+      const ok = await appConfirm(
+        `「${item ? item.title : 'この録音'}」の要約と文字起こしを削除しますか?\n(元に戻せません)`,
+        '🗑 削除');
+      if (!ok) return;
+      const rest = JSON.parse(localStorage.getItem('lq_talks') || '[]').filter((t) => t.id !== id);
+      localStorage.setItem('lq_talks', JSON.stringify(rest));
+      showToast('🗑 削除しました');
+      renderTalkList();
+    });
+  });
 
   el.querySelectorAll('[data-talk-id]').forEach((btn) => {
     btn.addEventListener('click', () => {
