@@ -750,6 +750,7 @@ const Learn = {
       try {
         if (!blob || blob.size < 800) throw new Error('録音が短すぎました');
         const result = await SpeakCheck.judge(blob, card);
+        this._lastSpeakBlob = blob;   // 自分の声の再生・波形表示用に保持
         this.finishSpeak(card, result);
       } catch (err) {
         this.locked = false;
@@ -814,12 +815,26 @@ const Learn = {
       ${mastered ? '<p class="fb-levelup">🎉 このカードを ⭐発話マスター しました!本番で使えます!</p>' : ''}
       ${!pass ? '<p class="field-note" style="text-align:center">お手本を聞いて、もう一度言ってみましょう。判定は「通じるか」基準なので気楽に!</p>' : ''}
       <p class="field-note" style="text-align:center">現在 ${SRS.stageIcon(rec.lv)} ${SRS.stageName(rec.lv)}</p>
+      ${this._lastSpeakBlob ? `
+        <div class="speak-analysis">
+          <p class="speak-analysis-title">🔬 発音のふりかえり</p>
+          <div class="lang-help-row">
+            <button class="btn-control" id="btn-play-mine">🎧 自分の声</button>
+            ${result.text && !pass ? '<button class="btn-control" id="btn-play-heard">🗣 聞こえた文の発音</button>' : ''}
+          </div>
+          <canvas id="speak-wave" class="speak-wave" width="600" height="90"></canvas>
+          <p class="field-note" id="speak-wave-note" style="text-align:center"></p>
+          ${result.stars < 3 ? `
+            <button class="btn-control" id="btn-speak-hint" style="width:100%">🇯🇵 AIに改善ポイントを聞く</button>
+            <div class="fb-explain-area hidden" id="speak-hint-area"></div>` : ''}
+        </div>` : ''}
       ${!pass ? '<button class="btn-large primary" id="btn-speak-retry">🔁 もう一度言ってみる</button>' : ''}
       <button class="btn-large ${pass ? 'primary' : ''}" id="btn-learn-next">次へ</button>
     `;
     stage.appendChild(fb);
     stage.querySelectorAll('.speak-rec-btn, #btn-speak-text').forEach((b) => { b.disabled = true; });
     document.getElementById('btn-fb-tts').addEventListener('click', () => playCardAudio(card, 0.85));
+    this.wireSpeakAnalysis(card, result);
     const retryBtn = document.getElementById('btn-speak-retry');
     if (retryBtn) {
       // 同じカードをその場で録り直す(idxは進めない)
@@ -832,6 +847,105 @@ const Learn = {
       this.idx++; this.renderStep();
     });
     fb.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  },
+
+  /** 🔬 発音ふりかえり: 自分の声・波形・聞こえた文・AIヒント */
+  wireSpeakAnalysis(card, result) {
+    const blob = this._lastSpeakBlob;
+    if (!blob) return;
+    // 🎧 自分の声を再生
+    const mine = document.getElementById('btn-play-mine');
+    if (mine) {
+      mine.addEventListener('click', () => {
+        try {
+          if (this._mineUrl) URL.revokeObjectURL(this._mineUrl);
+          this._mineUrl = URL.createObjectURL(blob);
+          new Audio(this._mineUrl).play();
+        } catch (_) { showToast('この端末では再生できませんでした'); }
+      });
+    }
+    // 🗣 Whisperが聞き取った文を、お手本と同じ声で読み上げる
+    // (自分の発音が相手にどう聞こえたかを、正しい発音との対比で体感する)
+    const heard = document.getElementById('btn-play-heard');
+    if (heard) {
+      heard.addEventListener('click', () => {
+        if (typeof LangHelp !== 'undefined') LangHelp.speakMany([result.text, card.t]);
+      });
+    }
+    // 波形: 自分の声(+お手本録音があれば下段に比較表示)
+    this.drawWave(blob, card);
+    // 🇯🇵 AIヒント
+    const hintBtn = document.getElementById('btn-speak-hint');
+    const area = document.getElementById('speak-hint-area');
+    if (hintBtn && area) {
+      hintBtn.addEventListener('click', async () => {
+        hintBtn.disabled = true;
+        area.classList.remove('hidden');
+        area.innerHTML = '<p class="field-note">🤖 発音を分析しています…</p>';
+        try {
+          const text = await LangHelp.pronunciationHint(card, result);
+          area.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
+        } catch (err) {
+          area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+          hintBtn.disabled = false;
+        }
+      });
+    }
+  },
+
+  /** 録音Blobの波形をcanvasに描く。お手本録音(VoiceStore)があれば上下2段で比較 */
+  async drawWave(blob, card) {
+    const canvas = document.getElementById('speak-wave');
+    const note = document.getElementById('speak-wave-note');
+    if (!canvas) return;
+    const hasModel = (typeof VoiceStore !== 'undefined') && VoiceStore.has(card.id);
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ac = new Ctx();
+      const peaks = async (b) => {
+        const buf = await ac.decodeAudioData(await b.arrayBuffer());
+        const data = buf.getChannelData(0);
+        const N = 120, step = Math.max(1, Math.floor(data.length / N)), out = [];
+        for (let i = 0; i < N; i++) {
+          let m = 0;
+          for (let j = i * step; j < Math.min(data.length, (i + 1) * step); j++) {
+            const v = Math.abs(data[j]); if (v > m) m = v;
+          }
+          out.push(m);
+        }
+        const mx = Math.max(0.01, ...out);
+        return out.map((v) => v / mx);   // 音量差ではなくリズムを見るため正規化
+      };
+      const minePeaks = await peaks(blob);
+      const modelPeaks = hasModel ? await peaks(await VoiceStore.get(card.id)) : null;
+      ac.close();
+
+      const g = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      g.clearRect(0, 0, W, H);
+      const drawRow = (ps, y0, h, color, label) => {
+        g.fillStyle = color;
+        const bw = W / ps.length;
+        ps.forEach((v, i) => {
+          const bh = Math.max(2, v * (h - 14));
+          g.fillRect(i * bw + 1, y0 + (h - bh) / 2, bw - 2, bh);
+        });
+        g.fillStyle = 'rgba(226,232,240,0.75)';
+        g.font = '12px sans-serif';
+        g.fillText(label, 6, y0 + 13);
+      };
+      if (modelPeaks) {
+        drawRow(modelPeaks, 0, H / 2, 'rgba(56,189,248,0.8)', '❤️ お手本');
+        drawRow(minePeaks, H / 2, H / 2, 'rgba(250,204,21,0.8)', '🎤 あなた');
+        if (note) note.textContent = '波形は「音のリズム・区切り」の比較用です(音量は正規化)。山の数と間を見比べてみましょう';
+      } else {
+        drawRow(minePeaks, 0, H, 'rgba(250,204,21,0.8)', '🎤 あなた');
+        if (note) note.textContent = 'あなたの声のリズムです。お手本録音があると上下で比較できます';
+      }
+    } catch (_) {
+      canvas.style.display = 'none';   // 波形非対応の端末では隠すだけ
+      if (note) note.textContent = '';
+    }
   },
 
   startTimer(limitSec, onTimeout) {

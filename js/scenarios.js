@@ -31,7 +31,7 @@ const SCENARIOS = [
             why: '無難ですが、学会という共通の話題があるのに天気を選ぶのはもったいない。会話が続きにくくなります。'
           },
           {
-            text: 'Hello. What is your research topic?',
+            text: 'Hello. Excuse me. What is your research topic? Please tell me about your research topic in detail.',
             delta: 1,
             why: '悪くはありませんが、いきなり本題だと面接のような印象に。まず自己紹介を挟むと柔らかくなります。'
           },
@@ -52,7 +52,7 @@ const SCENARIOS = [
             why: '最良。相手の分野に**具体的な興味**を示しつつ、自分の知識ともつなげています。相手が語りやすい問いです。'
           },
           {
-            text: 'Thank you. Actually, in my lab we also found something similar...',
+            text: 'Thank you. Actually, in my lab we also found something similar last year — let me explain our data first...',
             delta: -1,
             why: '相手が自分の話を始めた直後に話題を自分に引き戻すと、「聞いてくれない人」という印象になります。**自分の話は一往復待つ**のが基本です。'
           },
@@ -114,7 +114,7 @@ const SCENARIOS = [
             why: '唐突すぎて、話がつまらなかったのかと思われかねません。締めの一言があるだけで印象が変わります。'
           },
           {
-            text: 'Nice to meet you. Can I have your email? I want to send you my papers.',
+            text: 'It was so nice to meet you. Can I have your email address? I want to send you all of my papers and preprints tonight.',
             delta: 0,
             why: '連絡先を交換すること自体は良いのですが、いきなり論文を送る前提だと押しが強い印象に。まず「また話したい」と伝える方が自然です。'
           }
@@ -152,7 +152,7 @@ const SCENARIOS = [
             why: '間は埋まりますが、中身がないので次の沈黙がすぐ来ます。'
           },
           {
-            text: 'What do you think about the keynote this morning?',
+            text: 'By the way, what did you think about the keynote presentation this morning? I heard mixed opinions about it.',
             delta: 2,
             why: '共通体験に戻る良い方法です。ただし相手が朝のセッションにいなかった可能性もあるので、少し確認を挟むとより安全です。'
           }
@@ -173,7 +173,7 @@ const SCENARIOS = [
             why: '話題を変えるのは選択肢ですが、毎回変えていると表面的な会話に終始します。一度は掘り下げてみましょう。'
           },
           {
-            text: 'Really? I thought it was excellent!',
+            text: 'Really? I thought it was excellent! Especially the imaging part — that was beautiful, was it not?',
             delta: 1,
             why: '意見が違うこと自体は良いのですが、否定から入ると相手が萎縮します。「どこが気になった?」と聞く方が会話が続きます。'
           },
@@ -194,7 +194,7 @@ const SCENARIOS = [
             why: '最良。**知らないことを認めた上で質問する**のは、研究者同士では非常に好まれます。相手も説明しやすくなります。'
           },
           {
-            text: 'Yes, yes, I know. We have the same problem.',
+            text: 'Yes, yes, I know exactly what you mean. We have exactly the same problem in our lab too, actually.',
             delta: -2,
             why: '知ったかぶりは高い確率で見抜かれます。次の質問で答えられず気まずくなるリスクもあります。'
           },
@@ -225,7 +225,7 @@ const SCENARIOS = [
             why: '相手はおそらく誘おうとしていました。せっかくの機会を逃しています。'
           },
           {
-            text: 'I have some plans, but I could change them.',
+            text: 'I do have some plans in the evening, but I could probably change them around if it is really necessary.',
             delta: 1,
             why: '前向きですが曖昧です。相手に判断を委ねると、結局流れてしまうことが多いです。'
           },
@@ -284,7 +284,7 @@ const SCENARIOS = [
             why: '最良。**なぜ重要か**を、身近な言葉と結果に結びつけて説明しています。相手が次を聞きたくなる答えです。'
           },
           {
-            text: 'That\'s a good question. Actually, it\'s still controversial in the field.',
+            text: 'That\'s a very good question. Actually, it\'s still quite controversial in the field, and researchers disagree a lot.',
             delta: 1,
             why: '誠実ですが、聞き手は「で、あなたはどう考えるのか」を知りたいはずです。議論を紹介した後に自分の立場も述べましょう。'
           },
@@ -315,7 +315,7 @@ const SCENARIOS = [
             why: '社交辞令で終わってしまいます。相手は具体的な話をする準備がありました。'
           },
           {
-            text: 'Sure! I can send you all our data and protocols tonight.',
+            text: 'Sure, of course! I can send you all of our raw data and all of our protocols tonight if you want them.',
             delta: 1,
             why: '積極的なのは良いのですが、話す前にデータを渡す約束をするのは早すぎます。まず内容をすり合わせましょう。'
           },
@@ -341,7 +341,7 @@ const SCENARIOS = [
             why: '相手にボールを渡すと、忙しさに紛れて流れます。自分から送る方が確実です。'
           },
           {
-            text: 'We can find each other on ResearchGate.',
+            text: 'Well, we can probably find each other on ResearchGate or Google Scholar somehow, so it should be fine.',
             delta: 1,
             why: '悪くありませんが、その場で確実に残す方法(名刺・メール)の方が確実です。'
           },
@@ -384,7 +384,7 @@ const SCENARIOS = [
             why: '収入・政治・宗教は、国際的な場では避けるのが基本です。関係が浅い段階では特に危険です。'
           },
           {
-            text: 'What do you think about the political situation here?',
+            text: 'By the way, honestly, what do you think about the political situation in this country these days?',
             delta: -2,
             why: '同様に避けるべき話題です。相手の立場が分からない状態で持ち出すと、気まずくなるリスクが高いです。'
           }
@@ -400,7 +400,7 @@ const SCENARIOS = [
             why: '最良。**自分を少し落として笑いを作り**、さらに質問を返しています。会話が明るく続きます。'
           },
           {
-            text: 'Actually, Japanese people can eat spicy food too.',
+            text: 'Actually, you know, Japanese people can eat spicy food too. Please do not underestimate us like that.',
             delta: -1,
             why: '軽い一般化に真面目に反論すると、場の空気が固くなります。冗談には冗談で返すのが安全です。'
           },
@@ -436,7 +436,7 @@ const SCENARIOS = [
             why: '中身がなく、相手は次に何を言えばいいか困ります。'
           },
           {
-            text: 'It\'s expensive now, so maybe not the best time.',
+            text: 'Honestly, Japan is quite expensive now because of the exchange rate, so maybe it is not the best time to visit.',
             delta: -1,
             why: '相手の前向きな話を否定から受けています。まず歓迎の姿勢を示しましょう。'
           }
@@ -452,7 +452,7 @@ const SCENARIOS = [
             why: '最良。**次の予定につながる情報**を集めています。車中2時間の会話の準備として非常に有効です。'
           },
           {
-            text: 'Thank you for tonight. See you tomorrow.',
+            text: 'Thank you very much for tonight — it was really fun. See you tomorrow at the venue, same time as today.',
             delta: 2,
             why: '丁寧で良い締めです。ただ、もう一歩踏み込む余地がありました。'
           },

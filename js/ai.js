@@ -233,6 +233,31 @@ const LangHelp = {
     return AI.chat(sys, [{ role: 'user', content: parts.join('\n\n') }], 700);
   },
 
+  /** 発話チェックの結果から、発音の改善ポイントを日本語で解説する */
+  async pronunciationHint(card, result) {
+    const langName = card.lang === 'ko' ? '韓国語' : '広東語';
+    const sys = `あなたは日本人向けの${langName}発音コーチです。学習者が目標フレーズを発音し、音声認識(Whisper)が聞き取った結果と比べて、どこがどう違ったのかを日本語で具体的に解説してください。
+
+前提: 音声認識の結果は完璧ではありません。認識のブレの可能性にも一言触れつつ、それでも改善に役立つ指摘をしてください。
+
+出力形式(Markdown、全体で12行以内。スマホで読みます):
+## どう聞こえたか
+- 目標とのずれを1〜2行で(どの単語・どの音が別の音に化けたか)
+## 直すポイント
+- ずれた音を最大3つ。それぞれ「カタカナでの近似 → 口・舌の動かし方のコツ」の形で(用語は\`バッククォート\`、強調は**太字**)
+## 練習のコツ
+- 1行。次の1回で意識すること`;
+    const user = `目標フレーズ(${langName}): ${card.t}
+読み: ${card.k}(${card.r})
+意味: ${card.ja}
+
+Whisperが聞き取った結果: 「${result.text || '(無音/認識できず)'}」
+文字一致率: ${Math.round((result.ratio || 0) * 100)}%
+
+私の発音のどこを直せばよいですか?`;
+    return AI.chat(sys, [{ role: 'user', content: user }], 800);
+  },
+
   /** 解説画面に埋め込むボタン行のHTML */
   buttonsHtml() {
     return `
