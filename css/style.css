@@ -1825,3 +1825,25 @@ audio { width: 100%; margin-bottom: 12px; }
   color: var(--accent); font-weight: bold;
 }
 .sim-done { color: var(--success); font-size: 0.75rem; margin-left: 4px; }
+
+/* 🎙️ 録音の音量インジケーター (v1.24.0) */
+.rec-meter { width: 100%; max-width: 420px; margin: 4px auto 8px; }
+.rec-meter-row { display: flex; align-items: center; gap: 8px; }
+.rec-meter-track {
+  flex: 1; height: 12px; border-radius: 6px;
+  background: #0f172a; border: 1px solid #334155;
+  overflow: hidden;
+}
+.rec-meter-fill {
+  height: 100%; width: 0%;
+  border-radius: 6px;
+  transition: width 0.12s linear, background-color 0.2s;
+  background: #4ade80;
+}
+.rec-meter-fill[data-zone="quiet"] { background: #64748b; }
+.rec-meter-fill[data-zone="ok"] { background: #4ade80; }
+.rec-meter-fill[data-zone="loud"] { background: #facc15; }
+.rec-meter-label {
+  font-size: 0.78rem; color: var(--text-dim);
+  text-align: center; margin-top: 5px; min-height: 1.2em;
+}

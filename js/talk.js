@@ -29,6 +29,7 @@ const Talk = {
       if (e.data.size > 0) this.chunks.push(e.data);
     };
     this.recorder.start(5000); // 5秒ごとにデータを確保(長時間録音でのメモリ対策)
+    this.setupMeter(stream);   // 🎙️ 音量インジケーター
 
     this.current = {
       id: Date.now(),
@@ -48,6 +49,86 @@ const Talk = {
     this.paused = false;
     this.timer = setInterval(() => this.updateUI(), 500);
     this.updateUI();
+  },
+
+  /* ---------- 🎙️ 音量インジケーター ---------- */
+  meterCtx: null,
+  analyser: null,
+  meterTimer: null,
+  _meterBuf: null,
+  _quietSince: 0,
+
+  /** マイク入力をWeb Audioで監視する(非対応端末では静かに諦める) */
+  setupMeter(stream) {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) throw new Error('no AudioContext');
+      this.meterCtx = new Ctx();
+      const src = this.meterCtx.createMediaStreamSource(stream);
+      this.analyser = this.meterCtx.createAnalyser();
+      this.analyser.fftSize = 1024;
+      src.connect(this.analyser);   // 出力(スピーカー)へはつながない
+      this._meterBuf = new Float32Array(this.analyser.fftSize);
+      this._quietSince = Date.now();
+      this.meterTimer = setInterval(() => this.updateMeter(), 120);
+      const box = document.getElementById('talk-meter');
+      if (box) box.classList.remove('hidden');
+    } catch (_) {
+      const box = document.getElementById('talk-meter');
+      if (box) box.classList.add('hidden');
+    }
+  },
+
+  /**
+   * 音量(RMS)を「量と評価」に変換する。テスト可能な純関数。
+   * 戻り値: { pct: 0-100, zone: 'quiet'|'ok'|'loud', label }
+   */
+  meterInfo(rms) {
+    const db = 20 * Math.log10(Math.max(rms, 1e-6));   // -120〜0 dBFS
+    const pct = Math.max(0, Math.min(100, Math.round((db + 60) / 60 * 100)));
+    if (db < -45) return { pct, zone: 'quiet', label: '🔇 音が小さいようです — 端末を音源に近づけてください' };
+    if (db > -6) return { pct, zone: 'loud', label: '⚠ 大きすぎるかも(音割れ注意) — 少し離すと安全です' };
+    return { pct, zone: 'ok', label: '✓ 十分な音量で録音できています' };
+  },
+
+  updateMeter() {
+    if (!this.analyser) return;
+    const fill = document.getElementById('talk-meter-fill');
+    const label = document.getElementById('talk-meter-label');
+    const warn = document.getElementById('talk-meter-warn');
+    if (!fill || !label) return;
+    if (this.paused) {
+      label.textContent = '⏸ 一時停止中(音量の監視も停止)';
+      fill.style.width = '0%';
+      fill.dataset.zone = 'quiet';
+      this._quietSince = Date.now();
+      if (warn) warn.classList.add('hidden');
+      return;
+    }
+    this.analyser.getFloatTimeDomainData(this._meterBuf);
+    let sum = 0;
+    for (let i = 0; i < this._meterBuf.length; i++) sum += this._meterBuf[i] * this._meterBuf[i];
+    const info = this.meterInfo(Math.sqrt(sum / this._meterBuf.length));
+    fill.style.width = info.pct + '%';
+    fill.dataset.zone = info.zone;
+    label.textContent = info.label;
+    // 10秒以上「小さすぎ」が続いたら強めの警告
+    if (info.zone === 'quiet') {
+      if (warn) warn.classList.toggle('hidden', Date.now() - this._quietSince < 10000);
+    } else {
+      this._quietSince = Date.now();
+      if (warn) warn.classList.add('hidden');
+    }
+  },
+
+  stopMeter() {
+    clearInterval(this.meterTimer);
+    this.meterTimer = null;
+    this.analyser = null;
+    if (this.meterCtx) {
+      try { this.meterCtx.close(); } catch (_) { /* 既に閉じている */ }
+      this.meterCtx = null;
+    }
   },
 
   elapsedMs() {
@@ -104,6 +185,7 @@ const Talk = {
   stop() {
     return new Promise((resolve) => {
       clearInterval(this.timer);
+      this.stopMeter();
       if (!this.recorder || this.recorder.state === 'inactive') { resolve(); return; }
       this.current.durationMs = this.elapsedMs();
       this.recorder.onstop = () => {
