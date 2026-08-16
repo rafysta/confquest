@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.24.0';
+const APP_VERSION = '1.24.1';
 const APP_BUILD = '2026-08-16';
 
 /**
@@ -9,6 +9,13 @@ const APP_BUILD = '2026-08-16';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.24.1',
+    date: '2026-08-16',
+    items: [
+      { type: 'fix', text: '📤 講演の「共有する」がPCで「Must be handling a user gesture」エラーになる問題を修正。共有の呼び出しを1回に整理し、共有が使えない・拒否された環境では自動でファイル保存(ダウンロード)に切り替わるようになりました' }
+    ]
+  },
   {
     version: '1.24.0',
     date: '2026-08-16',

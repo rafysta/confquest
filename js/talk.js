@@ -296,32 +296,42 @@ const Talk = {
     return `${d.toISOString().slice(0, 10)}_${safe}.md`;
   },
 
-  /** Android共有シートを開く。ファイル共有が使えなければテキスト共有にフォールバック */
+  /** 共有シートを開く(主にAndroid用)。
+   *  ⚠ ブラウザの共有は1クリックにつき1回しか呼べない(2回目は
+   *  "Must be handling a user gesture" エラーになる)ため、事前に
+   *  ファイル共有かテキスト共有かを決めて1回だけ呼ぶ。
+   *  共有が使えない・拒否された環境(PCなど)では自動でダウンロードに切り替える。 */
   async share(includeTranscript) {
     const doc = this.buildDocument(includeTranscript);
     const name = this.fileName();
 
-    if (navigator.canShare && typeof File !== 'undefined') {
+    // 共有ペイロードを先に決める(share()の呼び出しは1回だけ)
+    let payload = null;
+    if (navigator.share && navigator.canShare && typeof File !== 'undefined') {
       try {
         const file = new File([doc], name, { type: 'text/markdown' });
         if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: this.current.title });
-          return 'file';
+          payload = { files: [file], title: this.current.title };
         }
-      } catch (err) {
-        if (err && err.name === 'AbortError') return 'cancelled';
-      }
+      } catch (_) { /* File非対応の環境ではテキスト共有へ */ }
     }
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: this.current.title, text: doc });
-        return 'text';
-      } catch (err) {
-        if (err && err.name === 'AbortError') return 'cancelled';
-        throw err;
-      }
+    if (!payload && navigator.share) {
+      payload = { title: this.current.title, text: doc };
     }
-    throw new Error('この端末は共有機能に対応していません。ダウンロードかコピーをお使いください。');
+    if (!payload) {
+      // 共有API自体が無い環境 → ダウンロードで代替
+      this.download(includeTranscript);
+      return 'download';
+    }
+    try {
+      await navigator.share(payload);
+      return payload.files ? 'file' : 'text';
+    } catch (err) {
+      if (err && err.name === 'AbortError') return 'cancelled';
+      // PCなどで共有がブロックされた場合はファイル保存に切り替える(内容は同じ)
+      this.download(includeTranscript);
+      return 'download';
+    }
   },
 
   /** ファイルとして保存 */

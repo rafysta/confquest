@@ -1431,6 +1431,7 @@ document.getElementById('btn-talk-share').addEventListener('click', async () => 
   try {
     const mode = await Talk.share(includeTranscript());
     status.textContent = mode === 'cancelled' ? '共有をキャンセルしました'
+      : mode === 'download' ? '✓ この環境では共有が使えないため、ファイルとして保存しました(ダウンロードフォルダ)'
       : (mode === 'file' ? '✓ ファイルとして共有しました' : '✓ テキストとして共有しました');
   } catch (err) {
     status.textContent = '⚠ ' + err.message;
