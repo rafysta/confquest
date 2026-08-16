@@ -975,7 +975,9 @@ const Run = {
         <div class="shop-row">
           <span class="shop-icon">${RUN_ITEMS[id].icon}</span>
           <span class="shop-body"><strong>${RUN_ITEMS[id].name}</strong>
-            ${RUN_ITEMS[id].kind === 'bad' ? '<span class="field-note" style="color:var(--warn)">バッドアイテム — 売って処分!</span>' : ''}</span>
+            <span class="field-note">${RUN_ITEMS[id].desc}</span>
+            ${RUN_ITEMS[id].kind === 'bad' ? '<span class="field-note" style="color:var(--warn)">バッドアイテム — 売って処分!</span>' : ''}
+            ${RUN_ITEMS[id].kind === 'relic' ? '<span class="field-note" style="color:#c084fc">✨ 完走ボーナス付き — 売ると効果は失われます</span>' : ''}</span>
           <button class="btn-control" data-sell="${idx}">売る 💰${this.priceSell(id)}</button>
         </div>`).join('') : '<p class="field-note">売れるものがありません</p>'}
       <button class="btn-large primary" style="margin-top:14px" id="btn-shop-leave">店を出る</button>`;

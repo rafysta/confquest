@@ -784,10 +784,17 @@ const Learn = {
       if (!this.isFreeMode()) SRS.answer(card.id, pass);
       this.answered++;
       if (pass) this.correct++;
-      if (pass && (SRS.get(card.id) || {}).lv === 3) mastered = SRS.master(card.id);
     }
-    if (!pass && !this.queue.slice(this.idx + 1).some((q) => q.card.id === card.id)) {
-      this.queue.push({ type: 'quiz', card, retry: true });
+    // 言えたら昇格。何度目の挑戦でも「声に出して言えた」ことは同じ価値
+    if (pass && (SRS.get(card.id) || {}).lv === 3) mastered = SRS.master(card.id);
+    if (!pass) {
+      if (!this.queue.slice(this.idx + 1).some((q) => q.card.id === card.id)) {
+        this.queue.push({ type: 'quiz', card, retry: true });
+      }
+    } else {
+      // 言い直して成功したので、セッション末尾の再挑戦は取り下げる
+      this.queue = this.queue.filter((q, i) =>
+        i <= this.idx || !(q.retry && q.card.id === card.id));
     }
     const rec = SRS.get(card.id) || { lv: 3 };
     const starStr = '⭐'.repeat(result.stars) + '☆'.repeat(3 - result.stars);
@@ -805,13 +812,22 @@ const Learn = {
         <button class="tts-btn" id="btn-fb-tts">🔊 お手本を聞く</button>
       </div>
       ${mastered ? '<p class="fb-levelup">🎉 このカードを ⭐発話マスター しました!本番で使えます!</p>' : ''}
-      ${!pass ? '<p class="field-note" style="text-align:center">お手本を聞いてもう一度。判定は「通じるか」基準なので気楽に!</p>' : ''}
+      ${!pass ? '<p class="field-note" style="text-align:center">お手本を聞いて、もう一度言ってみましょう。判定は「通じるか」基準なので気楽に!</p>' : ''}
       <p class="field-note" style="text-align:center">現在 ${SRS.stageIcon(rec.lv)} ${SRS.stageName(rec.lv)}</p>
-      <button class="btn-large primary" id="btn-learn-next">次へ</button>
+      ${!pass ? '<button class="btn-large primary" id="btn-speak-retry">🔁 もう一度言ってみる</button>' : ''}
+      <button class="btn-large ${pass ? 'primary' : ''}" id="btn-learn-next">次へ</button>
     `;
     stage.appendChild(fb);
     stage.querySelectorAll('.speak-rec-btn, #btn-speak-text').forEach((b) => { b.disabled = true; });
     document.getElementById('btn-fb-tts').addEventListener('click', () => playCardAudio(card, 0.85));
+    const retryBtn = document.getElementById('btn-speak-retry');
+    if (retryBtn) {
+      // 同じカードをその場で録り直す(idxは進めない)
+      retryBtn.addEventListener('click', () => {
+        this.locked = false;
+        this.renderQuiz(card, 'speak');
+      });
+    }
     document.getElementById('btn-learn-next').addEventListener('click', () => {
       this.idx++; this.renderStep();
     });
