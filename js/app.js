@@ -51,6 +51,74 @@ function appDialog(msg, title, isConfirm) {
 function appAlert(msg, title) { return appDialog(msg, title, false); }
 function appConfirm(msg, title) { return appDialog(msg, title, true); }
 
+/* ---------- 🔑 APIキーが未設定のときの案内 ---------- */
+
+/**
+ * APIキーの取得手順を表示し、設定画面へ案内する。
+ * provider: 'claude' | 'openai' / what: 使おうとした機能名(任意)
+ */
+function showApiKeyHelp(provider, what) {
+  const info = (typeof API_KEY_INFO !== 'undefined' && API_KEY_INFO[provider]) ||
+    (typeof API_KEY_INFO !== 'undefined' ? API_KEY_INFO.claude : null);
+  if (!info) { appAlert('設定画面でAPIキーを登録してください。', '🔑 APIキーが必要'); return; }
+  const old = document.getElementById('apikey-help-overlay');
+  if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'apikey-help-overlay';
+  ov.innerHTML = `
+    <div class="modal-box apikey-box">
+      <h3>🔑 APIキーの設定が必要です</h3>
+      <p class="field-note">
+        ${escapeHtml(what || 'この機能')}はAIを使うため、<strong>${escapeHtml(info.name)}</strong> のAPIキーが必要です。
+        キーはこの端末にだけ保存され、外部には送られません。
+      </p>
+      <ol class="apikey-steps">
+        <li>${escapeHtml(info.site)}を開く<br>
+          <a class="apikey-link" href="${info.url}" target="_blank" rel="noopener">${escapeHtml(info.url)}</a></li>
+        <li>ログイン(アカウントが無ければ新規登録)して、支払い方法かクレジットを登録する</li>
+        <li>「Create key」でキーを作り、<code>${escapeHtml(info.prefix)}…</code> で始まる文字列をコピーする
+          <br><span class="field-note">※キーは作成直後しか表示されません</span></li>
+        <li>下のボタンで設定画面を開き、「${escapeHtml(info.fieldLabel)}」に貼り付けて保存する</li>
+      </ol>
+      <p class="apikey-cost">💰 ${escapeHtml(info.cost)}</p>
+      <button class="btn-large primary" id="btn-apikey-settings">⚙️ 設定画面を開いて入力する</button>
+      <button class="btn-large" id="btn-apikey-close">あとで</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  ov.querySelector('#btn-apikey-close').addEventListener('click', close);
+  ov.querySelector('#btn-apikey-settings').addEventListener('click', () => {
+    close();
+    showScreen('settings');
+    focusKeyField(info.field);
+  });
+}
+
+/** 設定画面の該当キー欄までスクロールして光らせる */
+function focusKeyField(fieldId) {
+  const input = document.getElementById(fieldId);
+  if (!input) return;
+  const field = input.closest('.field') || input;
+  field.classList.add('key-highlight');
+  try { field.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) { /* 古い端末 */ }
+  setTimeout(() => { try { input.focus(); } catch (_) { /* 無視 */ } }, 300);
+  setTimeout(() => field.classList.remove('key-highlight'), 6000);
+}
+
+/**
+ * AI系のエラーを共通処理する。キー未設定なら案内を出し、
+ * 画面に出すための短い日本語メッセージを返す。
+ */
+function aiErrorText(err) {
+  if (err && err.noKey) {
+    showApiKeyHelp(err.provider, err.what);
+    return '🔑 APIキーが未設定です。表示された手順に沿って設定画面で登録してください。';
+  }
+  return '⚠ ' + ((err && err.message) || '不明なエラー');
+}
+
 /* ---------- 画面遷移 ---------- */
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
@@ -266,9 +334,22 @@ function updateLearnMenuDesc() {
 }
 
 /* ---------- 設定 ---------- */
+/** 設定画面のキー欄に「設定済み / 未設定」を表示する */
+function renderKeyStatus() {
+  const mark = (elId, has) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = has ? ' ✓ 設定済み' : ' ⚠ 未設定';
+    el.className = 'key-status ' + (has ? 'ok' : 'ng');
+  };
+  mark('key-status-claude', !!localStorage.getItem('lq_api_key'));
+  mark('key-status-openai', !!localStorage.getItem('lq_openai_key'));
+}
+
 function loadSettings() {
   document.getElementById('api-key').value = localStorage.getItem('lq_api_key') || '';
   document.getElementById('openai-key').value = localStorage.getItem('lq_openai_key') || '';
+  renderKeyStatus();
   document.getElementById('ai-provider').value =
     localStorage.getItem('lq_ai_provider') || 'claude';
   document.getElementById('ai-model').value =
@@ -318,6 +399,7 @@ document.getElementById('save-settings').addEventListener('click', () => {
     EventDates.set('ko', document.getElementById('event-ko').value);
     EventDates.set('yue', document.getElementById('event-yue').value);
   }
+  renderKeyStatus();
   // 保存されたことをはっきり示す: ボタンの見た目変化+トースト通知
   const btn = document.getElementById('save-settings');
   btn.textContent = '✓ 保存しました';
@@ -386,10 +468,7 @@ document.getElementById('pdf-input').addEventListener('change', async (e) => {
 
 document.getElementById('start-practice').addEventListener('click', async () => {
   const enableTranscribe = document.getElementById('enable-transcribe').checked;
-  if (enableTranscribe && !localStorage.getItem('lq_openai_key')) {
-    appAlert('文字起こしにはOpenAI APIキーが必要です。設定画面で入力するか、文字起こしのチェックを外してください。', '🔑 APIキーが必要');
-    return;
-  }
+  if (enableTranscribe && !AI.ensureKey('openai', '録音の文字起こし')) return;
   const opts = {
     targetMinutes: parseFloat(document.getElementById('target-minutes').value) || 12,
     lang: document.getElementById('speech-lang').value,
@@ -467,7 +546,8 @@ function renderResults(s) {
         <div class="lbl">スライド数</div>
       </div>
     </div>
-    ${s.transcriptError ? `<p class="field-note" style="margin-bottom:12px;color:var(--warn)">⚠ 文字起こし失敗: ${escapeHtml(s.transcriptError)}</p>` : ''}
+    ${s.transcriptError ? `<p class="field-note" style="margin-bottom:12px;color:var(--warn)">⚠ 文字起こし失敗: ${escapeHtml(s.transcriptError)}${
+      /APIキー/.test(s.transcriptError) ? ' <button class="quest-nav" id="btn-transcript-key">🔑 APIキーを設定する</button>' : ''}</p>` : ''}
     ${s.fillerCount > 0 ? `<p class="field-note" style="margin-bottom:12px">Filler内訳: ${s.fillerDetail}</p>` : ''}
     ${Practice.audioUrl ? `<audio controls src="${Practice.audioUrl}"></audio>` : ''}
     <h3 style="margin-bottom:8px;font-size:1rem">スライドごとの記録</h3>
@@ -479,6 +559,9 @@ function renderResults(s) {
       <h3 style="margin-bottom:8px;font-size:1rem">文字起こし</h3>
       <div class="transcript-box">${escapeHtml(s.fullTranscript)}</div>` : ''}
   `;
+
+  const keyBtn = document.getElementById('btn-transcript-key');
+  if (keyBtn) keyBtn.addEventListener('click', () => showApiKeyHelp('openai', '録音の文字起こし'));
 
   // スコアのカウントアップアニメーション
   animateScore(score);
@@ -626,6 +709,7 @@ function renderMarkdown(src) {
 
 /* ---------- AIフィードバック ---------- */
 document.getElementById('btn-ai-feedback').addEventListener('click', async () => {
+  if (!AI.ensureKey(null, 'AIフィードバック')) return;
   const area = document.getElementById('ai-feedback-area');
   area.classList.remove('hidden');
   area.innerHTML = '<div class="spinner"></div>';
@@ -636,7 +720,7 @@ document.getElementById('btn-ai-feedback').addEventListener('click', async () =>
       `<p class="field-note md-source">— ${escapeHtml(label)} —</p>
        <div class="md-body">${renderMarkdown(text)}</div>`;
   } catch (err) {
-    area.innerHTML = `<p class="md-error">⚠ ${escapeHtml(err.message)}</p>`;
+    area.innerHTML = `<p class="md-error">${escapeHtml(aiErrorText(err))}</p>`;
   }
 });
 
@@ -655,6 +739,7 @@ document.getElementById('btn-qa-sim').addEventListener('click', () => {
 });
 
 document.getElementById('qa-start').addEventListener('click', async () => {
+  if (!AI.ensureKey(null, 'Q&Aシミュレータ')) return;
   document.getElementById('qa-start').style.display = 'none';
   QA.messages = [{ role: 'user', content: 'Please ask your first question about my presentation.' }];
   await qaAsk();
@@ -685,7 +770,7 @@ async function qaAsk() {
     addChatMsg('ai', reply);
   } catch (err) {
     spinner.remove();
-    addChatMsg('ai', '⚠ ' + err.message);
+    addChatMsg('ai', aiErrorText(err));
   }
 }
 
@@ -1192,10 +1277,7 @@ function renderStatus() {
 
 /* ---------- 講演の録音・要約 ---------- */
 document.getElementById('btn-talk-start').addEventListener('click', async () => {
-  if (!localStorage.getItem('lq_openai_key')) {
-    appAlert('文字起こしにOpenAI APIキーが必要です。設定画面で入力してください。', '🔑 APIキーが必要');
-    return;
-  }
+  if (!AI.ensureKey('openai', '講演の録音・要約')) return;
   const meta = {
     title: document.getElementById('talk-title').value.trim(),
     speaker: document.getElementById('talk-speaker').value.trim(),
@@ -1236,7 +1318,7 @@ document.getElementById('btn-talk-finish').addEventListener('click', async () =>
     renderTalkResult();
     actions.classList.remove('hidden');
   } catch (err) {
-    el.innerHTML = `<p class="md-error">⚠ ${escapeHtml(err.message)}</p>`;
+    el.innerHTML = `<p class="md-error">${escapeHtml(aiErrorText(err))}</p>`;
     if (Talk.current && Talk.current.transcript) {
       // 要約に失敗しても文字起こしは残す
       Talk.save();

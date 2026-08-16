@@ -1,6 +1,40 @@
 /* ConfQuest - AI連携 (Claude / OpenAI 切替可能 + 文字起こし) */
 'use strict';
 
+/* ---------- 🔑 APIキーの案内 ----------
+ * キーが未設定のまま機能を使うと、取得手順つきの案内を出す(app.jsのshowApiKeyHelp)。
+ * ここでは「キーが無い」ことが分かるエラー(err.noKey)を投げるところまでを担当する。
+ */
+const API_KEY_INFO = {
+  claude: {
+    name: 'Anthropic (Claude)',
+    field: 'api-key',
+    fieldLabel: 'Anthropic APIキー',
+    url: 'https://console.anthropic.com/settings/keys',
+    site: 'Anthropic Console',
+    prefix: 'sk-ant-',
+    cost: '会話1回で数円程度。使った分だけの従量課金です(事前に少額のクレジット購入が必要)。'
+  },
+  openai: {
+    name: 'OpenAI',
+    field: 'openai-key',
+    fieldLabel: 'OpenAI APIキー',
+    url: 'https://platform.openai.com/api-keys',
+    site: 'OpenAI Platform',
+    prefix: 'sk-',
+    cost: '文字起こしは約0.9円/分、会話1回は数円程度の従量課金です(事前に少額のクレジット購入が必要)。'
+  }
+};
+
+/** 「APIキーが無い」ことを示すエラーを作る。err.noKey / err.provider で判別できる */
+function apiKeyError(provider, what) {
+  const info = API_KEY_INFO[provider] || API_KEY_INFO.claude;
+  const err = new Error(`${what || 'この機能'}には ${info.name} のAPIキーが必要です。設定画面で登録してください。`);
+  err.noKey = true;
+  err.provider = provider;
+  return err;
+}
+
 /** OpenAIによる文字起こし */
 const STT = {
   getKey() {
@@ -15,9 +49,7 @@ const STT = {
    */
   async transcribe(blob, lang, prompt) {
     const key = this.getKey();
-    if (!key) {
-      throw new Error('OpenAI APIキーが未設定です。設定画面で入力してください。');
-    }
+    if (!key) throw apiKeyError('openai', '音声の文字起こし');
     const ext = (blob.type.includes('ogg')) ? 'ogg'
       : (blob.type.includes('mp4') ? 'mp4' : 'webm');
     const model = this.getModel();
@@ -75,11 +107,27 @@ const AI = {
    * 選択中のプロバイダのAPIを呼ぶ。messages: [{role, content}]
    * 戻り値: アシスタントのテキスト
    */
+  /** 現在のプロバイダのキーが登録されているか */
+  hasKey() { return !!this.getKey(); },
+
+  /**
+   * AI機能に入る前のチェック。キーが無ければ案内を出してfalseを返す。
+   * provider省略時は現在のAIプロバイダ、'openai'指定で文字起こし用のキーを見る。
+   */
+  ensureKey(provider, what) {
+    const p = provider || this.getProvider();
+    const key = p === 'openai'
+      ? (localStorage.getItem('lq_openai_key') || '')
+      : (localStorage.getItem('lq_api_key') || '');
+    if (key) return true;
+    if (typeof showApiKeyHelp === 'function') showApiKeyHelp(p, what);
+    else if (typeof appAlert === 'function') appAlert(apiKeyError(p, what).message, '🔑 APIキーが必要');
+    return false;
+  },
+
   async chat(systemPrompt, messages, maxTokens = 1500) {
     const key = this.getKey();
-    if (!key) {
-      throw new Error(`${this.providerLabel()} のAPIキーが設定されていません。設定画面で入力してください。`);
-    }
+    if (!key) throw apiKeyError(this.getProvider());
     return this.getProvider() === 'openai'
       ? this._chatOpenAI(key, systemPrompt, messages, maxTokens)
       : this._chatClaude(key, systemPrompt, messages, maxTokens);
@@ -295,7 +343,8 @@ Whisperが聞き取った結果: 「${result.text || '(無音/認識できず)'}
           const text = await this.explainTurn(ctx);
           area.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
         } catch (err) {
-          area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+          const msg = (typeof aiErrorText === 'function') ? aiErrorText(err) : '⚠ ' + err.message;
+          area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(msg)}</p>`;
           exBtn.disabled = false;
         }
       });

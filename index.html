@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.21.0">
+<link rel="stylesheet" href="css/style.css?v=1.22.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -502,14 +502,16 @@ window.addEventListener('unhandledrejection', function (e) {
       </select>
     </label>
     <label class="field">
-      <span>Anthropic APIキー</span>
+      <span>Anthropic APIキー<span class="key-status" id="key-status-claude"></span></span>
       <input type="password" id="api-key" placeholder="sk-ant-...">
-      <span class="field-note">Claudeを使う場合に必要。この端末にのみ保存されます。</span>
+      <span class="field-note">Claudeを使う場合に必要。この端末にのみ保存されます。
+        <a class="apikey-link" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">🔗 キーを取得する(Anthropic Console)</a></span>
     </label>
     <label class="field">
-      <span>OpenAI APIキー</span>
+      <span>OpenAI APIキー<span class="key-status" id="key-status-openai"></span></span>
       <input type="password" id="openai-key" placeholder="sk-...">
-      <span class="field-note">文字起こしに必須。OpenAI GPTを使う場合もこのキーを使います。この端末にのみ保存されます。</span>
+      <span class="field-note">文字起こしに必須。OpenAI GPTを使う場合もこのキーを使います。この端末にのみ保存されます。
+        <a class="apikey-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">🔗 キーを取得する(OpenAI Platform)</a></span>
     </label>
     <label class="field">
       <span>文字起こしモデル</span>
@@ -634,23 +636,24 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.21.0"></script>
-<script src="js/ai.js?v=1.21.0"></script>
-<script src="js/practice.js?v=1.21.0"></script>
-<script src="js/talk.js?v=1.21.0"></script>
-<script src="js/scenarios.js?v=1.21.0"></script>
-<script src="js/convo.js?v=1.21.0"></script>
-<script src="js/cards.js?v=1.21.0"></script>
-<script src="js/minigames.js?v=1.21.0"></script>
-<script src="js/bosses.js?v=1.21.0"></script>
-<script src="js/run.js?v=1.21.0"></script>
-<script src="js/progress.js?v=1.21.0"></script>
-<script src="js/phrases.js?v=1.21.0"></script>
-<script src="js/voices.js?v=1.21.0"></script>
-<script src="js/learn.js?v=1.21.0"></script>
-<script src="js/route.js?v=1.21.0"></script>
-<script src="js/topics.js?v=1.21.0"></script>
-<script src="js/drive.js?v=1.21.0"></script>
-<script src="js/app.js?v=1.21.0"></script>
+<script src="js/version.js?v=1.22.0"></script>
+<script src="js/flags.js?v=1.22.0"></script>
+<script src="js/ai.js?v=1.22.0"></script>
+<script src="js/practice.js?v=1.22.0"></script>
+<script src="js/talk.js?v=1.22.0"></script>
+<script src="js/scenarios.js?v=1.22.0"></script>
+<script src="js/convo.js?v=1.22.0"></script>
+<script src="js/cards.js?v=1.22.0"></script>
+<script src="js/minigames.js?v=1.22.0"></script>
+<script src="js/bosses.js?v=1.22.0"></script>
+<script src="js/run.js?v=1.22.0"></script>
+<script src="js/progress.js?v=1.22.0"></script>
+<script src="js/phrases.js?v=1.22.0"></script>
+<script src="js/voices.js?v=1.22.0"></script>
+<script src="js/learn.js?v=1.22.0"></script>
+<script src="js/route.js?v=1.22.0"></script>
+<script src="js/topics.js?v=1.22.0"></script>
+<script src="js/drive.js?v=1.22.0"></script>
+<script src="js/app.js?v=1.22.0"></script>
 </body>
 </html>

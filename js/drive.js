@@ -135,6 +135,8 @@ const Drive = {
   /* ================= 進行 ================= */
 
   start(mode, passenger) {
+    // 出発前にAPIキーを確認(無ければ取得手順を案内して中断)
+    if (typeof AI !== 'undefined' && AI.ensureKey && !AI.ensureKey(null, 'ドライブシミュレータ')) return;
     this.state = {
       mode, passenger,
       goal: mode === 'full' ? 20 : 10,
@@ -160,7 +162,8 @@ const Drive = {
       this.addMsg('ai', reply);
     } catch (err) {
       spin.remove();
-      this.addMsg('ai', '⚠ ' + err.message + '\n\n(設定画面でAPIキーを確認してから、🏁で一度終了してやり直してください)');
+      this.addMsg('ai', this.errText(err) +
+        '\n\n(設定を直したら、🏁で一度終了してからもう一度出発してください)');
     }
   },
 
@@ -195,7 +198,7 @@ const Drive = {
       this.state.messages.pop();
       input.value = text;
       this.renderBar();
-      this.addMsg('ai', '⚠ ' + err.message);
+      this.addMsg('ai', this.errText(err));
     }
     this.state.busy = false;
   },
@@ -261,7 +264,7 @@ const Drive = {
       if (box) box.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
     } catch (err) {
       const box = document.getElementById('drive-critique');
-      if (box) box.innerHTML = `<p class="field-note">講評を取得できませんでした: ${escapeHtml(err.message)}</p>`;
+      if (box) box.innerHTML = `<p class="field-note">講評を取得できませんでした: ${escapeHtml(this.errText(err))}</p>`;
     }
   },
 
@@ -375,7 +378,7 @@ ${arriving ? '- You are NOW ARRIVING at Chung-Ang University: in THIS reply, wra
 (日本語訳)`;
         this._newsCache = await AI.chat(sys, [{ role: 'user', content: '3つお願いします。' }], 600);
       } catch (err) {
-        area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+        area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(this.errText(err))}</p>`;
         return;
       }
     }
@@ -423,11 +426,17 @@ ${arriving ? '- You are NOW ARRIVING at Chung-Ang University: in THIS reply, wra
       const text = await AI.chat(sys, [{ role: 'user', content: `相手の発言: ${lastAi.content}` }], 500);
       area.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
     } catch (err) {
-      area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+      area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(this.errText(err))}</p>`;
     }
   },
 
   /* ================= ユーティリティ ================= */
+
+  /** AIのエラーを表示用の文にする(APIキー未設定なら取得手順の案内も出す) */
+  errText(err) {
+    if (typeof aiErrorText === 'function') return aiErrorText(err);
+    return '⚠ ' + ((err && err.message) || '不明なエラー');
+  },
 
   addMsg(who, text) {
     const log = document.getElementById('drive-log');
