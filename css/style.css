@@ -1639,3 +1639,12 @@ audio { width: 100%; margin-bottom: 12px; }
   font-size: 0.88rem;
 }
 .fb-explain-area.hidden { display: none; }
+
+/* ♾️⭐ 自由練習・発話練習のCTA */
+.free-cta-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.free-cta-row .learn-cta { flex: 1; margin-bottom: 0; }
+.free-cta { border: 1px solid rgba(56, 189, 248, 0.3); }
+.free-cta .learn-cta-icon { font-size: 1.5rem; }
+@media (max-width: 420px) {
+  .free-cta-row { flex-direction: column; }
+}

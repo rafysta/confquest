@@ -272,6 +272,10 @@ function loadSettings() {
     localStorage.getItem('lq_stt_model') || 'whisper-1';
   document.getElementById('time-scale').value =
     localStorage.getItem('lq_time_scale') || '1.5';
+  document.getElementById('new-per-day').value =
+    localStorage.getItem('lq_new_per_day') || '5';
+  document.getElementById('review-cap').value =
+    localStorage.getItem('lq_review_cap') || '20';
   document.getElementById('filler-words').value =
     localStorage.getItem('lq_fillers') ||
     'um, uh, so, actually, basically, you know, kind of, I mean, like';
@@ -300,6 +304,8 @@ document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_openai_model', document.getElementById('openai-model').value);
   localStorage.setItem('lq_stt_model', document.getElementById('stt-model').value);
   localStorage.setItem('lq_time_scale', document.getElementById('time-scale').value);
+  localStorage.setItem('lq_new_per_day', document.getElementById('new-per-day').value);
+  localStorage.setItem('lq_review_cap', document.getElementById('review-cap').value);
   localStorage.setItem('lq_fillers', document.getElementById('filler-words').value);
   if (typeof EventDates !== 'undefined') {
     EventDates.set('ko', document.getElementById('event-ko').value);

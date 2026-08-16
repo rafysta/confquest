@@ -52,8 +52,16 @@ Speech.init();
 const SRS = {
   KEY: 'lq_srs',
   INTERVALS: [0, 1, 3, 7, 14, 30],  // box → 次回までの日数
-  REVIEW_CAP: 20,                    // 1日の復習上限(復習負債による挫折を防ぐ)
-  NEW_PER_DAY: 5,                    // 1日に新しく学べるカード数(言語ごとに別枠)
+  // 1日の上限は設定画面から変更できる(0 = 無制限)。既定値は復習20枚・新規5枚/言語。
+  DEFAULT_REVIEW_CAP: 20,
+  DEFAULT_NEW_PER_DAY: 5,
+  _num(key, def) {
+    const v = parseInt(localStorage.getItem(key), 10);
+    if (!Number.isFinite(v) || v < 0) return def;
+    return v === 0 ? Infinity : v;   // 0は「無制限」の意味
+  },
+  get REVIEW_CAP() { return this._num('lq_review_cap', this.DEFAULT_REVIEW_CAP); },
+  get NEW_PER_DAY() { return this._num('lq_new_per_day', this.DEFAULT_NEW_PER_DAY); },
 
   data() {
     try {
@@ -347,14 +355,40 @@ const Learn = {
           <span class="learn-cta-icon">✅</span>
           <span class="learn-cta-body">
             <strong>今日の復習は完了!</strong>
-            <span class="field-note">${counts.introduced ? '新しいカードを学びましょう' : '下のユニットから最初のカードを学びましょう'}</span>
+            <span class="field-note">${counts.introduced ? '新しいカードを学ぶか、♾️自由練習で好きなだけ復習できます' : '下のユニットから最初のカードを学びましょう'}</span>
           </span>
         </div>`}
+
+      ${(() => {
+        const poolN = this.freePool().length;
+        if (!poolN) return '';
+        const speakOk = (typeof SpeakCheck !== 'undefined') && SpeakCheck.available();
+        return `
+          <div class="free-cta-row">
+            <button class="learn-cta card free-cta" id="btn-learn-free">
+              <span class="learn-cta-icon">♾️</span>
+              <span class="learn-cta-body">
+                <strong>自由練習</strong>
+                <span class="field-note">学んだ${poolN}枚から10問・回数制限なし。復習の予定は変わりません</span>
+              </span>
+              <span class="learn-cta-go">▶</span>
+            </button>
+            ${speakOk ? `
+              <button class="learn-cta card free-cta" id="btn-learn-speak">
+                <span class="learn-cta-icon">⭐</span>
+                <span class="learn-cta-body">
+                  <strong>発話練習</strong>
+                  <span class="field-note">声に出して言う練習をいつでも。🌸のカードは⭐マスターに昇格できます</span>
+                </span>
+                <span class="learn-cta-go">▶</span>
+              </button>` : ''}
+          </div>`;
+      })()}
 
       <div class="learn-stats card">
         <div class="learn-stat"><span class="val">${counts.introduced}<span class="sub">/${counts.total}</span></span><span class="lbl">学習中</span></div>
         <div class="learn-stat"><span class="val">🌸${counts.bloomed}${counts.mastered ? ` ⭐${counts.mastered}` : ''}</span><span class="lbl">育った${counts.mastered ? '/マスター' : ''}</span></div>
-        <div class="learn-stat"><span class="val">${newRemain}</span><span class="lbl">今日の新規残り</span></div>
+        <div class="learn-stat"><span class="val">${newRemain === Infinity ? '∞' : newRemain}</span><span class="lbl">今日の新規残り</span></div>
         <div class="learn-stat-btns">
           <button class="btn-control" id="btn-learn-dex">📔 図鑑</button>
           <button class="btn-control" id="btn-learn-check">✍️ 監修${ReviewFlags.counts(lang).fix ? `<span class="fix-badge">${ReviewFlags.counts(lang).fix}</span>` : ''}</button>
@@ -420,6 +454,10 @@ const Learn = {
     document.getElementById('btn-learn-check').addEventListener('click', () => showScreen('learn-check'));
     const sn = document.getElementById('btn-learn-sniper');
     if (sn) sn.addEventListener('click', () => this.startSniper());
+    const fb = document.getElementById('btn-learn-free');
+    if (fb) fb.addEventListener('click', () => this.startFree());
+    const sp = document.getElementById('btn-learn-speak');
+    if (sp) sp.addEventListener('click', () => this.startSpeakPractice());
     el.querySelectorAll('[data-learn-unit]').forEach((b) =>
       b.addEventListener('click', () => this.startUnit(b.dataset.learnUnit)));
   },
@@ -431,6 +469,49 @@ const Learn = {
     this.queue = due.map((c) => ({ type: 'quiz', card: c }));
     this.beginSession('review', '📖 今日の復習');
   },
+
+  /** 自由練習の母集団: 導入済み・⚠️修正待ちでないカード */
+  freePool() {
+    return Phrases.byLang(this.lang)
+      .filter((c) => SRS.isIntroduced(c.id))
+      .filter((c) => ReviewFlags.get(c.id) !== 'fix');
+  },
+
+  /** ♾️ 自由練習: 何度でも・枚数制限なし。SRSの復習予定は変えない */
+  async startFree() {
+    const pool = this.freePool();
+    if (pool.length < 1) {
+      await appAlert('まず下のユニットからカードを学びましょう。学習したカードが自由練習の対象になります。', '♾️ 自由練習');
+      return;
+    }
+    const n = Math.min(10, pool.length);
+    this.queue = mgShuffle(pool).slice(0, n).map((c) => ({ type: 'quiz', card: c }));
+    this.beginSession('free', '♾️ 自由練習');
+  },
+
+  /** ⭐ 発話練習: 声に出して言う練習だけを、いつでも何度でも */
+  async startSpeakPractice() {
+    if (typeof SpeakCheck === 'undefined' || !SpeakCheck.available()) {
+      await appAlert('発話チェックにはOpenAI APIキーとマイクの許可が必要です。設定画面でキーを入力してください。', '⭐ 発話練習');
+      return;
+    }
+    const pool = this.freePool();
+    if (!pool.length) {
+      await appAlert('まず下のユニットからカードを学びましょう。', '⭐ 発話練習');
+      return;
+    }
+    const n = Math.min(8, pool.length);
+    // 🌸想起まで育ったカードを優先(⭐マスターへの昇格試験になるため)
+    const ranked = mgShuffle(pool).sort((a, b) => {
+      const la = (SRS.get(a.id) || { lv: 1 }).lv, lb = (SRS.get(b.id) || { lv: 1 }).lv;
+      return (lb === 3 ? 1 : 0) - (la === 3 ? 1 : 0);
+    });
+    this.queue = ranked.slice(0, n).map((c) => ({ type: 'quiz', card: c, mode: 'speak' }));
+    this.beginSession('free-speak', '⭐ 発話練習');
+  },
+
+  /** 自由練習系(SRSの予定を変えないモード)か */
+  isFreeMode() { return String(this.sessionKind || '').startsWith('free'); },
 
   async startUnit(unitId) {
     const u = Phrases.unit(unitId);
@@ -460,7 +541,8 @@ const Learn = {
       const label = LEARN_LANGS[u.lang].label;
       await appAlert(
         `今日の${label}の新規カードはもう満タンです(言語ごとに1日${SRS.NEW_PER_DAY}枚まで)。\n` +
-        'もう一方の言語の新規は別枠で学べます。欲張るより毎日続ける方が強くなります!',
+        'もう一方の言語の新規は別枠です。もっと進めたいときは設定画面で上限を変更できます。\n' +
+        'すでに学んだカードなら ♾️自由練習 で好きなだけ練習できます。',
         '🌱 今日はここまで');
       return;
     }
@@ -496,7 +578,7 @@ const Learn = {
     this.updateProgress();
     const step = this.queue[this.idx];
     if (step.type === 'intro') this.renderIntro(step.card);
-    else this.renderQuiz(step.card);
+    else this.renderQuiz(step.card, step.mode);
   },
 
   /* ----- 新カード紹介 ----- */
@@ -698,10 +780,11 @@ const Learn = {
     let mastered = false;
     if (this.firstTry[card.id]) {
       this.firstTry[card.id] = false;
-      SRS.answer(card.id, pass);
+      // 自由練習では復習スケジュールを動かさない。ただし⭐マスター昇格は認める
+      if (!this.isFreeMode()) SRS.answer(card.id, pass);
       this.answered++;
       if (pass) this.correct++;
-      if (pass && SRS.get(card.id).lv === 3) mastered = SRS.master(card.id);
+      if (pass && (SRS.get(card.id) || {}).lv === 3) mastered = SRS.master(card.id);
     }
     if (!pass && !this.queue.slice(this.idx + 1).some((q) => q.card.id === card.id)) {
       this.queue.push({ type: 'quiz', card, retry: true });
@@ -763,7 +846,7 @@ const Learn = {
     let levelUp = null;
     if (this.firstTry[card.id]) {
       this.firstTry[card.id] = false;
-      levelUp = SRS.answer(card.id, correct).levelUp;
+      if (!this.isFreeMode()) levelUp = SRS.answer(card.id, correct).levelUp;
       this.answered++;
       if (correct) this.correct++;
     }
@@ -809,9 +892,13 @@ const Learn = {
   finishSession() {
     const total = this.answered;
     const perfect = total > 0 && this.correct === total;
-    const earned = this.correct * 2 + (perfect ? 5 : 0) + (this.sessionKind === 'unit' ? 5 : 0);
+    const free = this.isFreeMode();
+    const earned = free
+      ? this.correct                                   // 自由練習は控えめ(周回対策)
+      : this.correct * 2 + (perfect ? 5 : 0) + (this.sessionKind === 'unit' ? 5 : 0);
     if (typeof Gami !== 'undefined' && earned) Gami.addPoints(earned);
-    if (typeof Quests !== 'undefined') Quests.tryComplete('study');
+    // デイリークエスト「ことばの習慣」は通常の学習セッションのみ対象
+    if (!free && typeof Quests !== 'undefined') Quests.tryComplete('study');
     SRS.checkCollectAchievements();
 
     const counts = SRS.counts(this.lang);
@@ -825,18 +912,24 @@ const Learn = {
           <span class="xp-chip points">⭐ +${earned} pt</span>
           <span class="xp-chip">🌸 育った ${counts.bloomed}/${counts.total}</span>
         </div>
-        ${due > 0
-          ? `<p class="field-note" style="margin-top:10px">📖 復習が残り${Math.min(due, SRS.REVIEW_CAP)}枚あります</p>`
-          : '<p class="field-note" style="margin-top:10px">✅ 今日の復習はすべて完了!</p>'}
+        ${free
+          ? '<p class="field-note" style="margin-top:10px">♾️ 自由練習は復習の予定を変えません。何度でもどうぞ</p>'
+          : (due > 0
+            ? `<p class="field-note" style="margin-top:10px">📖 復習が残り${Math.min(due, SRS.REVIEW_CAP)}枚あります</p>`
+            : '<p class="field-note" style="margin-top:10px">✅ 今日の復習はすべて完了!</p>')}
       </div>
       <div class="results-actions">
-        ${due > 0 ? '<button class="btn-large primary" id="btn-learn-more">📖 続けて復習する</button>' : ''}
+        ${free ? `<button class="btn-large primary" id="btn-learn-again">🔁 もう一度${this.sessionKind === 'free-speak' ? '発話練習' : '自由練習'}</button>` : ''}
+        ${!free && due > 0 ? '<button class="btn-large primary" id="btn-learn-more">📖 続けて復習する</button>' : ''}
         <button class="btn-large ${due > 0 ? '' : 'primary'}" data-nav="learn">ユニット一覧へ</button>
         <button class="btn-large" data-nav="home">ホームへ</button>
       </div>`;
 
     const more = document.getElementById('btn-learn-more');
     if (more) more.addEventListener('click', () => this.startReview());
+    const again = document.getElementById('btn-learn-again');
+    if (again) again.addEventListener('click', () =>
+      (this.sessionKind === 'free-speak' ? this.startSpeakPractice() : this.startFree()));
     document.querySelectorAll('#learn-stage [data-nav]').forEach((btn) =>
       btn.addEventListener('click', () => showScreen(btn.dataset.nav)));
   },
