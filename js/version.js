@@ -1,14 +1,23 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.26.0';
-const APP_BUILD = '2026-08-17';
+const APP_VERSION = '1.26.1';
+const APP_BUILD = '2026-08-18';
 
 /**
  * 更新履歴(新しい順)
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.26.1',
+    date: '2026-08-18',
+    items: [
+      { type: 'change', text: '❤️パートナー監修 第2回を反映(4件)。ご両親への呼びかけは「伯父/伯母」→香港で一般的な「Uncle / Auntie」に、聞き返しは「請再講多次」(一次→多次)に修正' },
+      { type: 'change', text: '「唔該,講慢啲吖」— 最後に吖(アー)を添えて柔らかいお願いに。「我唔明」→「我唔係好明(あまりよく分かりません)」とネイティブらしい響きに' },
+      { type: 'fix', text: '英語の借用語カード(Uncle / Auntie)は発音チェックの対象外にし、🌸想起問題で維持するようにしました' }
+    ]
+  },
   {
     version: '1.26.0',
     date: '2026-08-17',

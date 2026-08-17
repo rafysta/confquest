@@ -614,8 +614,10 @@ const Learn = {
     const lv = (SRS.get(card.id) || { lv: 1 }).lv;
     if (lv >= 4) return 'recall';  // マスター済みは高速な想起で維持
     if (lv === 3) {
-      // 🌸→⭐への昇格試験は「声に出して言う」。使えない環境では想起で維持
-      return (typeof SpeakCheck !== 'undefined' && SpeakCheck.available()) ? 'speak' : 'recall';
+      // 🌸→⭐への昇格試験は「声に出して言う」。
+      // 使えない環境、および発音判定に向かないカード(英語の借用語・2語並記)は想起で維持
+      return (typeof SpeakCheck !== 'undefined' && SpeakCheck.available() && !card.noSpeak)
+        ? 'speak' : 'recall';
     }
     if (lv === 2 && canHearCard(card)) return 'listen';
     return 'read';
