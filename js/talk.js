@@ -239,6 +239,29 @@ const Talk = {
     });
   },
 
+  /* ---------- 音声の扱い ----------
+   * 既定では録音音声は保存しない。要約が終わって画面を離れた時点で
+   * メモリから破棄する(要約・文字起こしは残る)。
+   * 残したい場合だけ TalkAudio(backup.js)に明示的に保存する。 */
+
+  /** メモリ上に再生できる録音があるか */
+  hasMemoryAudio() {
+    if (this.segments && this.segments.some((s) => s && s.blob && s.blob.size > 0)) return true;
+    return !!(this.audioBlob && this.audioBlob.size > 0);
+  },
+
+  /** メモリ上の録音を破棄する(保存済みのIndexedDBには触らない) */
+  discardAudio() {
+    if (this.audioUrls) {
+      this.audioUrls.forEach((u) => { try { URL.revokeObjectURL(u); } catch (_) { /* 無視 */ } });
+    }
+    this.audioUrls = [];
+    this.audioUrl = null;
+    this.audioBlob = null;
+    this.segments = [];
+    this.chunks = [];
+  },
+
   /* ---------- 文字起こし ---------- */
   /** 全セグメントを順に文字起こしして結合する。onProgress(done, total)で進捗を通知 */
   async transcribe(onProgress) {

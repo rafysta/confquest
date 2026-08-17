@@ -131,6 +131,12 @@ function aiErrorText(err) {
 
 /* ---------- 画面遷移 ---------- */
 function showScreen(name) {
+  // 要約画面を離れるとき、保存していない録音音声はメモリから破棄する(既定の動作)
+  const leaving = document.querySelector('.screen.active');
+  if (leaving && leaving.id === 'screen-talk-result' && name !== 'talk-result') {
+    releaseSavedAudioUrls();
+    if (typeof Talk !== 'undefined') Talk.discardAudio();
+  }
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
   document.getElementById(`screen-${name}`).classList.add('active');
   if (name === 'home') renderHome();
@@ -382,7 +388,30 @@ function loadSettings() {
     document.getElementById('event-yue').value = EventDates.get('yue');
   }
   document.getElementById('voice-check-result').innerHTML = '';
+  const keep = document.getElementById('keep-audio');
+  if (keep && typeof TalkAudio !== 'undefined') keep.checked = TalkAudio.keepDefault();
+  updateAudioUsage();
+  updateBackupInfo();
   updateProviderFields();
+}
+
+/** ⚙設定: 保存済み録音音声の使用量表示 */
+function updateAudioUsage() {
+  const el = document.getElementById('audio-usage');
+  if (!el || typeof TalkAudio === 'undefined') return;
+  const n = TalkAudio.count();
+  el.textContent = n
+    ? `現在の保存: ${n}件 ・ ${Backup.fmtBytes(TalkAudio.totalBytes())}`
+    : '現在の保存: なし';
+  const btn = document.getElementById('btn-audio-clear');
+  if (btn) btn.disabled = !n;
+}
+
+/** ⚙設定: 最後にバックアップした日時 */
+function updateBackupInfo() {
+  const el = document.getElementById('backup-last');
+  if (!el || typeof Backup === 'undefined') return;
+  el.textContent = Backup.lastBackupText(localStorage.getItem('lq_last_backup'));
 }
 
 /** 選択中のプロバイダに応じてモデル選択欄を出し分け */
@@ -419,6 +448,125 @@ document.getElementById('save-settings').addEventListener('click', () => {
     btn.classList.remove('saved');
   }, 1800);
   showToast('✓ 設定を保存しました');
+});
+
+/* ---------- 🎵 録音音声の保存設定 ---------- */
+const _keepAudio = document.getElementById('keep-audio');
+if (_keepAudio) _keepAudio.addEventListener('change', () => {
+  // 保存ボタンを押し忘れても効くよう、切り替えた時点で反映する
+  TalkAudio.setKeepDefault(_keepAudio.checked);
+  showToast(_keepAudio.checked
+    ? '🎵 これからの録音は音声も残します'
+    : '🎵 これからの録音は音声を残しません(既定)');
+});
+
+const _audioClear = document.getElementById('btn-audio-clear');
+if (_audioClear) _audioClear.addEventListener('click', async () => {
+  const n = TalkAudio.count();
+  if (!n) return;
+  const ok = await appConfirm(
+    `保存されている録音音声 ${n}件(${Backup.fmtBytes(TalkAudio.totalBytes())})をすべて削除しますか?\n(要約と文字起こしは残ります。音声は元に戻せません)`,
+    '🗑 録音音声の削除');
+  if (!ok) return;
+  await TalkAudio.clearAll();
+  updateAudioUsage();
+  showToast('🗑 録音音声を削除しました');
+});
+
+/* ---------- 💾 バックアップと復元 ---------- */
+let _backupBlob = null;
+let _backupName = '';
+
+const _bkExport = document.getElementById('btn-backup-export');
+if (_bkExport) _bkExport.addEventListener('click', async () => {
+  const status = document.getElementById('backup-status');
+  const share = document.getElementById('btn-backup-share');
+  const withAudio = document.getElementById('backup-audio').checked;
+  const withKeys = document.getElementById('backup-keys').checked;
+  _bkExport.disabled = true;
+  if (share) share.classList.add('hidden');
+  status.textContent = '準備しています…';
+  try {
+    const r = await Backup.create({
+      audio: withAudio,
+      keys: withKeys,
+      onProgress: (t) => { status.textContent = t; }
+    });
+    _backupBlob = r.blob;
+    _backupName = r.name;
+    // ダウンロード(PCなら保存先を選べる。Androidはダウンロードフォルダ)
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(r.blob);
+    a.download = r.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+    status.textContent = `✓ ${r.name}(${Backup.fmtBytes(r.bytes)})を保存しました。` +
+      'Nextcloudの同期フォルダやGoogle Driveに置いておくと、いつでも復元できます。';
+    if (share && navigator.share) share.classList.remove('hidden');
+    updateBackupInfo();
+  } catch (err) {
+    status.textContent = '⚠ バックアップを作成できませんでした: ' + err.message;
+  } finally {
+    _bkExport.disabled = false;
+  }
+});
+
+const _bkShare = document.getElementById('btn-backup-share');
+if (_bkShare) _bkShare.addEventListener('click', async () => {
+  const status = document.getElementById('backup-status');
+  if (!_backupBlob) return;
+  try {
+    const file = new File([_backupBlob], _backupName, { type: 'application/zip' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'ConfQuest バックアップ' });
+      status.textContent = '✓ 共有しました。Google DriveやNextcloudに保存できましたか?';
+    } else {
+      status.textContent = '⚠ この端末ではファイルの共有ができません。保存済みのファイルを手動でアップロードしてください。';
+    }
+  } catch (err) {
+    if (!err || err.name !== 'AbortError') status.textContent = '⚠ 共有できませんでした: ' + err.message;
+  }
+});
+
+const _bkImport = document.getElementById('btn-backup-import');
+if (_bkImport) _bkImport.addEventListener('click', () => document.getElementById('backup-file').click());
+
+const _bkFile = document.getElementById('backup-file');
+if (_bkFile) _bkFile.addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';   // 同じファイルをもう一度選べるように
+  if (!file) return;
+  const status = document.getElementById('backup-status');
+  status.textContent = 'バックアップの中身を確認しています…';
+  let insp;
+  try {
+    insp = await Backup.inspect(file);
+  } catch (err) {
+    status.textContent = '⚠ ' + err.message;
+    return;
+  }
+  const lines = Backup.summarize(insp.meta);
+  const ok = await appConfirm(
+    `このバックアップの内容:\n\n${lines.join('\n')}\n\n` +
+    'この端末の進行状況・設定をすべて置き換えます。今の状態は元に戻せません。\n' +
+    '(心配な場合は、先に今の状態のバックアップを取ってください)',
+    '⬆ バックアップから復元');
+  if (!ok) { status.textContent = '復元をキャンセルしました。'; return; }
+  status.textContent = '復元しています…';
+  try {
+    const st = await Backup.restore(insp, {
+      keys: !!insp.meta.includeKeys,
+      onProgress: (t) => { status.textContent = t; }
+    });
+    await appAlert(
+      `復元しました。\n\n設定・進行状況: ${st.keys}項目\nお手本・読み上げ音声: ${st.voices}件\n講演の音声: ${st.talks}件` +
+      (st.missing ? `\n⚠ 見つからなかった音声: ${st.missing}件` : '') +
+      '\n\nOKを押すとアプリを読み込み直します。',
+      '✓ 復元完了');
+    hardReload();
+  } catch (err) {
+    status.textContent = '⚠ 復元に失敗しました: ' + err.message;
+  }
 });
 
 /* ---------- 読み上げ音声の診断(Language Quest) ---------- */
@@ -1348,6 +1496,14 @@ async function talkSummarizeStep() {
     el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">要約を作成中...</p>';
     await Talk.summarize();
     Talk.save();
+    // ⚙設定で「録音音声を端末に残す」がオンなら、ここで自動保存する
+    if (typeof TalkAudio !== 'undefined' && TalkAudio.keepDefault() && Talk.hasMemoryAudio()) {
+      try {
+        await TalkAudio.saveCurrent();
+      } catch (err) {
+        showToast('⚠ 音声の保存に失敗: ' + err.message);
+      }
+    }
     if (typeof Achievements !== 'undefined') Achievements.unlock('first-talk');
     renderTalkResult();
     updateTranscriptToggle();
@@ -1384,11 +1540,13 @@ function renderTalkRetry(len) {
       <button class="btn-large primary" id="btn-talk-retry">🔁 もう一度文字起こしする</button>
       ${len > 0 ? '<button class="btn-large" id="btn-talk-force">この結果のまま要約する</button>' : ''}
     </div>
-    ${talkAudioHtml() ? `<p class="field-note">録音の確認:</p>${talkAudioHtml()}` : ''}`;
+    <p class="field-note">録音の確認:</p>
+    <div id="talk-audio-box"></div>`;
   el.querySelector('#btn-talk-retry').addEventListener('click', () =>
     talkTranscribeStep(el.querySelector('#talk-retry-lang').value));
   const force = el.querySelector('#btn-talk-force');
   if (force) force.addEventListener('click', () => talkSummarizeStep());
+  renderTalkAudioBox();
 }
 
 function talkErrorView(err) {
@@ -1400,10 +1558,8 @@ function talkErrorView(err) {
     el.innerHTML += `<p class="field-note">文字起こしは保存しました。「聴講した講演」から確認できます。</p>
       <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
   }
-  const audios = talkAudioHtml();
-  if (audios) {
-    el.innerHTML += `<p class="field-note" style="margin-top:12px">録音は再生できます:</p>${audios}`;
-  }
+  el.innerHTML += '<div id="talk-audio-box" style="margin-top:12px"></div>';
+  renderTalkAudioBox();
 }
 
 function renderTalkResult() {
@@ -1417,7 +1573,7 @@ function renderTalkResult() {
         ${c.markedText && c.markedText.length ? ' · ⭐' + c.markedText.length : ''}
       </p>
     </div>
-    ${talkAudioHtml()}
+    <div id="talk-audio-box"></div>
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
     ${c.transcript ? `
       <details class="card" style="margin-top:10px">
@@ -1425,6 +1581,7 @@ function renderTalkResult() {
         <div class="transcript-box" style="margin-top:8px">${escapeHtml(c.transcript)}</div>
       </details>` : ''}
   `;
+  renderTalkAudioBox();
 }
 
 /** 録音の再生プレイヤーHTML(長時間録音はパートごとに分かれる) */
@@ -1436,6 +1593,108 @@ function talkAudioHtml() {
   return urls.map((u, i) => `
     ${urls.length > 1 ? `<p class="field-note" style="margin:6px 0 2px">パート ${i + 1}(${i * 10}分〜)</p>` : ''}
     <audio controls src="${u}"></audio>`).join('');
+}
+
+/* ---------- 🎵 録音音声の保存(既定は破棄) ---------- */
+/* 保存済み音声を再生するためのObjectURL。画面を離れるときに必ず解放する */
+let _savedAudioUrls = [];
+function releaseSavedAudioUrls() {
+  _savedAudioUrls.forEach((u) => { try { URL.revokeObjectURL(u); } catch (_) { /* 無視 */ } });
+  _savedAudioUrls = [];
+}
+
+/**
+ * #talk-audio-box を描き直す。状態は3つ。
+ *  ① 端末に保存済み  → 再生 + ⬇ダウンロード + 🗑削除
+ *  ② メモリにある    → 再生 + 「この録音を残す」(離れると消える旨の注意つき)
+ *  ③ どちらも無い    → 保存されていない旨のひとこと
+ */
+async function renderTalkAudioBox() {
+  const box = document.getElementById('talk-audio-box');
+  if (!box || typeof TalkAudio === 'undefined') return;
+  const c = Talk.current;
+  if (!c) { box.innerHTML = ''; return; }
+  releaseSavedAudioUrls();
+
+  if (TalkAudio.has(c.id)) {
+    let rec = null;
+    try { rec = await TalkAudio.get(c.id); } catch (_) { /* 読めなければ未保存扱い */ }
+    const parts = (rec && rec.parts) || [];
+    if (parts.length) {
+      _savedAudioUrls = parts.map((p) => URL.createObjectURL(p.blob));
+      box.innerHTML = `<div class="card audio-box">
+        <p class="field-note">🎵 この録音の音声は端末に保存されています(${Backup.fmtBytes(rec.bytes || 0)})。</p>
+        ${_savedAudioUrls.map((u, i) => `
+          ${_savedAudioUrls.length > 1
+            ? `<p class="field-note" style="margin:6px 0 2px">パート ${i + 1}(${Math.round((parts[i].startSec || 0) / 60)}分〜)</p>` : ''}
+          <audio controls src="${u}"></audio>`).join('')}
+        <div class="audio-actions">
+          <button class="btn-control" id="btn-audio-dl" type="button">⬇ 音声ファイルを書き出す</button>
+          <button class="btn-control danger" id="btn-audio-del" type="button">🗑 音声を削除</button>
+        </div>
+      </div>`;
+      box.querySelector('#btn-audio-dl').addEventListener('click', () => downloadTalkAudio(parts, c));
+      box.querySelector('#btn-audio-del').addEventListener('click', async () => {
+        const ok = await appConfirm(
+          `「${c.title}」の録音音声を端末から削除しますか?\n(要約と文字起こしは残ります。音声は元に戻せません)`,
+          '🗑 音声を削除');
+        if (!ok) return;
+        await TalkAudio.remove(c.id);
+        showToast('🗑 音声を削除しました');
+        renderTalkAudioBox();
+      });
+      return;
+    }
+  }
+
+  if (Talk.hasMemoryAudio()) {
+    box.innerHTML = `<div class="card audio-box">
+      ${talkAudioHtml()}
+      <p class="field-note">⚠ この画面を離れると、録音音声は破棄されます(要約と文字起こしは残ります)。</p>
+      <button class="btn-audio-keep" id="btn-audio-save" type="button">🎵 この録音の音声を端末に残す</button>
+      <p class="field-note">毎回残したい場合は、⚙設定の「録音音声を端末に残す」をオンにしてください。</p>
+    </div>`;
+    box.querySelector('#btn-audio-save').addEventListener('click', async () => {
+      const btn = box.querySelector('#btn-audio-save');
+      btn.disabled = true;
+      btn.textContent = '保存しています…';
+      try {
+        // 一覧から開き直せるよう、要約が未保存ならここで記録も作る
+        const list = JSON.parse(localStorage.getItem('lq_talks') || '[]');
+        if (!list.some((t) => t.id === Talk.current.id)) Talk.save();
+        await TalkAudio.saveCurrent();
+        showToast('🎵 音声を端末に保存しました');
+        renderTalkAudioBox();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '🎵 この録音の音声を端末に残す';
+        appAlert('保存できませんでした: ' + err.message +
+          '\n\n端末の空き容量が足りない可能性があります。', '🎵 音声の保存');
+      }
+    });
+    return;
+  }
+
+  box.innerHTML = '<p class="field-note">🎵 この録音の音声は保存されていません(既定では要約のあと破棄されます)。</p>';
+}
+
+/** 保存した音声をファイルとして書き出す(パートごと) */
+function downloadTalkAudio(parts, c) {
+  const d = new Date(c.date);
+  const day = d.toISOString().slice(0, 10);
+  const safe = String(c.title || '録音').replace(/[\\/:*?"<>|]/g, '_').slice(0, 50);
+  parts.forEach((p, i) => {
+    setTimeout(() => {
+      const ext = Backup.extFor(p.blob.type);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(p.blob);
+      a.download = parts.length > 1
+        ? `${day}_${safe}_part${i + 1}.${ext}` : `${day}_${safe}.${ext}`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }, i * 600);   // 連続ダウンロードはブラウザに間隔が必要
+  });
+  showToast(parts.length > 1 ? `⬇ ${parts.length}個のファイルを保存中…` : '⬇ 保存しました');
 }
 
 /* 共有・保存・コピー */
@@ -1524,17 +1783,22 @@ function renderTalkList() {
     el.innerHTML = '<p class="empty-note">まだ録音した講演がありません。<br>学会で使ってみましょう!</p>';
     return;
   }
+  const hasAudio = (id) => typeof TalkAudio !== 'undefined' && TalkAudio.has(id);
   el.innerHTML = list.map((t) => {
     const d = new Date(t.date);
     const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
     return `<div class="talk-item-row">
       <button class="talk-item" data-talk-id="${t.id}">
-        <span class="talk-item-title">${t.kind === 'meeting' ? '👥 ' : ''}${escapeHtml(t.title)}</span>
+        <span class="talk-item-title">${t.kind === 'meeting' ? '👥 ' : ''}${escapeHtml(t.title)}${hasAudio(t.id) ? ' 🎵' : ''}</span>
         <span class="meta">${dateStr}${t.speaker ? ' · ' + escapeHtml(t.speaker) : ''} · ${PracticeUtil.fmtTime(t.durationMs)}${t.summary ? '' : ' · 要約なし'}</span>
       </button>
       <button class="talk-del" data-talk-del="${t.id}" aria-label="この要約を削除">🗑</button>
     </div>`;
   }).join('');
+  const audioCount = list.filter((t) => hasAudio(t.id)).length;
+  if (audioCount) {
+    el.innerHTML += `<p class="field-note" style="margin-top:10px">🎵 のついた ${audioCount}件は音声も端末に保存されています(合計 ${Backup.fmtBytes(TalkAudio.totalBytes())})。</p>`;
+  }
 
   // 🗑 削除
   el.querySelectorAll('[data-talk-del]').forEach((btn) => {
@@ -1542,10 +1806,12 @@ function renderTalkList() {
       e.stopPropagation();
       const id = Number(btn.dataset.talkDel);
       const item = list.find((t) => t.id === id);
+      const withAudio = hasAudio(id);
       const ok = await appConfirm(
-        `「${item ? item.title : 'この録音'}」の要約と文字起こしを削除しますか?\n(元に戻せません)`,
+        `「${item ? item.title : 'この録音'}」の要約と文字起こし${withAudio ? '、保存した音声' : ''}を削除しますか?\n(元に戻せません)`,
         '🗑 削除');
       if (!ok) return;
+      if (withAudio) await TalkAudio.remove(id);
       const rest = JSON.parse(localStorage.getItem('lq_talks') || '[]').filter((t) => t.id !== id);
       localStorage.setItem('lq_talks', JSON.stringify(rest));
       showToast('🗑 削除しました');
@@ -1567,7 +1833,9 @@ function renderTalkList() {
         document.getElementById('talk-result-content').innerHTML =
           `<div class="card"><h3 style="font-size:1.05rem">${escapeHtml(found.title)}</h3>
            <p class="field-note">要約がありません(作成時にエラー)。文字起こしのみ表示します。</p></div>
+           <div id="talk-audio-box"></div>
            <div class="transcript-box">${escapeHtml(found.transcript || '')}</div>`;
+        renderTalkAudioBox();
       }
     });
   });

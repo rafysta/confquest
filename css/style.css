@@ -1860,3 +1860,20 @@ audio { width: 100%; margin-bottom: 12px; }
   padding: 0 14px; font-size: 1rem; cursor: pointer;
 }
 .talk-del:active { transform: scale(0.95); color: var(--danger); }
+
+/* ---------- 🎵 録音音声の保存 (v1.26.0) ---------- */
+.audio-box { margin: 10px 0; }
+.audio-box audio { width: 100%; margin: 4px 0 8px; }
+/* カードの中なので、ボタンだとはっきり分かる見た目にする */
+.btn-audio-keep {
+  width: 100%; margin: 6px 0 4px;
+  background: var(--accent-dark); color: #fff;
+  border: none; border-radius: 12px;
+  padding: 13px; font-size: 0.95rem; font-weight: 700; cursor: pointer;
+}
+.btn-audio-keep:disabled { opacity: 0.55; }
+.audio-actions { display: flex; gap: 8px; margin-top: 8px; }
+.audio-actions .btn-control {
+  flex: 1; font-size: 0.85rem; padding: 11px 8px;
+  border: 1px solid rgba(255,255,255,0.18);
+}
