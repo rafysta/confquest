@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.11.1">
+<link rel="stylesheet" href="css/style.css?v=1.26.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -37,7 +37,7 @@ window.addEventListener('unhandledrejection', function (e) {
   <div class="streak-banner card" id="streak-banner">
     <span class="streak-flame">🔥</span>
     <span id="streak-text">連続 0 日</span>
-    <span class="points-badge" id="points-badge">⭐ 0 pt</span>
+    <button class="points-badge" id="points-badge" data-nav="status">⭐ 0 pt</button>
     <button class="gems-badge" id="gems-badge" data-nav="gemshop">💎 0</button>
   </div>
   <button class="quest-card" data-nav="quests">
@@ -57,6 +57,11 @@ window.addEventListener('unhandledrejection', function (e) {
         <span class="menu-icon">📚</span>
         <span class="menu-label">聴講した講演</span>
         <span class="menu-desc">保存した要約を見る・送る</span>
+      </button>
+      <button class="menu-btn" data-nav="topics">
+        <span class="menu-icon">🚗</span>
+        <span class="menu-label">雑談の準備</span>
+        <span class="menu-desc">車中・懇親会・Dinnerのネタ帳</span>
       </button>
     </div>
 
@@ -93,11 +98,31 @@ window.addEventListener('unhandledrejection', function (e) {
   <p class="version-footer" id="version-footer"></p>
 </section>
 
+<!-- 🚗 雑談クエスト: ネタ帳 -->
+<section id="screen-topics" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>🚗 雑談クエスト — ネタ帳</h2>
+  </header>
+  <div class="learn-tabs topics-tabs" id="topics-tabs"></div>
+  <div id="topics-content"></div>
+</section>
+
+<!-- 🤖 AI自由会話シミュレータ (雑談クエスト Phase 3) -->
+<section id="screen-drive" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" id="btn-drive-back">←</button>
+    <h2>🤖 AI自由会話</h2>
+  </header>
+  <div id="drive-content"></div>
+</section>
+
 <!-- 学会攻略: マップ -->
 <section id="screen-run-map" class="screen">
   <header class="screen-header">
     <button class="back-btn" data-nav="home">←</button>
     <h2>Day 1: レセプション</h2>
+    <button class="back-btn map-help-btn" id="btn-run-legend" aria-label="アイコンの説明">❓</button>
   </header>
   <div class="run-hud"></div>
   <div id="run-map-area" class="run-map-area"></div>
@@ -181,12 +206,20 @@ window.addEventListener('unhandledrejection', function (e) {
   </header>
   <div class="setup-form">
     <label class="field">
-      <span>講演タイトル</span>
+      <span>録音の種類</span>
+      <select id="talk-kind">
+        <option value="talk" selected>🎓 講演・発表</option>
+        <option value="meeting">👥 ミーティング・打ち合わせ</option>
+      </select>
+      <span class="field-note">ミーティングは議事録形式で要約します(決定事項・TODO・話者ごとの発言をAIが文脈から推定)。</span>
+    </label>
+    <label class="field">
+      <span>タイトル</span>
       <input type="text" id="talk-title" placeholder="Chromatin organization in senescence">
     </label>
     <label class="field">
-      <span>発表者(任意)</span>
-      <input type="text" id="talk-speaker" placeholder="Prof. Kim">
+      <span>発表者・参加者(任意)</span>
+      <input type="text" id="talk-speaker" placeholder="Prof. Kim / 田中さん、佐藤さん">
     </label>
     <label class="field">
       <span>会場・セッション(任意)</span>
@@ -195,12 +228,14 @@ window.addEventListener('unhandledrejection', function (e) {
     <label class="field">
       <span>講演の言語</span>
       <select id="talk-lang">
-        <option value="en" selected>英語</option>
+        <option value="" selected>自動判定(おすすめ)</option>
+        <option value="en">英語</option>
         <option value="ja">日本語</option>
         <option value="ko">韓国語</option>
       </select>
+      <span class="field-note">指定した言語はWhisperに強制されます。実際の音声と違う言語を選ぶと文字起こしが空になることがあるため、迷ったら自動判定のままで。</span>
     </label>
-    <p class="field-note">💡 個別の講演ごとに録音してください。30分程度までが目安です。</p>
+    <p class="field-note">💡 長い録音は10分ごとに自動で分割して文字起こしされるので、時間の制限はありません(2時間を超える場合は端末のメモリにご注意)。</p>
     <button class="btn-large primary" id="btn-talk-start">● 録音を開始</button>
   </div>
 </section>
@@ -212,9 +247,17 @@ window.addEventListener('unhandledrejection', function (e) {
       <span class="rec-dot big" id="talk-rec-dot"></span>
       <span id="talk-elapsed" class="talk-time">0:00</span>
     </div>
+    <div class="rec-meter" id="talk-meter">
+      <div class="rec-meter-row">
+        <span class="rec-meter-icon">🎙️</span>
+        <div class="rec-meter-track"><div class="rec-meter-fill" id="talk-meter-fill"></div></div>
+      </div>
+      <p class="rec-meter-label" id="talk-meter-label">マイクの音量を確認しています…</p>
+      <p class="pace-warning hidden" id="talk-meter-warn">⚠ しばらくほぼ無音です。マイクの位置・距離を確認してください</p>
+    </div>
     <p class="field-note" id="talk-rec-title"></p>
     <p class="field-note" id="talk-mark-count">マークなし</p>
-    <p class="pace-warning hidden" id="talk-size-warn">⚠ 録音が長くなっています。そろそろ終了してください</p>
+    <p class="pace-warning hidden" id="talk-size-warn">⚠ 録音が2時間を超えました。端末メモリのため、そろそろ区切るのがおすすめです</p>
     <button class="mark-btn" id="btn-talk-mark">
       <span class="mark-icon">⭐</span>
       <span>ここは重要</span>
@@ -234,8 +277,8 @@ window.addEventListener('unhandledrejection', function (e) {
 <!-- 講演録音: 結果 -->
 <section id="screen-talk-result" class="screen">
   <header class="screen-header">
-    <button class="back-btn" data-nav="home">←</button>
-    <h2>講演の要約</h2>
+    <button class="back-btn" data-nav="talk-list">←</button>
+    <h2>録音の要約</h2>
   </header>
   <div id="talk-result-content"></div>
   <div class="results-actions" id="talk-actions">
@@ -254,7 +297,7 @@ window.addEventListener('unhandledrejection', function (e) {
 <section id="screen-talk-list" class="screen">
   <header class="screen-header">
     <button class="back-btn" data-nav="home">←</button>
-    <h2>聴講した講演</h2>
+    <h2>録音した講演・会議</h2>
   </header>
   <div id="talk-list-content"></div>
 </section>
@@ -477,14 +520,16 @@ window.addEventListener('unhandledrejection', function (e) {
       </select>
     </label>
     <label class="field">
-      <span>Anthropic APIキー</span>
+      <span>Anthropic APIキー<span class="key-status" id="key-status-claude"></span></span>
       <input type="password" id="api-key" placeholder="sk-ant-...">
-      <span class="field-note">Claudeを使う場合に必要。この端末にのみ保存されます。</span>
+      <span class="field-note">Claudeを使う場合に必要。この端末にのみ保存されます。
+        <a class="apikey-link" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">🔗 キーを取得する(Anthropic Console)</a></span>
     </label>
     <label class="field">
-      <span>OpenAI APIキー</span>
+      <span>OpenAI APIキー<span class="key-status" id="key-status-openai"></span></span>
       <input type="password" id="openai-key" placeholder="sk-...">
-      <span class="field-note">文字起こしに必須。OpenAI GPTを使う場合もこのキーを使います。この端末にのみ保存されます。</span>
+      <span class="field-note">文字起こしに必須。OpenAI GPTを使う場合もこのキーを使います。この端末にのみ保存されます。
+        <a class="apikey-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">🔗 キーを取得する(OpenAI Platform)</a></span>
     </label>
     <label class="field">
       <span>文字起こしモデル</span>
@@ -511,6 +556,27 @@ window.addEventListener('unhandledrejection', function (e) {
     </label>
     <h3 class="about-section">Language Quest</h3>
     <label class="field">
+      <span>1日に学べる新しいカード(言語ごと)</span>
+      <select id="new-per-day">
+        <option value="5" selected>5枚(おすすめ・記憶に優しい)</option>
+        <option value="10">10枚</option>
+        <option value="15">15枚</option>
+        <option value="30">30枚(集中的に詰め込む)</option>
+        <option value="0">無制限</option>
+      </select>
+      <span class="field-note">上限を上げると短期的には進みますが、翌日以降の復習が一気に増えます。</span>
+    </label>
+    <label class="field">
+      <span>1日の復習上限</span>
+      <select id="review-cap">
+        <option value="20" selected>20枚(おすすめ)</option>
+        <option value="40">40枚</option>
+        <option value="60">60枚</option>
+        <option value="0">無制限</option>
+      </select>
+      <span class="field-note">上限を超えた分は翌日に繰り越されます。♾️自由練習なら上限に関係なく練習できます。</span>
+    </label>
+    <label class="field">
       <span>🎤 ISSY39(韓国)の開催日</span>
       <input type="date" id="event-ko">
       <span class="field-note">設定するとホームと学習画面にカウントダウンが表示されます。</span>
@@ -527,6 +593,46 @@ window.addEventListener('unhandledrejection', function (e) {
     </div>
     <button class="btn-large primary" id="save-settings">保存</button>
     <p class="field-note" id="settings-saved" style="display:none">✓ 保存しました</p>
+
+    <h3 class="about-section">🎵 録音音声の保存</h3>
+    <label class="field checkbox-field">
+      <input type="checkbox" id="keep-audio">
+      <span>講演・会議の録音音声を端末に残す</span>
+    </label>
+    <p class="field-note">
+      既定はオフです。要約と文字起こしができた時点で音声は破棄され、端末の容量を使いません。<br>
+      オンにすると録音音声が端末内に保存され、あとから聞き直したり、ファイルとして書き出したりできます
+      (32kbpsなので1時間あたり約15MB)。<br>
+      オフのままでも、録音のあとの画面で「🎵 この録音の音声を端末に残す」を押せば1件ずつ残せます。
+    </p>
+    <p class="field-note" id="audio-usage">現在の保存: なし</p>
+    <button class="btn-large" id="btn-audio-clear" type="button">🗑 保存した録音音声をすべて削除</button>
+
+    <h3 class="about-section">💾 バックアップと復元</h3>
+    <p class="field-note">
+      進行状況・設定・APIキー・録音の要約・お手本録音を、1つのZIPファイルにまとめて書き出します。
+      できたファイルを<strong>Nextcloudの同期フォルダやGoogle Drive</strong>に置いておけば、
+      端末が壊れても・機種を変えても、そのファイルから元どおりにできます。
+      別の端末で復元すれば、同じ環境で続きから遊べます。
+    </p>
+    <label class="field checkbox-field">
+      <input type="checkbox" id="backup-audio" checked>
+      <span>音声も含める(お手本録音・読み上げキャッシュ・保存した講演音声)</span>
+    </label>
+    <label class="field checkbox-field">
+      <input type="checkbox" id="backup-keys" checked>
+      <span>APIキーも含める</span>
+    </label>
+    <p class="field-note">
+      音声を含めるとファイルは大きくなりますが、パートナーに録ってもらったお手本もそのまま戻せます。<br>
+      ⚠ APIキーを含めたファイルは、他の人と共有しないでください。
+    </p>
+    <button class="btn-large primary" id="btn-backup-export" type="button">⬇ バックアップを作成</button>
+    <button class="btn-large hidden" id="btn-backup-share" type="button">📤 このバックアップを共有(Drive・Nextcloudなど)</button>
+    <button class="btn-large" id="btn-backup-import" type="button">⬆ バックアップから復元</button>
+    <input type="file" id="backup-file" accept=".zip,application/zip" class="hidden">
+    <p class="field-note" id="backup-status"></p>
+    <p class="field-note" id="backup-last"></p>
   </div>
 </section>
 
@@ -588,21 +694,25 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.11.1"></script>
-<script src="js/ai.js?v=1.11.1"></script>
-<script src="js/practice.js?v=1.11.1"></script>
-<script src="js/talk.js?v=1.11.1"></script>
-<script src="js/scenarios.js?v=1.11.1"></script>
-<script src="js/convo.js?v=1.11.1"></script>
-<script src="js/cards.js?v=1.11.1"></script>
-<script src="js/minigames.js?v=1.11.1"></script>
-<script src="js/bosses.js?v=1.11.1"></script>
-<script src="js/run.js?v=1.11.1"></script>
-<script src="js/progress.js?v=1.11.1"></script>
-<script src="js/phrases.js?v=1.11.1"></script>
-<script src="js/voices.js?v=1.11.1"></script>
-<script src="js/learn.js?v=1.11.1"></script>
-<script src="js/route.js?v=1.11.1"></script>
-<script src="js/app.js?v=1.11.1"></script>
+<script src="js/version.js?v=1.26.0"></script>
+<script src="js/flags.js?v=1.26.0"></script>
+<script src="js/ai.js?v=1.26.0"></script>
+<script src="js/practice.js?v=1.26.0"></script>
+<script src="js/talk.js?v=1.26.0"></script>
+<script src="js/backup.js?v=1.26.0"></script>
+<script src="js/scenarios.js?v=1.26.0"></script>
+<script src="js/convo.js?v=1.26.0"></script>
+<script src="js/cards.js?v=1.26.0"></script>
+<script src="js/minigames.js?v=1.26.0"></script>
+<script src="js/bosses.js?v=1.26.0"></script>
+<script src="js/run.js?v=1.26.0"></script>
+<script src="js/progress.js?v=1.26.0"></script>
+<script src="js/phrases.js?v=1.26.0"></script>
+<script src="js/voices.js?v=1.26.0"></script>
+<script src="js/learn.js?v=1.26.0"></script>
+<script src="js/route.js?v=1.26.0"></script>
+<script src="js/topics.js?v=1.26.0"></script>
+<script src="js/drive.js?v=1.26.0"></script>
+<script src="js/app.js?v=1.26.0"></script>
 </body>
 </html>
