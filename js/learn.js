@@ -52,16 +52,8 @@ Speech.init();
 const SRS = {
   KEY: 'lq_srs',
   INTERVALS: [0, 1, 3, 7, 14, 30],  // box → 次回までの日数
-  // 1日の上限は設定画面から変更できる(0 = 無制限)。既定値は復習20枚・新規5枚/言語。
-  DEFAULT_REVIEW_CAP: 20,
-  DEFAULT_NEW_PER_DAY: 5,
-  _num(key, def) {
-    const v = parseInt(localStorage.getItem(key), 10);
-    if (!Number.isFinite(v) || v < 0) return def;
-    return v === 0 ? Infinity : v;   // 0は「無制限」の意味
-  },
-  get REVIEW_CAP() { return this._num('lq_review_cap', this.DEFAULT_REVIEW_CAP); },
-  get NEW_PER_DAY() { return this._num('lq_new_per_day', this.DEFAULT_NEW_PER_DAY); },
+  REVIEW_CAP: 20,                    // 1日の復習上限(復習負債による挫折を防ぐ)
+  NEW_PER_DAY: 5,                    // 1日に新しく学べるカード数(言語ごとに別枠)
 
   data() {
     try {
@@ -355,59 +347,19 @@ const Learn = {
           <span class="learn-cta-icon">✅</span>
           <span class="learn-cta-body">
             <strong>今日の復習は完了!</strong>
-            <span class="field-note">${counts.introduced ? '新しいカードを学ぶか、♾️自由練習で好きなだけ復習できます' : '下のユニットから最初のカードを学びましょう'}</span>
+            <span class="field-note">${counts.introduced ? '新しいカードを学びましょう' : '下のユニットから最初のカードを学びましょう'}</span>
           </span>
         </div>`}
-
-      ${(() => {
-        const poolN = this.freePool().length;
-        if (!poolN) return '';
-        const speakOk = (typeof SpeakCheck !== 'undefined') && SpeakCheck.available();
-        return `
-          <div class="free-cta-row">
-            <button class="learn-cta card free-cta" id="btn-learn-free">
-              <span class="learn-cta-icon">♾️</span>
-              <span class="learn-cta-body">
-                <strong>自由練習</strong>
-                <span class="field-note">学んだ${poolN}枚から10問・回数制限なし。復習の予定は変わりません</span>
-              </span>
-              <span class="learn-cta-go">▶</span>
-            </button>
-            ${speakOk ? `
-              <button class="learn-cta card free-cta" id="btn-learn-speak">
-                <span class="learn-cta-icon">⭐</span>
-                <span class="learn-cta-body">
-                  <strong>発話練習</strong>
-                  <span class="field-note">声に出して言う練習をいつでも。🌸のカードは⭐マスターに昇格できます</span>
-                </span>
-                <span class="learn-cta-go">▶</span>
-              </button>` : ''}
-          </div>`;
-      })()}
 
       <div class="learn-stats card">
         <div class="learn-stat"><span class="val">${counts.introduced}<span class="sub">/${counts.total}</span></span><span class="lbl">学習中</span></div>
         <div class="learn-stat"><span class="val">🌸${counts.bloomed}${counts.mastered ? ` ⭐${counts.mastered}` : ''}</span><span class="lbl">育った${counts.mastered ? '/マスター' : ''}</span></div>
-        <div class="learn-stat"><span class="val">${newRemain === Infinity ? '∞' : newRemain}</span><span class="lbl">今日の新規残り</span></div>
+        <div class="learn-stat"><span class="val">${newRemain}</span><span class="lbl">今日の新規残り</span></div>
         <div class="learn-stat-btns">
           <button class="btn-control" id="btn-learn-dex">📔 図鑑</button>
           <button class="btn-control" id="btn-learn-check">✍️ 監修${ReviewFlags.counts(lang).fix ? `<span class="fix-badge">${ReviewFlags.counts(lang).fix}</span>` : ''}</button>
         </div>
       </div>
-
-      ${(() => {
-        const pool = this.sniperPool();
-        if (pool.length < 4) return '';
-        const best = parseInt(localStorage.getItem('lq_sniper_best_' + lang) || '0', 10);
-        return `<button class="learn-cta card sniper-cta" id="btn-learn-sniper">
-          <span class="learn-cta-icon">🎧</span>
-          <span class="learn-cta-body">
-            <strong>聞き取りスナイパー</strong>
-            <span class="field-note">音声を聞いて即タップ・連続正解でコンボ!${best ? ` ・ 🏆ベスト ${best}点` : ''}</span>
-          </span>
-          <span class="learn-cta-go">▶</span>
-        </button>`;
-      })()}
 
       ${!ttsOk && lang === 'yue' ? (() => {
         const rec = (typeof VoiceStore !== 'undefined') ? VoiceStore.countByLang('yue') : 0;
@@ -452,12 +404,6 @@ const Learn = {
     });
     document.getElementById('btn-learn-dex').addEventListener('click', () => showScreen('learn-dex'));
     document.getElementById('btn-learn-check').addEventListener('click', () => showScreen('learn-check'));
-    const sn = document.getElementById('btn-learn-sniper');
-    if (sn) sn.addEventListener('click', () => this.startSniper());
-    const fb = document.getElementById('btn-learn-free');
-    if (fb) fb.addEventListener('click', () => this.startFree());
-    const sp = document.getElementById('btn-learn-speak');
-    if (sp) sp.addEventListener('click', () => this.startSpeakPractice());
     el.querySelectorAll('[data-learn-unit]').forEach((b) =>
       b.addEventListener('click', () => this.startUnit(b.dataset.learnUnit)));
   },
@@ -469,49 +415,6 @@ const Learn = {
     this.queue = due.map((c) => ({ type: 'quiz', card: c }));
     this.beginSession('review', '📖 今日の復習');
   },
-
-  /** 自由練習の母集団: 導入済み・⚠️修正待ちでないカード */
-  freePool() {
-    return Phrases.byLang(this.lang)
-      .filter((c) => SRS.isIntroduced(c.id))
-      .filter((c) => ReviewFlags.get(c.id) !== 'fix');
-  },
-
-  /** ♾️ 自由練習: 何度でも・枚数制限なし。SRSの復習予定は変えない */
-  async startFree() {
-    const pool = this.freePool();
-    if (pool.length < 1) {
-      await appAlert('まず下のユニットからカードを学びましょう。学習したカードが自由練習の対象になります。', '♾️ 自由練習');
-      return;
-    }
-    const n = Math.min(10, pool.length);
-    this.queue = mgShuffle(pool).slice(0, n).map((c) => ({ type: 'quiz', card: c }));
-    this.beginSession('free', '♾️ 自由練習');
-  },
-
-  /** ⭐ 発話練習: 声に出して言う練習だけを、いつでも何度でも */
-  async startSpeakPractice() {
-    if (typeof SpeakCheck === 'undefined' || !SpeakCheck.available()) {
-      await appAlert('発話チェックにはOpenAI APIキーとマイクの許可が必要です。設定画面でキーを入力してください。', '⭐ 発話練習');
-      return;
-    }
-    const pool = this.freePool();
-    if (!pool.length) {
-      await appAlert('まず下のユニットからカードを学びましょう。', '⭐ 発話練習');
-      return;
-    }
-    const n = Math.min(8, pool.length);
-    // 🌸想起まで育ったカードを優先(⭐マスターへの昇格試験になるため)
-    const ranked = mgShuffle(pool).sort((a, b) => {
-      const la = (SRS.get(a.id) || { lv: 1 }).lv, lb = (SRS.get(b.id) || { lv: 1 }).lv;
-      return (lb === 3 ? 1 : 0) - (la === 3 ? 1 : 0);
-    });
-    this.queue = ranked.slice(0, n).map((c) => ({ type: 'quiz', card: c, mode: 'speak' }));
-    this.beginSession('free-speak', '⭐ 発話練習');
-  },
-
-  /** 自由練習系(SRSの予定を変えないモード)か */
-  isFreeMode() { return String(this.sessionKind || '').startsWith('free'); },
 
   async startUnit(unitId) {
     const u = Phrases.unit(unitId);
@@ -541,8 +444,7 @@ const Learn = {
       const label = LEARN_LANGS[u.lang].label;
       await appAlert(
         `今日の${label}の新規カードはもう満タンです(言語ごとに1日${SRS.NEW_PER_DAY}枚まで)。\n` +
-        'もう一方の言語の新規は別枠です。もっと進めたいときは設定画面で上限を変更できます。\n' +
-        'すでに学んだカードなら ♾️自由練習 で好きなだけ練習できます。',
+        'もう一方の言語の新規は別枠で学べます。欲張るより毎日続ける方が強くなります!',
         '🌱 今日はここまで');
       return;
     }
@@ -578,7 +480,7 @@ const Learn = {
     this.updateProgress();
     const step = this.queue[this.idx];
     if (step.type === 'intro') this.renderIntro(step.card);
-    else this.renderQuiz(step.card, step.mode);
+    else this.renderQuiz(step.card);
   },
 
   /* ----- 新カード紹介 ----- */
@@ -614,8 +516,10 @@ const Learn = {
     const lv = (SRS.get(card.id) || { lv: 1 }).lv;
     if (lv >= 4) return 'recall';  // マスター済みは高速な想起で維持
     if (lv === 3) {
-      // 🌸→⭐への昇格試験は「声に出して言う」。使えない環境では想起で維持
-      return (typeof SpeakCheck !== 'undefined' && SpeakCheck.available()) ? 'speak' : 'recall';
+      // 🌸→⭐への昇格試験は「声に出して言う」。
+      // 使えない環境、および発音判定に向かないカード(英語の借用語・2語並記)は想起で維持
+      return (typeof SpeakCheck !== 'undefined' && SpeakCheck.available() && !card.noSpeak)
+        ? 'speak' : 'recall';
     }
     if (lv === 2 && canHearCard(card)) return 'listen';
     return 'read';
@@ -750,20 +654,12 @@ const Learn = {
       try {
         if (!blob || blob.size < 800) throw new Error('録音が短すぎました');
         const result = await SpeakCheck.judge(blob, card);
-        this._lastSpeakBlob = blob;   // 自分の声の再生・波形表示用に保持
         this.finishSpeak(card, result);
       } catch (err) {
         this.locked = false;
         recBtn.disabled = false;
         recBtn.textContent = '🎤 もう一度話す';
-        if (err && (err.noKey || err.badKey) && typeof showApiKeyHelp === 'function') {
-          showApiKeyHelp(err.provider, '発話チェック(音声認識)', err.badKey ? 'invalid' : undefined);
-          status.textContent = err.badKey
-            ? '🔑 APIキーが認証エラーです — 表示された手順でキーを貼り直すか、「文字で答える」を選んでください'
-            : '🔑 APIキーが未設定です — 表示された手順で設定するか、「文字で答える」を選んでください';
-        } else {
-          status.textContent = `⚠ ${err.message} — もう一度試すか、「文字で答える」を選んでください`;
-        }
+        status.textContent = `⚠ ${err.message} — もう一度試すか、「文字で答える」を選んでください`;
       }
     };
 
@@ -788,21 +684,13 @@ const Learn = {
     let mastered = false;
     if (this.firstTry[card.id]) {
       this.firstTry[card.id] = false;
-      // 自由練習では復習スケジュールを動かさない。ただし⭐マスター昇格は認める
-      if (!this.isFreeMode()) SRS.answer(card.id, pass);
+      SRS.answer(card.id, pass);
       this.answered++;
       if (pass) this.correct++;
+      if (pass && SRS.get(card.id).lv === 3) mastered = SRS.master(card.id);
     }
-    // 言えたら昇格。何度目の挑戦でも「声に出して言えた」ことは同じ価値
-    if (pass && (SRS.get(card.id) || {}).lv === 3) mastered = SRS.master(card.id);
-    if (!pass) {
-      if (!this.queue.slice(this.idx + 1).some((q) => q.card.id === card.id)) {
-        this.queue.push({ type: 'quiz', card, retry: true });
-      }
-    } else {
-      // 言い直して成功したので、セッション末尾の再挑戦は取り下げる
-      this.queue = this.queue.filter((q, i) =>
-        i <= this.idx || !(q.retry && q.card.id === card.id));
+    if (!pass && !this.queue.slice(this.idx + 1).some((q) => q.card.id === card.id)) {
+      this.queue.push({ type: 'quiz', card, retry: true });
     }
     const rec = SRS.get(card.id) || { lv: 3 };
     const starStr = '⭐'.repeat(result.stars) + '☆'.repeat(3 - result.stars);
@@ -820,205 +708,17 @@ const Learn = {
         <button class="tts-btn" id="btn-fb-tts">🔊 お手本を聞く</button>
       </div>
       ${mastered ? '<p class="fb-levelup">🎉 このカードを ⭐発話マスター しました!本番で使えます!</p>' : ''}
-      ${!pass ? '<p class="field-note" style="text-align:center">お手本を聞いて、もう一度言ってみましょう。判定は「通じるか」基準なので気楽に!</p>' : ''}
+      ${!pass ? '<p class="field-note" style="text-align:center">お手本を聞いてもう一度。判定は「通じるか」基準なので気楽に!</p>' : ''}
       <p class="field-note" style="text-align:center">現在 ${SRS.stageIcon(rec.lv)} ${SRS.stageName(rec.lv)}</p>
-      ${this._lastSpeakBlob ? `
-        <div class="speak-analysis">
-          <p class="speak-analysis-title">🔬 発音のふりかえり</p>
-          <div class="lang-help-row">
-            <button class="btn-control" id="btn-play-mine">🎧 自分の声</button>
-            ${result.text && !pass ? '<button class="btn-control" id="btn-play-heard">🗣 聞こえた文の発音</button>' : ''}
-          </div>
-          <canvas id="speak-wave" class="speak-wave" width="600" height="90"></canvas>
-          <p class="field-note" id="speak-wave-note" style="text-align:center"></p>
-          ${result.stars < 3 ? `
-            <button class="btn-control" id="btn-speak-hint" style="width:100%">🇯🇵 AIに改善ポイントを聞く</button>
-            <div class="fb-explain-area hidden" id="speak-hint-area"></div>` : ''}
-        </div>` : ''}
-      ${!pass && card.lang === 'yue' ? '<button class="btn-control" id="btn-partner-pass" style="width:100%">💗 隣のパートナーが「合ってる」と言ったので合格にする</button>' : ''}
-      ${!pass ? '<button class="btn-large primary" id="btn-speak-retry">🔁 もう一度言ってみる</button>' : ''}
-      <button class="btn-large ${pass ? 'primary' : ''}" id="btn-learn-next">次へ</button>
+      <button class="btn-large primary" id="btn-learn-next">次へ</button>
     `;
     stage.appendChild(fb);
     stage.querySelectorAll('.speak-rec-btn, #btn-speak-text').forEach((b) => { b.disabled = true; });
     document.getElementById('btn-fb-tts').addEventListener('click', () => playCardAudio(card, 0.85));
-    this.wireSpeakAnalysis(fb, card, result);
-    const retryBtn = document.getElementById('btn-speak-retry');
-    if (retryBtn) {
-      // 同じカードをその場で録り直す(idxは進めない)
-      retryBtn.addEventListener('click', () => {
-        this.locked = false;
-        this.renderQuiz(card, 'speak');
-      });
-    }
     document.getElementById('btn-learn-next').addEventListener('click', () => {
       this.idx++; this.renderStep();
     });
     fb.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  },
-
-  /** 🔬 発音ふりかえり: 自分の声・波形・聞こえた文・AIヒント
-   *  どれか1つの失敗が他のボタンを殺さないよう、各配線は独立にtry/catchする */
-  wireSpeakAnalysis(fb, card, result) {
-    const $ = (id) => (fb ? fb.querySelector('#' + id) : document.getElementById(id));
-    // 🇯🇵 AIヒント(最優先で配線: 他の機能が失敗しても必ず生きるように)
-    try {
-      const hintBtn = $('btn-speak-hint');
-      const area = $('speak-hint-area');
-      if (hintBtn && area) {
-        hintBtn.addEventListener('click', async () => {
-          hintBtn.disabled = true;
-          area.classList.remove('hidden');
-          area.innerHTML = '<p class="field-note">🤖 発音を分析しています…</p>';
-          try {
-            if (typeof LangHelp === 'undefined' || !LangHelp.pronunciationHint) {
-              throw new Error('アプリの更新が完全に反映されていないようです。アプリ情報画面の「🔄 更新を確認」→ それでも直らなければ「🧹 完全リセット」をお試しください。');
-            }
-            const text = await LangHelp.pronunciationHint(card, result);
-            area.innerHTML = `<div class="md-body">${renderMarkdown(text)}</div>`;
-          } catch (err) {
-            const msg = (typeof aiErrorText === 'function') ? aiErrorText(err) : '⚠ ' + err.message;
-            area.innerHTML = `<p class="field-note" style="color:var(--danger)">${escapeHtml(msg)}</p>`;
-            hintBtn.disabled = false;
-          }
-        });
-      }
-    } catch (_) { /* 配線失敗しても他へ */ }
-    // 💗 パートナー公認の合格(広東語のみ。判定器よりネイティブの耳を信じる)
-    try {
-      const pp = $('btn-partner-pass');
-      if (pp) {
-        pp.addEventListener('click', async () => {
-          const ok = await appConfirm(
-            '隣のパートナーが「合っている」と言ってくれた発音を、合格として記録します。\n(Whisperの聞き取りには限界があります — ネイティブの耳が最終判定です)',
-            '💗 パートナー公認');
-          if (!ok) return;
-          let mastered = false;
-          if ((SRS.get(card.id) || {}).lv === 3) mastered = SRS.master(card.id);
-          this.queue = this.queue.filter((q, i) =>
-            i <= this.idx || !(q.retry && q.card.id === card.id));
-          showToast(mastered ? '💗 パートナー公認で ⭐発話マスター!' : '💗 パートナー公認で合格!');
-          this.idx++; this.renderStep();
-        });
-      }
-    } catch (_) { /* 続行 */ }
-    const blob = this._lastSpeakBlob;
-    if (!blob) return;
-    // 🎧 自分の声を再生
-    try {
-      const mine = $('btn-play-mine');
-      if (mine) {
-        mine.addEventListener('click', () => {
-          try {
-            if (this._mineUrl) URL.revokeObjectURL(this._mineUrl);
-            this._mineUrl = URL.createObjectURL(blob);
-            new Audio(this._mineUrl).play();
-          } catch (_) { showToast('この端末では再生できませんでした'); }
-        });
-      }
-    } catch (_) { /* 続行 */ }
-    // 🗣 Whisperが聞き取った文 → お手本 の順に読み上げて聞き比べ
-    try {
-      const heard = $('btn-play-heard');
-      if (heard) {
-        heard.addEventListener('click', () => {
-          if (typeof LangHelp !== 'undefined') LangHelp.speakMany([result.text]);
-        });
-      }
-    } catch (_) { /* 続行 */ }
-    // 波形(失敗しても他の機能に影響しない)
-    try { this.drawWave(blob, card); } catch (_) { /* 非対応端末 */ }
-  },
-
-  /** 録音Blobの波形をcanvasに描く。お手本録音(VoiceStore)があれば上下2段で比較 */
-  async drawWave(blob, card) {
-    const canvas = document.getElementById('speak-wave');
-    const note = document.getElementById('speak-wave-note');
-    if (!canvas) return;
-    // お手本音声: ①パートナー録音 ②生成済みTTSキャッシュ ③AI音声を生成(韓国語のみ)
-    let model = null;
-    try {
-      if (typeof ModelVoice !== 'undefined') {
-        if (note && !VoiceStore.has(card.id) && !VoiceStore.has('tts:' + card.id) &&
-            ModelVoice.canGenerate(card)) {
-          note.textContent = '🎵 お手本の波形をAI音声から生成しています…';
-        }
-        model = await ModelVoice.get(card);
-      }
-    } catch (_) { model = null; }
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      const ac = new Ctx();
-      /** 前後の無音を検出して切り落とす(録音・お手本の開始位置をそろえる)。
-       *  10ms窓ごとの最大振幅を見て、全体ピークの8%を超えた最初/最後の窓で区切り、
-       *  立ち上がりを切らないよう前後に50msの余白を残す */
-      const trimSilence = (data, sampleRate) => {
-        const win = Math.max(1, Math.floor(sampleRate * 0.01));
-        let peak = 0;
-        for (let i = 0; i < data.length; i++) { const v = Math.abs(data[i]); if (v > peak) peak = v; }
-        const th = peak * 0.08;
-        const nWin = Math.ceil(data.length / win);
-        let first = -1, last = -1;
-        for (let w = 0; w < nWin; w++) {
-          let m = 0;
-          for (let j = w * win; j < Math.min(data.length, (w + 1) * win); j++) {
-            const v = Math.abs(data[j]); if (v > m) m = v;
-          }
-          if (m >= th) { if (first < 0) first = w; last = w; }
-        }
-        if (first < 0) return data;                    // 全編ほぼ無音ならそのまま
-        const margin = Math.floor(sampleRate * 0.05);  // 50ms
-        const s0 = Math.max(0, first * win - margin);
-        const e0 = Math.min(data.length, (last + 1) * win + margin);
-        return data.subarray(s0, e0);
-      };
-      const peaks = async (b) => {
-        const buf = await ac.decodeAudioData(await b.arrayBuffer());
-        const data = trimSilence(buf.getChannelData(0), buf.sampleRate);
-        const N = 120, step = Math.max(1, Math.floor(data.length / N)), out = [];
-        for (let i = 0; i < N; i++) {
-          let m = 0;
-          for (let j = i * step; j < Math.min(data.length, (i + 1) * step); j++) {
-            const v = Math.abs(data[j]); if (v > m) m = v;
-          }
-          out.push(m);
-        }
-        const mx = Math.max(0.01, ...out);
-        return out.map((v) => v / mx);   // 音量差ではなくリズムを見るため正規化
-      };
-      const minePeaks = await peaks(blob);
-      const modelPeaks = model ? await peaks(model.blob) : null;
-      ac.close();
-
-      const g = canvas.getContext('2d');
-      const W = canvas.width, H = canvas.height;
-      g.clearRect(0, 0, W, H);
-      const drawRow = (ps, y0, h, color, label) => {
-        g.fillStyle = color;
-        const bw = W / ps.length;
-        ps.forEach((v, i) => {
-          const bh = Math.max(2, v * (h - 14));
-          g.fillRect(i * bw + 1, y0 + (h - bh) / 2, bw - 2, bh);
-        });
-        g.fillStyle = 'rgba(226,232,240,0.75)';
-        g.font = '12px sans-serif';
-        g.fillText(label, 6, y0 + 13);
-      };
-      if (modelPeaks) {
-        const label = model.source === 'recording' ? '❤️ お手本(録音)' : '🎵 お手本(AI音声)';
-        drawRow(modelPeaks, 0, H / 2, 'rgba(56,189,248,0.8)', label);
-        drawRow(minePeaks, H / 2, H / 2, 'rgba(250,204,21,0.8)', '🎤 あなた');
-        if (note) note.textContent = '前後の無音をそろえた比較です(音量も正規化)。山の数・間・長さの配分を見比べてみましょう';
-      } else {
-        drawRow(minePeaks, 0, H, 'rgba(250,204,21,0.8)', '🎤 あなた');
-        if (note) note.textContent = card.lang === 'yue'
-          ? 'あなたの声のリズムです。パートナーのお手本録音があると上下で比較できます'
-          : 'あなたの声のリズムです。お手本録音があると上下で比較できます';
-      }
-    } catch (_) {
-      canvas.style.display = 'none';   // 波形非対応の端末では隠すだけ
-      if (note) note.textContent = '';
-    }
   },
 
   startTimer(limitSec, onTimeout) {
@@ -1049,7 +749,7 @@ const Learn = {
     let levelUp = null;
     if (this.firstTry[card.id]) {
       this.firstTry[card.id] = false;
-      if (!this.isFreeMode()) levelUp = SRS.answer(card.id, correct).levelUp;
+      levelUp = SRS.answer(card.id, correct).levelUp;
       this.answered++;
       if (correct) this.correct++;
     }
@@ -1095,13 +795,9 @@ const Learn = {
   finishSession() {
     const total = this.answered;
     const perfect = total > 0 && this.correct === total;
-    const free = this.isFreeMode();
-    const earned = free
-      ? this.correct                                   // 自由練習は控えめ(周回対策)
-      : this.correct * 2 + (perfect ? 5 : 0) + (this.sessionKind === 'unit' ? 5 : 0);
+    const earned = this.correct * 2 + (perfect ? 5 : 0) + (this.sessionKind === 'unit' ? 5 : 0);
     if (typeof Gami !== 'undefined' && earned) Gami.addPoints(earned);
-    // デイリークエスト「ことばの習慣」は通常の学習セッションのみ対象
-    if (!free && typeof Quests !== 'undefined') Quests.tryComplete('study');
+    if (typeof Quests !== 'undefined') Quests.tryComplete('study');
     SRS.checkCollectAchievements();
 
     const counts = SRS.counts(this.lang);
@@ -1115,180 +811,18 @@ const Learn = {
           <span class="xp-chip points">⭐ +${earned} pt</span>
           <span class="xp-chip">🌸 育った ${counts.bloomed}/${counts.total}</span>
         </div>
-        ${free
-          ? '<p class="field-note" style="margin-top:10px">♾️ 自由練習は復習の予定を変えません。何度でもどうぞ</p>'
-          : (due > 0
-            ? `<p class="field-note" style="margin-top:10px">📖 復習が残り${Math.min(due, SRS.REVIEW_CAP)}枚あります</p>`
-            : '<p class="field-note" style="margin-top:10px">✅ 今日の復習はすべて完了!</p>')}
+        ${due > 0
+          ? `<p class="field-note" style="margin-top:10px">📖 復習が残り${Math.min(due, SRS.REVIEW_CAP)}枚あります</p>`
+          : '<p class="field-note" style="margin-top:10px">✅ 今日の復習はすべて完了!</p>'}
       </div>
       <div class="results-actions">
-        ${free ? `<button class="btn-large primary" id="btn-learn-again">🔁 もう一度${this.sessionKind === 'free-speak' ? '発話練習' : '自由練習'}</button>` : ''}
-        ${!free && due > 0 ? '<button class="btn-large primary" id="btn-learn-more">📖 続けて復習する</button>' : ''}
+        ${due > 0 ? '<button class="btn-large primary" id="btn-learn-more">📖 続けて復習する</button>' : ''}
         <button class="btn-large ${due > 0 ? '' : 'primary'}" data-nav="learn">ユニット一覧へ</button>
         <button class="btn-large" data-nav="home">ホームへ</button>
       </div>`;
 
     const more = document.getElementById('btn-learn-more');
     if (more) more.addEventListener('click', () => this.startReview());
-    const again = document.getElementById('btn-learn-again');
-    if (again) again.addEventListener('click', () =>
-      (this.sessionKind === 'free-speak' ? this.startSpeakPractice() : this.startFree()));
-    document.querySelectorAll('#learn-stage [data-nav]').forEach((btn) =>
-      btn.addEventListener('click', () => showScreen(btn.dataset.nav)));
-  },
-
-  /* ----- 🎧 聞き取りスナイパー(音声→意味の高速4択。SRS連動) ----- */
-  sniper: null,
-
-  /** 出題できるカード: 学習済み・修正待ちでない・音声が聞ける */
-  sniperPool() {
-    return Phrases.byLang(this.lang)
-      .filter((c) => SRS.isIntroduced(c.id))
-      .filter((c) => ReviewFlags.get(c.id) !== 'fix')
-      .filter((c) => canHearCard(c));
-  },
-
-  /** 出題キュー: 復習期限のカードを優先しつつ、直近3問と重複しないように補充 */
-  buildSniperQueue(pool, n) {
-    const poolIds = new Set(pool.map((c) => c.id));
-    const due = SRS.dueCards(this.lang).filter((c) => poolIds.has(c.id));
-    const q = mgShuffle(due).slice(0, Math.min(4, due.length));
-    while (q.length < n) {
-      const recent = q.slice(-3).map((c) => c.id);
-      const rest = mgShuffle(pool.filter((c) => !recent.includes(c.id)));
-      for (const c of rest) {
-        if (q.length >= n) break;
-        q.push(c);
-      }
-    }
-    return q.slice(0, n);
-  },
-
-  async startSniper() {
-    const pool = this.sniperPool();
-    if (pool.length < 4) {
-      await appAlert(
-        '聞き取りスナイパーは、音声を再生できる学習済みカードが4枚以上必要です。\n' +
-        'まずユニットからカードを学びましょう(広東語は、お手本録音があるカードが対象になります)。',
-        '🎧 まだ準備中');
-      return;
-    }
-    this.sniper = {
-      queue: this.buildSniperQueue(pool, 10),
-      i: 0, score: 0, combo: 0, maxCombo: 0, correct: 0,
-      srsDone: {}, autoT: null
-    };
-    document.getElementById('learn-session-title').textContent = '🎧 聞き取りスナイパー';
-    showScreen('learn-session');
-    this.renderSniperQ();
-  },
-
-  renderSniperQ() {
-    const s = this.sniper;
-    if (!s) return;
-    clearTimeout(s.autoT);
-    clearInterval(this.timerId);
-    if (s.i >= s.queue.length) { this.finishSniper(); return; }
-    const card = s.queue[s.i];
-    this.locked = false;
-    document.getElementById('learn-progress').textContent = `${s.i + 1} / ${s.queue.length}`;
-    const wrong = this.distractors(card, 'ja');
-    const options = [{ v: card.ja, ok: true }]
-      .concat(wrong.map((c) => ({ v: c.ja, ok: false })));
-    for (let i = options.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [options[i], options[j]] = [options[j], options[i]];
-    }
-    document.getElementById('learn-stage').innerHTML = `
-      <div class="sniper-head">
-        <span class="sniper-score">🎯 ${s.score}</span>
-        <span class="sniper-combo ${s.combo >= 2 ? 'hot' : ''}">${s.combo >= 2 ? `🔥 ${s.combo}コンボ` : ''}</span>
-      </div>
-      <div class="quiz-prompt card" style="text-align:center">
-        <button class="tts-btn big" id="btn-sniper-tts">🔊 もう一度聞く</button>
-        <p class="field-note">聞こえたフレーズの意味を、素早くタップ!</p>
-      </div>
-      <div class="timer-wrap"><div class="timer-bar" id="learn-timer"></div></div>
-      <div class="choices">
-        ${options.map((o, i) =>
-          `<button class="choice-btn learn-choice" data-sniper="${i}">${escapeHtml(o.v)}</button>`).join('')}
-      </div>`;
-    const play = () => playCardAudio(card, 0.9);
-    document.getElementById('btn-sniper-tts').addEventListener('click', play);
-    setTimeout(play, 250);
-    document.querySelectorAll('[data-sniper]').forEach((btn) => {
-      btn.addEventListener('click', () =>
-        this.answerSniper(card, options[Number(btn.dataset.sniper)].ok, btn));
-    });
-    this.startTimer(7, () => this.answerSniper(card, false, null));
-  },
-
-  answerSniper(card, ok, btn) {
-    if (this.locked || !this.sniper) return;
-    this.locked = true;
-    clearInterval(this.timerId);
-    const s = this.sniper;
-    const elapsed = Date.now() - this.turnStartedAt;
-    // SRSには各カードの初回回答だけを反映(お宝クイズと同じ方式)
-    if (!s.srsDone[card.id]) {
-      s.srsDone[card.id] = true;
-      SRS.answer(card.id, ok);
-    }
-    let gained = 0;
-    if (ok) {
-      s.combo++;
-      s.correct++;
-      s.maxCombo = Math.max(s.maxCombo, s.combo);
-      gained = 10 + Math.min(s.combo, 5) * 2 + (elapsed < 2500 ? 5 : 0);
-      s.score += gained;
-    } else {
-      s.combo = 0;
-    }
-    if (btn) btn.classList.add(ok ? 'correct' : 'wrong');
-    const stage = document.getElementById('learn-stage');
-    stage.querySelectorAll('.learn-choice').forEach((b) => { b.disabled = true; });
-    const fb = document.createElement('div');
-    fb.className = `sniper-flash ${ok ? 'good' : 'bad'}`;
-    fb.innerHTML = ok
-      ? `<span class="sniper-big">⭕ +${gained}</span>
-         ${s.combo >= 2 ? `<span class="sniper-combo hot">🔥 ${s.combo}コンボ!</span>` : ''}
-         ${elapsed < 2500 ? '<span class="fb-bonus">⚡ 即答ボーナス</span>' : ''}`
-      : `<span class="sniper-big">❌</span>
-         <span class="field-note">${escapeHtml(card.t)}(${escapeHtml(card.k)})= ${escapeHtml(card.ja)}</span>`;
-    stage.appendChild(fb);
-    s.i++;
-    s.autoT = setTimeout(() => this.renderSniperQ(), ok ? 1100 : 2600);
-  },
-
-  finishSniper() {
-    const s = this.sniper;
-    const total = s.queue.length;
-    const earned = s.correct * 2 + s.maxCombo;
-    if (typeof Gami !== 'undefined' && earned) Gami.addPoints(earned);
-    if (typeof Quests !== 'undefined') Quests.tryComplete('study');
-    if (s.maxCombo >= 8 && typeof Achievements !== 'undefined') Achievements.unlock('sniper-combo8');
-    const key = 'lq_sniper_best_' + this.lang;
-    const best = parseInt(localStorage.getItem(key) || '0', 10);
-    const isBest = s.score > best;
-    if (isBest) localStorage.setItem(key, String(s.score));
-    document.getElementById('learn-stage').innerHTML = `
-      <div class="convo-result">
-        <div class="learn-result-icon">🎧</div>
-        <h3>スコア ${s.score}${isBest ? ' 🏆 自己ベスト更新!' : ''}</h3>
-        <p class="field-note">正解 ${s.correct} / ${total} ・ 最大コンボ 🔥${s.maxCombo}</p>
-        <div class="xp-gains">
-          <span class="xp-chip points">⭐ +${earned} pt</span>
-          ${!isBest && best ? `<span class="xp-chip">🏆 ベスト ${best}点</span>` : ''}
-        </div>
-        <p class="field-note" style="margin-top:10px">回答はSRS(復習間隔)にも記録されました</p>
-      </div>
-      <div class="results-actions">
-        <button class="btn-large primary" id="btn-sniper-again">🎧 もう一度</button>
-        <button class="btn-large" data-nav="learn">Language Questへ</button>
-        <button class="btn-large" data-nav="home">ホームへ</button>
-      </div>`;
-    this.sniper = null;
-    document.getElementById('btn-sniper-again').addEventListener('click', () => this.startSniper());
     document.querySelectorAll('#learn-stage [data-nav]').forEach((btn) =>
       btn.addEventListener('click', () => showScreen(btn.dataset.nav)));
   },
