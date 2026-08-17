@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.26.1';
+const APP_VERSION = '1.26.2';
 const APP_BUILD = '2026-08-18';
 
 /**
@@ -9,6 +9,15 @@ const APP_BUILD = '2026-08-18';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.26.2',
+    date: '2026-08-18',
+    items: [
+      { type: 'fix', text: '💾「このバックアップを共有」で「Permission denied」になる問題を修正。ブラウザの共有機能は画像・音声・動画・PDFなどしか受け付けず、ZIPファイルは仕様上そもそも共有できないため、このボタンは廃止しました' },
+      { type: 'new', text: '💾 代わりにPC(Chrome・Edge)では保存先を選ぶ画面が出るようになりました。Nextcloudの同期フォルダやGoogle Driveのフォルダを直接指定できるので、ダウンロードフォルダから移す手間がなくなります。次回からは同じフォルダが最初に開きます' },
+      { type: 'fix', text: '💾 保存をキャンセルしたときに「バックアップ済み」と記録されてしまう問題を修正。実際に保存できたときだけ「最後のバックアップ」の日付が更新されます' }
+    ]
+  },
   {
     version: '1.26.1',
     date: '2026-08-18',

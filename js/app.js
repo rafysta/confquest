@@ -480,11 +480,28 @@ let _backupName = '';
 const _bkExport = document.getElementById('btn-backup-export');
 if (_bkExport) _bkExport.addEventListener('click', async () => {
   const status = document.getElementById('backup-status');
-  const share = document.getElementById('btn-backup-share');
   const withAudio = document.getElementById('backup-audio').checked;
   const withKeys = document.getElementById('backup-keys').checked;
+
+  /* 保存先を選ぶダイアログは「クリックした直後」しか開けない(ZIPを作ってから
+   * 呼ぶと権限エラーになる)ので、作る前に先に聞く。PCのChrome/Edgeなら
+   * Nextcloudの同期フォルダを直接選べるので、あとから移す手間がなくなる。
+   * 非対応の端末(Android・Firefox・Safari)は従来どおりダウンロードする。 */
+  let handle = null;
+  if (window.showSaveFilePicker) {
+    try {
+      handle = await window.showSaveFilePicker({
+        id: 'confquest-backup',           // 次回も同じフォルダが開く
+        suggestedName: Backup.fileName(withAudio),
+        types: [{ description: 'ConfQuest バックアップ', accept: { 'application/zip': ['.zip'] } }]
+      });
+    } catch (err) {
+      if (err && err.name === 'AbortError') { status.textContent = '保存をキャンセルしました。'; return; }
+      handle = null;   // 使えない環境ならダウンロードで続行する
+    }
+  }
+
   _bkExport.disabled = true;
-  if (share) share.classList.add('hidden');
   status.textContent = '準備しています…';
   try {
     const r = await Backup.create({
@@ -492,39 +509,27 @@ if (_bkExport) _bkExport.addEventListener('click', async () => {
       keys: withKeys,
       onProgress: (t) => { status.textContent = t; }
     });
-    _backupBlob = r.blob;
-    _backupName = r.name;
-    // ダウンロード(PCなら保存先を選べる。Androidはダウンロードフォルダ)
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(r.blob);
-    a.download = r.name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 20000);
-    status.textContent = `✓ ${r.name}(${Backup.fmtBytes(r.bytes)})を保存しました。` +
-      'Nextcloudの同期フォルダやGoogle Driveに置いておくと、いつでも復元できます。';
-    if (share && navigator.share) share.classList.remove('hidden');
+    if (handle) {
+      status.textContent = '書き込んでいます…';
+      const w = await handle.createWritable();
+      await w.write(r.blob);
+      await w.close();
+      status.textContent = `✓ 「${handle.name}」に保存しました(${Backup.fmtBytes(r.bytes)})。`;
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(r.blob);
+      a.download = r.name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+      status.textContent = `✓ ${r.name}(${Backup.fmtBytes(r.bytes)})を保存しました。` +
+        'ダウンロードフォルダにあるので、Nextcloudの同期フォルダやGoogle Driveに移しておいてください。';
+    }
+    Backup.markSaved();
     updateBackupInfo();
   } catch (err) {
     status.textContent = '⚠ バックアップを作成できませんでした: ' + err.message;
   } finally {
     _bkExport.disabled = false;
-  }
-});
-
-const _bkShare = document.getElementById('btn-backup-share');
-if (_bkShare) _bkShare.addEventListener('click', async () => {
-  const status = document.getElementById('backup-status');
-  if (!_backupBlob) return;
-  try {
-    const file = new File([_backupBlob], _backupName, { type: 'application/zip' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'ConfQuest バックアップ' });
-      status.textContent = '✓ 共有しました。Google DriveやNextcloudに保存できましたか?';
-    } else {
-      status.textContent = '⚠ この端末ではファイルの共有ができません。保存済みのファイルを手動でアップロードしてください。';
-    }
-  } catch (err) {
-    if (!err || err.name !== 'AbortError') status.textContent = '⚠ 共有できませんでした: ' + err.message;
   }
 });
 

@@ -503,8 +503,12 @@ const Backup = {
     ].concat(files);
 
     const blob = await MiniZip.write(entries, now);
-    localStorage.setItem('lq_last_backup', now.toISOString());
     return { blob, name: this.fileName(!!opt.audio, now), meta, bytes: blob.size };
+  },
+
+  /** 実際に保存できたときだけ呼ぶ(作っただけでは「バックアップ済み」にしない) */
+  markSaved(now) {
+    localStorage.setItem('lq_last_backup', (now || new Date()).toISOString());
   },
 
   readme(meta) {
