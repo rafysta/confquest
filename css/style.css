@@ -613,6 +613,9 @@ audio { width: 100%; margin-bottom: 12px; }
   width: 100%; height: 100%;
 }
 .map-lines line { stroke: #334155; stroke-width: 0.8; }
+/* いま立っているマスから伸びる線(v1.28.0)。線が増えて交差もするので、
+   どこへ行けるかが一目で分かるように強調する */
+.map-lines line.live { stroke: var(--accent); stroke-width: 2; opacity: 0.95; }
 .map-node {
   position: absolute; transform: translate(-50%, -50%);
   width: 52px; height: 52px;

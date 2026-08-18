@@ -89,6 +89,16 @@ const NODE_TYPES = {
                 desc: 'その日の最後の関門。倒すと次の日へ進める' }
 };
 
+/* マップの抽選プール。同じ層に同じ種類を並べないため、種類数(5)は層の最大幅(4)より多くしておく。
+ * 🛒お店・☕休憩所・🚶コーヒーブレイク・👥名刺交換・🛡️質疑応答は genMap 側で位置を決めて置く。 */
+const RUN_NODE_POOL = [
+  { type: 'researcher', w: 42 },
+  { type: 'treasure',   w: 20 },   // 豆知識・クイズ系は多めに
+  { type: 'random',     w: 16 },
+  { type: 'topic',      w: 14 },
+  { type: 'elite',      w: 8 }     // 1日1つまで
+];
+
 const Run = {
   state: null,
 
@@ -167,29 +177,68 @@ const Run = {
     this.save();
   },
 
+  /**
+   * 同じ層にまだ無い種類を、重み付きで1つ選ぶ。
+   * これにより「隣り合う選択肢が必ず違う遊びになる」= 選ぶ意味が生まれる。
+   * 候補を使い切ったときだけ重複を許す(幅4 > 種類5 なので通常は起きない)。
+   */
+  pickUnique(used, pool) {
+    const fresh = pool.filter((p) => !used.has(p.type));
+    const list = fresh.length ? fresh : pool;
+    const total = list.reduce((a, p) => a + p.w, 0);
+    let r = Math.random() * total;
+    for (const p of list) { r -= p.w; if (r < 0) return p.type; }
+    return list[list.length - 1].type;
+  },
+
   genMap() {
     const LAYERS = 8;
     const layers = [];
+    let eliteLeft = 1;      // ⭐エリートは1日1つまで
+    let topicLeft = 3;      // 🎴話題トークは3つまで
     for (let i = 0; i < LAYERS; i++) {
-      let count;
-      if (i === LAYERS - 1) count = 1;                       // 最上段はボス
-      else if (i === LAYERS - 2) count = 1;                  // ボス直前は🛡️質疑応答の関門
-      else if (i === 0) count = 3;
-      else count = 2 + Math.floor(Math.random() * 3);        // 2〜4
+      if (i === LAYERS - 1) { layers.push([{ type: 'boss', visited: false }]); continue; }
+      if (i === LAYERS - 2) { layers.push([{ type: 'qa', visited: false }]); continue; }
+      if (i === 0) {
+        // 最初は必ず会話から。3つ並ぶが、どこから登るかで先のルートが変わる
+        layers.push([0, 1, 2].map(() => ({ type: 'researcher', visited: false })));
+        continue;
+      }
+      // 上限に達した種類はプールから外す(あとから変換すると層内で重複が生まれるため)
+      const pool = RUN_NODE_POOL.filter((p) =>
+        (p.type !== 'elite' || eliteLeft > 0) && (p.type !== 'topic' || topicLeft > 0));
+      // 幅は種類数を超えない。超えると必ず同じ種類が並んでしまう
+      const count = Math.min(2 + Math.floor(Math.random() * 3), pool.length);   // 2〜4
+      const used = new Set();
       const nodes = [];
       for (let j = 0; j < count; j++) {
-        nodes.push({ type: this.pickType(i, LAYERS), visited: false });
+        const type = this.pickUnique(used, pool);
+        if (type === 'elite') eliteLeft--;
+        if (type === 'topic') topicLeft--;
+        used.add(type);
+        nodes.push({ type, visited: false });
       }
       layers.push(nodes);
     }
-    // 固定配置: 上書きしてはいけないタイプを避けつつ、必ず1つ置く
-    const flat = layers.slice(1, -1).flat();
+
+    /* 固定配置: 上書きしてはいけないタイプを避けつつ、必ず1つ置く。
+     * 同じ層に同じ種類ができないよう、その種類が既にある層は候補から外す。 */
     const SPECIAL = ['shop', 'rest', 'qa', 'stroll', 'badge', 'boss', 'elite'];
     const place = (type, minLayer, maxLayer) => {
-      const range = layers.slice(minLayer, maxLayer + 1).flat();
-      let candidates = range.filter((n) => !SPECIAL.includes(n.type));
-      // 空きがなければエリートも上書き対象にする(qa/bossは不可侵)
-      if (!candidates.length) candidates = range.filter((n) => n.type === 'elite');
+      const lo = Math.max(1, minLayer);
+      const hi = Math.min(maxLayer, LAYERS - 3);
+      const pickFrom = (allowElite) => {
+        const out = [];
+        for (let i = lo; i <= hi; i++) {
+          if (layers[i].some((n) => n.type === type)) continue;   // 同じ層に重複を作らない
+          layers[i].forEach((n) => {
+            if (allowElite ? n.type === 'elite' : !SPECIAL.includes(n.type)) out.push(n);
+          });
+        }
+        return out;
+      };
+      let candidates = pickFrom(false);
+      if (!candidates.length) candidates = pickFrom(true);   // qa/bossは不可侵
       if (!candidates.length) return false;
       candidates[Math.floor(Math.random() * candidates.length)].type = type;
       return true;
@@ -202,41 +251,28 @@ const Run = {
     if (!(this.state && this.state.badge && this.state.badge.met)) {
       place('badge', 1, 3);
     }
-    // 話題トークは2〜3回に揃える
-    const topics = flat.filter((n) => n.type === 'topic');
-    for (let i = 3; i < topics.length; i++) topics[i].type = 'researcher';
-    if (topics.length < 2) {
-      const mid = layers.slice(1, -2).flat();
-      const convertible = mid.filter((n) => n.type === 'researcher')
-        .concat(mid.filter((n) => n.type === 'random'))
-        .concat(mid.filter((n) => n.type === 'treasure'));
-      for (let i = 0; i < 2 - topics.length && i < convertible.length; i++) {
-        convertible[i].type = 'topic';
-      }
-    }
-    // エリートは1つまで
-    let eliteSeen = false;
-    for (const n of flat) {
-      if (n.type === 'elite') {
-        if (eliteSeen) n.type = 'researcher';
-        eliteSeen = true;
-      }
-    }
+    // 🎴話題トークが1つも出なかった日は、重複しない層に1つだけ足す
+    const topicCount = layers.slice(1, -2).flat().filter((n) => n.type === 'topic').length;
+    if (topicCount < 1) place('topic', 1, 5);
 
-    // 層間の接続: 双方向に最低1本を保証
+    /* 層間の接続: 各マスから「対応する位置とその左右」へ引く。
+     * 以前は1本＋40%で2本だったため、6割以上の場面で行き先が1つしかなかった。
+     * ⚠ 層の幅が変わるところでは線が交差する。交差を禁じる引き方(単調な区間割当)も
+     *   試したが、選択の余地がない場面が25%→43〜48%に悪化したため交差を許す方を採用。
+     *   代わりに renderMap() で「いま立っているマスから伸びる線」だけを光らせて読みやすくする。 */
     const edges = [];
     for (let i = 0; i < LAYERS - 1; i++) {
       const a = layers[i].length, b = layers[i + 1].length;
       const used = new Set();
       for (let j = 0; j < a; j++) {
-        // 位置が近いノードへ1〜2本
-        const t1 = Math.min(b - 1, Math.round(j * (b - 1) / Math.max(1, a - 1)));
-        edges.push([i, j, t1]); used.add(t1);
-        if (Math.random() < 0.4) {
-          const t2 = Math.max(0, Math.min(b - 1, t1 + (Math.random() < 0.5 ? -1 : 1)));
-          if (t2 !== t1) { edges.push([i, j, t2]); used.add(t2); }
-        }
+        const c = Math.min(b - 1, Math.round(j * (b - 1) / Math.max(1, a - 1)));
+        [c - 1, c, c + 1].forEach((t) => {
+          if (t < 0 || t > b - 1) return;
+          edges.push([i, j, t]);
+          used.add(t);
+        });
       }
+      // どこからも辿り着けないマスが残らないように(理論上ほぼ起きないが保険)
       for (let k = 0; k < b; k++) {
         if (!used.has(k)) {
           const from = Math.min(a - 1, Math.round(k * (a - 1) / Math.max(1, b - 1)));
@@ -245,19 +281,6 @@ const Run = {
       }
     }
     return { layers, edges };
-  },
-
-  pickType(layerIdx, totalLayers) {
-    if (layerIdx === totalLayers - 1) return 'boss';
-    if (layerIdx === totalLayers - 2) return 'qa';         // ボス直前は必ず質疑応答
-    if (layerIdx === 0) return 'researcher';               // 最初は必ず会話から
-    const r = Math.random();
-    if (r < 0.42) return 'researcher';
-    if (r < 0.62) return 'treasure';                       // 豆知識・クイズ系は多めに
-    if (r < 0.76) return 'topic';                          // 話題トーク(後で2〜3個に調整)
-    if (r < 0.92) return 'random';
-    return 'elite';                                        // 中盤に稀に出現(1つまで)
-    // お店・休憩所・コーヒーブレイク・名刺交換・質疑応答は genMap 側で固定配置
   },
 
   hasItem(id) { return this.state.items.includes(id); },
@@ -358,7 +381,10 @@ const Run = {
     let svg = '';
     for (const [li, a, b] of edges) {
       const p1 = pos(li, a), p2 = pos(li + 1, b);
-      svg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"></line>`;
+      // いま立っているマスから伸びる線だけを光らせる。
+      // 線が増えて交差もするので、これが無いと「どこへ行けるか」が読み取りにくい
+      const live = li === this.state.layer && a === this.state.nodeIndex;
+      svg += `<line class="${live ? 'live' : ''}" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"></line>`;
     }
 
     let nodesHtml = '';
