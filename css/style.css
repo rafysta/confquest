@@ -1955,3 +1955,24 @@ audio { width: 100%; margin-bottom: 12px; }
   padding: 11px 13px; margin-top: 12px;
   font-size: 0.85rem; line-height: 1.7; text-align: left;
 }
+
+/* ---------- 🎴 話題トーク: 選ぶ基準を見せる (v1.29.0) ---------- */
+.topic-legend { text-align: left; font-size: 0.82rem; line-height: 1.9; margin-top: 10px; }
+.topic-legend-title { font-weight: 700; margin-bottom: 4px; }
+.topic-legend .t-mark { display: inline-block; width: 1.6em; }
+.topic-legend-inline { display: block; color: var(--text-dim); font-size: 0.72rem; margin-top: 2px; }
+.topic-card .t-mark { font-size: 0.72rem; margin-left: 5px; white-space: nowrap; }
+.topic-card .t-guide {
+  display: block; font-size: 0.72rem; line-height: 1.5; margin-top: 4px;
+  color: var(--accent);
+}
+.topic-card.safety-cond { border-left: 3px solid #facc15; }
+.topic-card.safety-taboo { border-left: 3px solid var(--danger); }
+.topic-card.safety-safe { border-left: 3px solid var(--success); }
+.topic-card.not-ready .t-guide { color: var(--text-dim); }
+.topic-card.safety-taboo .t-guide { color: var(--danger); }
+/* 会話マスから始まるクイズの導入文 */
+.quiz-intro {
+  text-align: center; font-size: 0.85rem; line-height: 1.7;
+  color: var(--text-dim); margin: -6px 0 10px;
+}

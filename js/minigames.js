@@ -310,6 +310,34 @@ const Topic = {
     return mgShuffle(hand);
   },
 
+  /**
+   * その札の「安全度」と、いまの状況で効くかどうかを返す(純関数)。
+   * 何を目安に選べばいいのかが分からない、という問題への答え。
+   *   safe … いつ出しても外さない。基礎点が高いほど盛り上がる
+   *   cond … 条件を満たしたときだけ効く。満たさないとマイナス
+   *   taboo… 国際的な場では地雷。出してはいけない
+   */
+  cardGuide(card, mood, playedTags) {
+    if (card.tag === 'taboo') {
+      return { safety: 'taboo', mark: '🔴', stars: 0, ready: false,
+        note: '国際的な場では地雷。出さないのが正解' };
+    }
+    if (card.tag === 'risky') {
+      const ready = mood >= 7;
+      return { safety: 'cond', mark: '🟡', stars: 0, ready,
+        note: ready ? `いまなら本音が共感を呼ぶ(機嫌${mood})`
+          : `打ち解けてから(機嫌7以上で効く・いま${mood})` };
+    }
+    if (card.id === 'ownwork') {
+      const ready = (playedTags || []).indexOf('research') >= 0;
+      return { safety: 'cond', mark: '🟡', stars: card.base, ready,
+        note: ready ? '相手の研究を聞いたあとなので、いま効く'
+          : '先に🧬相手の研究を聞いてから出すと効く' };
+    }
+    return { safety: 'safe', mark: '🟢', stars: card.base, ready: true,
+      note: card.base >= 2 ? '安全なうえ、よく盛り上がる話題' : '無難。外さないが大きくは動かない' };
+  },
+
   /** 1枚出したときの評価(純粋関数)。{delta, dmg, line} を返す */
   evalCard(card, partner, mood, playedTags) {
     if (card.tag === 'taboo') {

@@ -23,12 +23,12 @@ const RUN_ITEMS = {
   trophy:   { icon: '🏆', name: '記念トロフィー', price: 999, kind: 'gadget',
               desc: '効果はないが高く売れる(80pt)', sellValue: 80, noShop: true,
               how: '⭐ エリートに勝利すると1個もらえる' },
-  mic:      { icon: '🎤', name: '座長の推薦状', price: 999, kind: 'gadget', noShop: true,
-              desc: '会話で得られる研究費が15%増える(Day 1ボス撃破の証)', sellValue: 60,
-              how: '👑 Day 1 ボス撃破の証' },
-  goldcard: { icon: '🥇', name: '大御所の名刺', price: 999, kind: 'gadget', noShop: true,
-              desc: '会話で受けるダメージが25%減る(Day 2ボス撃破の証)', sellValue: 70,
-              how: '👑 Day 2 ボス撃破の証' },
+  mic:      { icon: '🎤', name: '座長からの推薦状', price: 75, kind: 'gadget',
+              desc: '会話で得られる研究費が15%増える', sellValue: 60,
+              how: '🛒 お店で購入' },
+  goldcard: { icon: '🥇', name: '大御所の名刺', price: 90, kind: 'gadget',
+              desc: '会話で受けるダメージが25%減る', sellValue: 70,
+              how: '🛒 お店で購入' },
   // ドリンク(使い切り。アイコンをタップして使用)
   coffee:   { icon: '☕', name: 'コーヒー', price: 20, kind: 'drink',
               desc: '使うと、次の会話だけスピードゲージの減りが半分になる',
@@ -79,8 +79,6 @@ const NODE_TYPES = {
                 desc: '手札から話題を選んで相手との距離を縮めるカードバトル。地雷話題に注意' },
   stroll:     { icon: '🚶', label: 'コーヒーブレイク',
                 desc: '15分の休憩時間。誰に・どの順で会いに行くか、動線を考える' },
-  badge:      { icon: '👥', label: '名刺交換',
-                desc: '新しい出会い。相手の名前は、あとで思い出すことになるかも…' },
   qa:         { icon: '🛡️', label: '質疑応答',
                 desc: 'ボス前の関門。飛んでくる質問を「答える/確認/持ち帰る」で捌く' },
   elite:      { icon: '⭐', label: 'エリート',
@@ -92,11 +90,11 @@ const NODE_TYPES = {
 /* マップの抽選プール。同じ層に同じ種類を並べないため、種類数(5)は層の最大幅(4)より多くしておく。
  * 🛒お店・☕休憩所・🚶コーヒーブレイク・👥名刺交換・🛡️質疑応答は genMap 側で位置を決めて置く。 */
 const RUN_NODE_POOL = [
-  { type: 'researcher', w: 42 },
-  { type: 'treasure',   w: 20 },   // 豆知識・クイズ系は多めに
-  { type: 'random',     w: 16 },
-  { type: 'topic',      w: 14 },
-  { type: 'elite',      w: 8 }     // 1日1つまで
+  { type: 'researcher', w: 44 },   // 時々クイズになる(v1.29.0)
+  { type: 'treasure',   w: 17 },
+  { type: 'topic',      w: 16 },
+  { type: 'random',     w: 15 },
+  { type: 'elite',      w: 8 }     // 1ランに1つまで
 ];
 
 const Run = {
@@ -134,6 +132,12 @@ const Run = {
       // 旧形式(最上段がエリート)はボスに変換
       const top = s.map.layers[s.map.layers.length - 1];
       if (top && top[0] && top[0].type !== 'boss') top[0].type = 'boss';
+      // 廃止した種類のマス(👥名刺交換はイベント化)は会話マスとして扱う
+      s.map.layers.forEach((l) => l.forEach((n) => {
+        if (!NODE_TYPES[n.type]) n.type = 'researcher';
+      }));
+      if (!Array.isArray(s.bossesSeen)) s.bossesSeen = [];
+      if (typeof s.dayBonus !== 'number') s.dayBonus = 1;
       // 存在しないアイテムIDを除去
       s.items = s.items.filter((id) => RUN_ITEMS[id]);
       this.save();
@@ -159,7 +163,7 @@ const Run = {
       active: true,
       day: 1,
       hp: maxHp, maxHp,
-      funds: 30 + (perk.funds || 0),
+      funds: 45 + (perk.funds || 0),
       items: [],
       dailyMult: mult,
       perkNote: perk,
@@ -168,7 +172,9 @@ const Run = {
       usedCards: [],
       qaUsed: [],         // 質疑応答で出題済みの質問ID
       topicUsed: [],      // 話題トークで登場済みの相手ID
-      badge: null,        // 名刺交換の状態(1ランに1回だけ)
+      badge: null,        // 名刺交換の状態(1ランに1回だけ・マスではなくランダム発生)
+      bossesSeen: [],     // このランで戦ったボス(同じ相手が続けて出ないように)
+      dayBonus: 1,        // 「もう1日続ける」を選ぶたびに上がる報酬倍率
       map: null
     };
     // マップ生成はstate確定後に(名刺交換の出現判定がstateを見るため)
@@ -192,9 +198,11 @@ const Run = {
   },
 
   genMap() {
-    const LAYERS = 8;
+    /* 1ラン = 1日 = 11層。1層につき1マスしか通れないので踏破は11マス。
+     * 幅3〜4なので地図には約33マスが並び、「どう回るか」を選ぶ余地が大きい。 */
+    const LAYERS = 11;
     const layers = [];
-    let eliteLeft = 1;      // ⭐エリートは1日1つまで
+    let eliteLeft = 1;      // ⭐エリートは1ランに1つまで
     let topicLeft = 3;      // 🎴話題トークは3つまで
     for (let i = 0; i < LAYERS; i++) {
       if (i === LAYERS - 1) { layers.push([{ type: 'boss', visited: false }]); continue; }
@@ -208,7 +216,7 @@ const Run = {
       const pool = RUN_NODE_POOL.filter((p) =>
         (p.type !== 'elite' || eliteLeft > 0) && (p.type !== 'topic' || topicLeft > 0));
       // 幅は種類数を超えない。超えると必ず同じ種類が並んでしまう
-      const count = Math.min(2 + Math.floor(Math.random() * 3), pool.length);   // 2〜4
+      const count = Math.min(3 + Math.floor(Math.random() * 2), pool.length);   // 3〜4
       const used = new Set();
       const nodes = [];
       for (let j = 0; j < count; j++) {
@@ -221,9 +229,10 @@ const Run = {
       layers.push(nodes);
     }
 
-    /* 固定配置: 上書きしてはいけないタイプを避けつつ、必ず1つ置く。
+    /* 「出したい体験」は抽選の重みではなく、地図に置く数で直接決める。
+     * 全部は回れないので、どれを取りに行くかがルート選択の意味になる。
      * 同じ層に同じ種類ができないよう、その種類が既にある層は候補から外す。 */
-    const SPECIAL = ['shop', 'rest', 'qa', 'stroll', 'badge', 'boss', 'elite'];
+    const SPECIAL = ['shop', 'rest', 'qa', 'stroll', 'boss', 'elite'];
     const place = (type, minLayer, maxLayer) => {
       const lo = Math.max(1, minLayer);
       const hi = Math.min(maxLayer, LAYERS - 3);
@@ -243,23 +252,22 @@ const Run = {
       candidates[Math.floor(Math.random() * candidates.length)].type = type;
       return true;
     };
-    place('rest', 5, 5);                                     // 休憩所はボス2つ前に必ず1つ
-    place('shop', 2, 5);                                     // お店は1日1軒
-    place('stroll', 2, 5);                                   // コーヒーブレイクも1日1回
-    if (Math.random() < 0.5) place('rest', 2, 3);            // たまに序盤にもう1つ
-    // 名刺交換は1ランに1回だけ(まだ出会っていなければ序盤に配置)
-    if (!(this.state && this.state.badge && this.state.badge.met)) {
-      place('badge', 1, 3);
-    }
+    place('shop', 1, 3);      // 🛒お店は序盤・中盤・終盤に1軒ずつ
+    place('shop', 4, 6);      //   1ランが短いので、買った物を使う機会を確保する
+    place('shop', 7, 8);
+    place('rest', 2, 5);      // ☕休憩所は中盤とボス前
+    place('rest', 7, 8);
+    place('stroll', 2, 5);    // 🚶コーヒーブレイクは2回
+    place('stroll', 5, 8);
     // 🎴話題トークが1つも出なかった日は、重複しない層に1つだけ足す
     const topicCount = layers.slice(1, -2).flat().filter((n) => n.type === 'topic').length;
-    if (topicCount < 1) place('topic', 1, 5);
+    if (topicCount < 1) place('topic', 1, 8);
 
     /* 層間の接続: 各マスから「対応する位置とその左右」へ引く。
-     * 以前は1本＋40%で2本だったため、6割以上の場面で行き先が1つしかなかった。
+     * v1.27.0までは1本＋40%で2本だったため、6割以上の場面で行き先が1つしかなかった。
      * ⚠ 層の幅が変わるところでは線が交差する。交差を禁じる引き方(単調な区間割当)も
-     *   試したが、選択の余地がない場面が25%→43〜48%に悪化したため交差を許す方を採用。
-     *   代わりに renderMap() で「いま立っているマスから伸びる線」だけを光らせて読みやすくする。 */
+     *   試したが、選択の余地がない場面が悪化したため交差を許す方を採用。
+     *   代わりに renderMap() で「いま立っているマスから伸びる線」だけを光らせる。 */
     const edges = [];
     for (let i = 0; i < LAYERS - 1; i++) {
       const a = layers[i].length, b = layers[i + 1].length;
@@ -496,6 +504,18 @@ const Run = {
         <p class="modal-title">🗺️ マップの見方</p>
         <h4 class="about-section">マス(ノード)の種類</h4>
         ${nodeRows}
+        <h4 class="about-section">マスに入ったときに起きること</h4>
+        <div class="legend-row">
+          <span class="legend-icon">👥</span>
+          <span class="legend-body"><strong>名刺交換</strong>
+            <span>どのマスに入るときも、まれに直前に発生します(1ランに1回だけ)。
+              覚えた名前は、あとで☕休憩所で聞かれます</span></span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-icon">🧠</span>
+          <span class="legend-body"><strong>クイズ</strong>
+            <span>💬会話のマスは、時々そのまま学会の豆知識や語学の話題になります</span></span>
+        </div>
         <h4 class="about-section">マスの状態</h4>
         <div class="legend-row">
           <span class="legend-icon sample-reachable">💬</span>
@@ -552,6 +572,30 @@ const Run = {
     this.state.nodeIndex = j;
     node.visited = true;
     this.save();
+    // 👥名刺交換は「マス」ではなく、どこかのマスに入る直前に割り込むイベント(1ランに1回)
+    if (this.maybeBadgeMeet(i, node.type)) return;
+    await this.resolveNode(node);
+  },
+
+  /**
+   * 👥名刺交換を割り込ませるか判定する。
+   * 一度でも起きたら二度と起きない。🛡️質疑応答と👑ボスの直前には割り込まない。
+   * 終盤まで起きなければ必ず起こす(1ランに1回は必ず体験できるように)。
+   */
+  maybeBadgeMeet(layer, type) {
+    const s = this.state;
+    if (s.badge && s.badge.met) return false;
+    if (type === 'boss' || type === 'qa') return false;
+    const total = s.map.layers.length;
+    const lastChance = layer >= total - 4;    // ここを逃すと再会する余裕が無くなる
+    if (!lastChance && Math.random() >= 0.3) return false;
+    this._pendingNode = this.state.map.layers[layer][this.state.nodeIndex];
+    this.openBadgeMeet();
+    return true;
+  },
+
+  /** マスの中身を実行する(名刺交換の割り込みが終わったあとにも呼ばれる) */
+  async resolveNode(node) {
     if (node.type === 'researcher') {
       // 招待状があればスキップ可能
       if (this.hasItem('invite')) {
@@ -565,6 +609,10 @@ const Run = {
           return;
         }
       }
+      // 💬会話マスは、時々そのまま雑学・語学の話題になる(v1.29.0)
+      const r = Math.random();
+      if (r < 0.20) { showScreen('run-event'); this.renderHud(); this.miniTrivia(); return; }
+      if (r < 0.32) { showScreen('run-event'); this.renderHud(); this.miniLang(); return; }
       this.startBattle(false);
     }
     else if (node.type === 'elite') this.startBattle(true);
@@ -575,8 +623,8 @@ const Run = {
     else if (node.type === 'random') this.openRandom();
     else if (node.type === 'topic') this.startTopic();
     else if (node.type === 'stroll') this.openStroll();
-    else if (node.type === 'badge') this.openBadgeMeet();
     else if (node.type === 'qa') this.startQaDefense();
+    else this.startBattle(false);
   },
 
   /* ---------- 会話戦闘 ---------- */
@@ -633,18 +681,31 @@ const Run = {
   },
 
   /** その日のボス戦を開始 */
+  /** まだ倒していないボスを優先して選ぶ(1ランに1体しか戦えないため) */
+  pickBoss() {
+    const seen = this.state.bossesSeen || [];
+    let pool = BOSSES.filter((b) => seen.indexOf(b.id) < 0);
+    if (!pool.length) pool = BOSSES.slice();
+    const beaten = (typeof BossLog !== 'undefined') ? BossLog.list() : [];
+    const fresh = pool.filter((b) => beaten.indexOf(b.id) < 0);
+    const from = fresh.length ? fresh : pool;
+    return from[Math.floor(Math.random() * from.length)];
+  },
+
   startBossBattle() {
     const day = this.state.day || 1;
-    const boss = BOSSES[day - 1];
+    const boss = this.pickBoss();
+    this.state.bossesSeen = (this.state.bossesSeen || []).concat(boss.id);
     // コーヒーはボス戦でも消費される
     let coffee = false;
     if (this.state.coffeeBuff) {
       coffee = true;
       this.state.coffeeBuff = false;
-      this.save();
     }
+    this.save();
     this.battle = {
-      isElite: false, isBoss: true, bossDay: day,
+      isElite: false, isBoss: true, bossDay: day, bossId: boss.id,
+      bossReward: boss.reward || { funds: 60, gems: 2 },
       title: boss.title, partner: boss.partner,
       turns: boss.turns, focus: boss.focus, coffee,
       timeMult: boss.timeMult || 1,
@@ -858,9 +919,10 @@ const Run = {
     const b = this.battle;
     let reward = 8 + 3 * b.totalDelta;
     if (b.isElite) reward = Math.round(reward * 2.5) + 20;
-    if (b.isBoss) reward += DAY_INFO[b.bossDay - 1].bossReward.funds;
+    if (b.isBoss) reward += (b.bossReward && b.bossReward.funds) || 60;
     reward = Math.round(reward * (b.rewardMult || 1));
     reward = Math.round(reward * (this.state.dailyMult || 1));     // 本日初回ボーナス等
+    reward = Math.round(reward * (this.state.dayBonus || 1));      // 「もう1日続ける」の上乗せ
     if (this.hasItem('shirt')) reward = Math.round(reward * 1.25);
     if (this.hasItem('mic')) reward = Math.round(reward * 1.15);   // 座長の推薦状
     this.state.funds += reward;
@@ -877,12 +939,18 @@ const Run = {
       this.gainItem('trophy');
       itemNote = `<div class="levelup-box">🏆 ${RUN_ITEMS.trophy.name} を手に入れた!(${RUN_ITEMS.trophy.desc})</div>`;
     }
+    let bossGems = 0;
     if (b.isBoss) {
-      const bossItem = DAY_INFO[b.bossDay - 1].bossReward.item;
-      if (bossItem && !this.hasItem(bossItem)) {
-        this.gainItem(bossItem);
-        itemNote = `<div class="levelup-box">${RUN_ITEMS[bossItem].icon} ${RUN_ITEMS[bossItem].name} を手に入れた!(${RUN_ITEMS[bossItem].desc})</div>`;
+      bossGems = (b.bossReward && b.bossReward.gems) || 0;
+      if (bossGems && typeof Gems !== 'undefined') Gems.add(bossGems, 'ボス撃破');
+      if (typeof BossLog !== 'undefined') {
+        BossLog.add(b.bossId);
+        if (BossLog.allBeaten() && typeof Achievements !== 'undefined') {
+          Achievements.unlock('boss-all');
+        }
       }
+      itemNote = `<div class="levelup-box">👑 ${escapeHtml(b.title)} を攻略した!` +
+        (bossGems ? ` 💎+${bossGems}` : '') + '</div>';
     }
     this.save();
     this.renderHud();
@@ -895,13 +963,12 @@ const Run = {
     if (b.isBoss && missed.length === 0 && typeof Achievements !== 'undefined') {
       Achievements.unlock('boss-perfect');
     }
-    // Day 1・2 のボスを倒したら、ここで一晩明けまで済ませてしまう。
-    // 「ボス撃破」と「Day Nクリア」で画面を2枚使わないためのテンポ改善。
-    const toNextDay = b.isBoss && b.bossDay < 3;
-    const nextInfo = toNextDay ? this.nextDay(true) : null;
-    const nextLabel = b.isBoss
-      ? (b.bossDay >= 3 ? '🎓 学会を終える' : `${nextInfo.name} を始める`)
-      : 'マップに戻る';
+    /* 1ラン = 1日が基本。ボスを倒したら「ここで終える」か「もう1日続ける」かを選ぶ。
+     * 平日は1日で切り上げ、時間のある日は伸ばす、という使い分けができる。 */
+    const day = b.bossDay || 1;
+    const canContinue = b.isBoss && day < 3;
+    const nextBonus = Math.round((1 + 0.3 * day) * 100) / 100;
+    const nextLabel = b.isBoss ? '🎓 ここで学会を終える(成果を持ち帰る)' : 'マップに戻る';
 
     const html = `
       <div class="convo-result">
@@ -914,9 +981,12 @@ const Run = {
         ${itemNote}
         ${levelUps.map((l) =>
           `<div class="levelup-box">🎉 <strong>${Stats.KEYS[l.key].label}</strong> が Lv.${l.level} に!</div>`).join('')}
-        ${toNextDay ? `<div class="nextday-box">
-          🌅 ホテルでぐっすり眠った。<strong>🧠 +15</strong> 回復。💰とアイテムはそのまま持ち越し。<br>
-          明日は「${escapeHtml(nextInfo.name)}」— さらに手強い相手が待っている。
+        ${canContinue ? `<div class="nextday-box">
+          🌅 <strong>もう1日続けますか?</strong><br>
+          続けると 🧠+15 回復し、💰とアイテムはそのまま持ち越して
+          「${escapeHtml((DAY_INFO[day] || {}).name || '次の日')}」へ。<br>
+          報酬倍率が <strong>×${nextBonus}</strong> に上がり、まだ倒していないボスが待っています。<br>
+          ここで終えても、成果はすべて持ち帰れます。
         </div>` : ''}
         ${merged ? '' : (missed.length ? `<div class="review-item" style="margin-top:10px">
           <div class="md-body review-situation">${renderMarkdown(missed[0].situation)}</div>
@@ -926,7 +996,10 @@ const Run = {
           ? '<p class="all-best">ベストな返しができた!</p>'
           : '<p class="all-best">全ターンでベスト選択!</p>'))}
       </div>
-      <button class="btn-large primary" id="btn-run-battle-done">${nextLabel}</button>`;
+      ${canContinue
+        ? `<button class="btn-large primary" id="btn-run-continue">🌅 もう1日続ける(報酬 ×${nextBonus})</button>
+           <button class="btn-large" id="btn-run-battle-done" style="margin-top:10px">${nextLabel}</button>`
+        : `<button class="btn-large primary" id="btn-run-battle-done">${nextLabel}</button>`}`;
 
     // merged のときはフィードバックの下に差し込む(画面を作り直さない)
     const box = merged ? document.getElementById('run-battle-endbox') : null;
@@ -938,7 +1011,13 @@ const Run = {
     }
 
     document.getElementById('btn-run-battle-done').addEventListener('click', () => {
-      if (b.isBoss && b.bossDay >= 3) { this.clearRun(); return; }
+      if (b.isBoss) { this.clearRun(); return; }
+      showScreen('run-map');
+    });
+    const cont = document.getElementById('btn-run-continue');
+    if (cont) cont.addEventListener('click', () => {
+      this.state.dayBonus = nextBonus;
+      this.nextDay(true);
       showScreen('run-map');
     });
   },
@@ -1107,7 +1186,6 @@ const Run = {
       <h3 style="text-align:center;margin-bottom:4px">休憩スペース</h3>
       <p class="field-note" style="text-align:center;margin-bottom:16px">静かなソファを見つけました。どう過ごしますか?</p>
       <button class="btn-large primary" id="btn-rest-heal">☕ 休む(🧠を${Math.round(this.state.maxHp * 0.3)}回復)</button>
-      <button class="btn-large" id="btn-rest-study" style="margin-top:10px">📖 予習する(好きな能力に+30XP)</button>
       ${kiosk && kiosk.length ? `
         <h4 class="about-section">🛍️ 小さな売店が出ている</h4>
         ${kiosk.map((id) => `
@@ -1118,27 +1196,13 @@ const Run = {
             <button class="btn-control ${this.state.funds >= this.priceBuy(id) ? 'primary' : ''}" data-rest-buy="${id}"
               ${this.state.funds >= this.priceBuy(id) ? '' : 'disabled'}>💰${this.priceBuy(id)}</button>
           </div>`).join('')}
-        <p class="field-note" style="text-align:center">買い物をしても、休む/予習はそのまま選べます</p>` : ''}`;
+        <p class="field-note" style="text-align:center">買い物をしても、そのあと休めます</p>` : ''}`;
 
     document.getElementById('btn-rest-heal').addEventListener('click', () => {
       this.state.hp = Math.min(this.state.maxHp,
         this.state.hp + Math.round(this.state.maxHp * 0.3));
       this.save();
       this.eventDone('☕ ひと息ついた。🧠が回復した。');
-    });
-    document.getElementById('btn-rest-study').addEventListener('click', () => {
-      document.getElementById('run-event-content').innerHTML = `
-        <h3 style="text-align:center;margin:12px 0 16px">どの能力を伸ばす?</h3>
-        ${Object.entries(Stats.KEYS).map(([k, meta]) =>
-          `<button class="btn-large" style="margin-bottom:10px" data-study="${k}">${meta.icon} ${meta.label} +30XP</button>`).join('')}`;
-      document.querySelectorAll('[data-study]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const ups = Stats.add({ [btn.dataset.study]: 30 });
-          this.save();
-          this.eventDone(`📖 ${Stats.KEYS[btn.dataset.study].label} が +30XP` +
-            (ups.length ? ` — 🎉 Lv.${ups[0].level} に上がった!` : ''));
-        });
-      });
     });
     document.querySelectorAll('[data-rest-buy]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1160,10 +1224,8 @@ const Run = {
   openTreasure() {
     showScreen('run-event');
     this.renderHud();
-    const r = Math.random();
-    if (r < 0.22) this.miniSlot();
-    else if (r < 0.56) this.miniTrivia();                  // 豆知識クイズを多めに
-    else if (r < 0.80) this.miniLang();
+    // クイズは💬会話マスに移したので、ここはスロットと宝箱の2種類(v1.29.0)
+    if (Math.random() < 0.35) this.miniSlot();
     else this.freeTreasure();
   },
 
@@ -1228,11 +1290,12 @@ const Run = {
   },
 
   /** クイズ共通描画 */
-  renderQuiz(icon, title, q, onAnswer) {
+  renderQuiz(icon, title, q, onAnswer, intro) {
     const el = document.getElementById('run-event-content');
     const idxs = q.choices.map((_, i) => i).sort(() => Math.random() - 0.5);
     el.innerHTML = `
       ${this.eventHead(icon, title, '正解すると報酬がもらえます')}
+      ${intro ? `<p class="quiz-intro">${escapeHtml(intro)}</p>` : ''}
       <div class="situation">${escapeHtml(q.q)}</div>
       <div class="choices">
         ${idxs.map((i) =>
@@ -1247,16 +1310,30 @@ const Run = {
     });
   },
 
+  TRIVIA_INTRO: [
+    '隣に座った研究者と、学会の慣習の話になった。',
+    'コーヒーを待つ列で、ベテランの先生がクイズを出してきた。',
+    '懇親会のテーブルで、学会の豆知識で盛り上がっている。',
+    'ポスター会場の休憩コーナーで、雑談から学会あるあるの話に。'
+  ],
+
   miniTrivia() {
     const q = TRIVIA[Math.floor(Math.random() * TRIVIA.length)];
-    this.renderQuiz('🧠', '学会豆知識クイズ', q, (ok, qq) => {
+    const intro = this.TRIVIA_INTRO[Math.floor(Math.random() * this.TRIVIA_INTRO.length)];
+    this.renderQuiz('🧠', '学会の豆知識', q, (ok, qq) => {
       let msg;
       if (ok) { this.state.funds += 20; msg = `⭕ 正解! 💰20 を獲得。\n\n${qq.note}`; }
       else { msg = `❌ 残念! 正解は「${qq.choices[qq.correct]}」。\n\n${qq.note}`; }
       this.save();
       this.eventDone(msg);
-    });
+    }, intro);
   },
+
+  LANG_INTRO: [
+    '相手が母語で話しかけてきた。ここで返せると距離が一気に縮まる。',
+    '「日本語以外も話せるの?」と聞かれた。覚えたフレーズの出番だ。',
+    '受付で現地スタッフに話しかけられた。'
+  ],
 
   miniLang() {
     // Language Questの学習済みカードがあればそこから出題(回答はSRSにも記録)
@@ -1265,7 +1342,8 @@ const Run = {
       try { q = Learn.runQuizQuestion(); } catch (_) { q = null; }
     }
     if (!q) q = LANG_QUIZ[Math.floor(Math.random() * LANG_QUIZ.length)];
-    this.renderQuiz('🗣️', `${q.lang}クイズ`, q, (ok, qq) => {
+    const intro = this.LANG_INTRO[Math.floor(Math.random() * this.LANG_INTRO.length)];
+    this.renderQuiz('🗣️', `${q.lang}で話しかけられた`, q, (ok, qq) => {
       if (qq.cardId && typeof SRS !== 'undefined') SRS.answer(qq.cardId, ok);
       let msg;
       if (ok) {
@@ -1277,7 +1355,7 @@ const Run = {
       }
       this.save();
       this.eventDone(msg);
-    });
+    }, intro);
   },
 
   freeTreasure() {
@@ -1343,7 +1421,15 @@ const Run = {
         <p class="field-note" style="margin-top:6px">${escapeHtml(this.topicGame.partner.situation)}</p>
         <p class="topic-hint">🔍 ${escapeHtml(this.topicGame.partner.hint)}</p>
       </div>
-      <p class="field-note" style="text-align:center;margin-top:8px">ヒントから相手の好みを読み、話題を出す<strong>順番</strong>も考えましょう</p>
+      <div class="card topic-legend">
+        <p class="topic-legend-title">話題の選び方</p>
+        <p><span class="t-mark">🟢</span> いつ出しても外さない。⭐が多いほど盛り上がる</p>
+        <p><span class="t-mark">🟡</span> 条件つき。条件を満たすまではマイナスになる</p>
+        <p><span class="t-mark">🔴</span> 地雷。出すと機嫌が大きく下がり🧠も減る</p>
+        <p class="field-note" style="margin-top:6px">
+          そのうえで、上の🔍ヒントから相手の好みを読むと <strong>さらに+1</strong>、
+          嫌いな話題だと <strong>-1</strong> されます。出す<strong>順番</strong>も大事です。</p>
+      </div>
       <button class="btn-large primary" style="margin-top:10px" id="btn-topic-go">会話を始める</button>`;
     document.getElementById('btn-topic-go').addEventListener('click', () => this.renderTopicTurn());
   },
@@ -1360,14 +1446,20 @@ const Run = {
       </div>
       <p class="field-note" style="text-align:center">ターン ${g.turn + 1} / 3 ・ 🔍 ${escapeHtml(g.partner.hint)}</p>
       ${g.lastLine ? `<div class="card topic-line">${escapeHtml(g.lastLine)}</div>` : ''}
-      <p class="field-note" style="margin:8px 0 4px">どの話題を出す?</p>
+      <p class="field-note" style="margin:8px 0 4px">どの話題を出す?
+        <span class="topic-legend-inline">🟢安全 / 🟡条件つき / 🔴地雷 ・ ⭐は基礎点</span></p>
       <div class="topic-hand">
-        ${g.hand.map((c, i) => `
-          <button class="topic-card" data-topic-play="${i}">
+        ${g.hand.map((c, i) => {
+          const gd = Topic.cardGuide(c, g.mood, g.playedTags);
+          return `
+          <button class="topic-card safety-${gd.safety} ${gd.ready ? '' : 'not-ready'}" data-topic-play="${i}">
             <span class="t-icon">${c.icon}</span>
-            <span class="t-label">${escapeHtml(c.label)}</span>
+            <span class="t-label">${escapeHtml(c.label)}
+              <span class="t-mark">${gd.mark}${'⭐'.repeat(gd.stars)}</span></span>
             <span class="t-desc">${escapeHtml(c.desc)}</span>
-          </button>`).join('')}
+            <span class="t-guide">${escapeHtml(gd.note)}</span>
+          </button>`;
+        }).join('')}
       </div>`;
     document.querySelectorAll('[data-topic-play]').forEach((btn) => {
       btn.addEventListener('click', () => this.playTopicCard(Number(btn.dataset.topicPlay)));
@@ -1765,42 +1857,45 @@ const Run = {
 
   /* ---------- 👥 名刺交換(名札記憶ゲーム。1ランに1回) ---------- */
   openBadgeMeet() {
-    const people = mgShuffle(BADGE_PEOPLE).slice(0, 3);
+    // 覚えるのは1人だけ。3人は多すぎて「覚える遊び」にならなかった(v1.29.0)
+    const person = BADGE_PEOPLE[Math.floor(Math.random() * BADGE_PEOPLE.length)];
     this.state.badge = {
       met: true, resolved: false,
-      day: this.state.day, layer: this.state.layer, people
+      day: this.state.day, layer: this.state.layer, people: [person]
     };
     this.save();
     showScreen('run-event');
     this.renderHud();
     document.getElementById('run-event-content').innerHTML = `
-      ${this.eventHead('👥', '名刺交換', 'コーヒー待ちの列で、3人組の研究者と名刺交換をした')}
-      ${people.map((p) => `
-        <div class="card badge-card">
-          <p class="badge-name">${escapeHtml(p.name)}</p>
-          <p class="field-note">${escapeHtml(p.affil)} ・ ${escapeHtml(p.topic)}の研究</p>
-        </div>`).join('')}
+      ${this.eventHead('👥', '名刺交換', '通りがかりに声をかけられ、名刺を交換した')}
+      <div class="card badge-card">
+        <p class="badge-name">${escapeHtml(person.name)}</p>
+        <p class="field-note">${escapeHtml(person.affil)} ・ ${escapeHtml(person.topic)}の研究</p>
+      </div>
       <p class="field-note" style="text-align:center;margin-top:8px">
-        📇 名前と顔(所属・研究テーマ)をつなげて覚えましょう。<br>
+        📇 名前を、所属と研究テーマとセットで覚えるのがコツです。<br>
         <strong>この名前、あとで思い出すことになるかも…</strong></p>
       <button class="btn-large primary" style="margin-top:10px" id="btn-badge-done">覚えた!(💰+5)</button>`;
     document.getElementById('btn-badge-done').addEventListener('click', () => {
       this.state.funds += 5;
       this.save();
-      showScreen('run-map');
+      // 割り込みだったので、本来入るはずだったマスへ進む
+      const pending = this._pendingNode;
+      this._pendingNode = null;
+      if (pending) this.resolveNode(pending);
+      else showScreen('run-map');
     });
   },
 
   renderBadgeRecall() {
     const b = this.state.badge;
-    const target = b.people[Math.floor(Math.random() * b.people.length)];
-    const metNames = b.people.map((p) => p.name);
-    const decoys = mgShuffle(BADGE_PEOPLE.filter((p) => !metNames.includes(p.name))).slice(0, 1);
-    const choices = mgShuffle(b.people.concat(decoys).map((p) => p.name));
+    const target = b.people[0];
+    const decoys = mgShuffle(BADGE_PEOPLE.filter((p) => p.name !== target.name)).slice(0, 3);
+    const choices = mgShuffle([target].concat(decoys).map((p) => p.name));
     document.getElementById('run-event-content').innerHTML = `
       ${this.eventHead('👤', '見覚えのある顔!', '')}
       <div class="situation">
-        休憩スペースに入ると、先日名刺交換した研究者が笑顔で近づいてきた。<br><br>
+        休憩スペースに入ると、さっき名刺交換した研究者が笑顔で近づいてきた。<br><br>
         <strong>${escapeHtml(target.affil)}</strong>で<strong>${escapeHtml(target.topic)}</strong>を研究している、あの人だ。<br>
         「We met the other day!」 — さて、名前は…?
       </div>
@@ -1820,7 +1915,7 @@ const Run = {
           msg = `⭕ 「${target.name}さんですよね!」\n「覚えていてくれたんですね!」— 相手は明らかに嬉しそうだ。研究の話で盛り上がり、共同研究の芽が生まれた。💰+40 ・ 🧠+8`;
         } else {
           this.state.hp = Math.max(1, this.state.hp - 6);
-          msg = `❌ 「…私は ${target.name} です(苦笑)」\n名前を間違えるのは、覚えていないより気まずい…。🧠-6。\n(名刺交換のときは、名前+所属+テーマをセットで覚えるのがコツ)`;
+          msg = `❌ 「…私は ${target.name} です(苦笑)」\n名前を間違えるのは、覚えていないより気まずい…。🧠-6。\n(名前+所属+研究テーマをセットで覚えるのがコツ)`;
         }
         this.save();
         this.renderHud();
@@ -1936,7 +2031,9 @@ const Run = {
   /* ---------- 終了 ---------- */
   clearRun() {
     const funds = this.state.funds;
-    const bonus = 100; // 完走ボーナス
+    const days = this.state.day || 1;
+    // 1ラン=1日が基本になったので完走ボーナスは控えめに。続けた日数ぶんは上乗せする
+    const bonus = 60 * days;
 
     // 所持しているレリックの完走ボーナスを精算
     const relicRows = [];
@@ -1960,22 +2057,24 @@ const Run = {
       Achievements.unlock('run-clear');
       if (relicRows.length >= 2) Achievements.unlock('relic-collector');
     }
-    if (typeof Gems !== 'undefined') Gems.add(5 + relicGems, '学会制覇');
+    const gems = 2 + days + relicGems;
+    if (typeof Gems !== 'undefined') Gems.add(gems, '学会をやりきった');
     this.end();
     showScreen('run-result');
     document.getElementById('run-result-content').innerHTML = `
       <div class="rank-badge" style="color:var(--success);border-color:var(--success)">
         <span class="rank-letter">🎓</span></div>
-      <p class="rank-label">学会制覇!</p>
+      <p class="rank-label">${days >= 3 ? '学会制覇!' : 'おつかれさま!'}</p>
       <p class="field-note" style="margin-bottom:14px">
-        座長、大御所、そして鋭いReviewer——<br>
-        3日間すべての会話を乗り切りました。<br>
-        あなたの学会は、確かな人脈と次の論文の約束とともに終わりました。
+        ${days}日間の会話を乗り切りました。<br>
+        名刺と、次につながる約束を持って帰ります。
+        ${(typeof BossLog !== 'undefined' && BossLog.allBeaten())
+          ? '<br>👑 3人のボスすべてに勝ったことがあります。' : ''}
       </p>
       <div class="xp-gains">
         <span class="xp-chip points">💰 ${funds} → ⭐ ${funds} pt に換金</span>
         <span class="xp-chip points">🎓 完走ボーナス +${bonus} pt</span>
-        <span class="xp-chip">💎 +5</span>
+        <span class="xp-chip">💎 +${gems}</span>
       </div>
       ${relicRows.length ? `<h3 class="about-section">✨ レリックボーナス</h3>${relicRows.join('')}` : ''}
       <button class="btn-large primary" id="btn-run-again" style="margin-top:14px">新しい学会に挑戦</button>

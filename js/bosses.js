@@ -7,7 +7,7 @@
 const BOSSES = [
   {
     day: 1,
-    id: 'boss-chair',
+    id: 'boss-chair', reward: { funds: 55, gems: 2 },
     title: '👑 セッション座長',
     partner: 'Prof. Han — あなたのセッションの座長。丁寧だが観察眼が鋭い',
     focus: ['network', 'confidence'],
@@ -73,7 +73,7 @@ const BOSSES = [
 
   {
     day: 2,
-    id: 'boss-bigshot',
+    id: 'boss-bigshot', reward: { funds: 65, gems: 2 },
     title: '👑 分野の大御所',
     partner: 'Prof. Weiss — この分野を作った一人。あなたの発表を最前列で聞いていた',
     focus: ['confidence', 'english'],
@@ -153,7 +153,7 @@ const BOSSES = [
 
   {
     day: 3,
-    id: 'boss-reviewer',
+    id: 'boss-reviewer', reward: { funds: 80, gems: 3 },
     title: '👑 鋭いReviewer',
     partner: 'Dr. Sato — シンポジウム後の質疑で最前列に座る、有名な辛口レビュアー',
     timeMult: 0.75,
@@ -234,7 +234,30 @@ const BOSSES = [
 ];
 
 const DAY_INFO = [
-  { day: 1, name: 'Day 1: レセプション', bossReward: { item: 'mic', funds: 50 } },
-  { day: 2, name: 'Day 2: 本会議', bossReward: { item: 'goldcard', funds: 60 } },
-  { day: 3, name: 'Day 3: シンポジウム', bossReward: { item: null, funds: 80 } }
+  { day: 1, name: 'Day 1: レセプション' },
+  { day: 2, name: 'Day 2: 本会議' },
+  { day: 3, name: 'Day 3: シンポジウム' }
 ];
+
+/* 撃破したボスの記録(ランをまたいで残る)。
+ * 1ラン1日制になり1体しか戦えないので、まだ倒していない相手が優先で出るようにする。 */
+const BossLog = {
+  KEY: 'lq_boss_beaten',
+  list() {
+    try {
+      const v = JSON.parse(localStorage.getItem(this.KEY) || '[]');
+      return Array.isArray(v) ? v : [];
+    } catch (_) { return []; }
+  },
+  add(id) {
+    const l = this.list();
+    if (l.indexOf(id) < 0) {
+      l.push(id);
+      localStorage.setItem(this.KEY, JSON.stringify(l));
+    }
+  },
+  allBeaten() {
+    const l = this.list();
+    return BOSSES.every((b) => l.indexOf(b.id) >= 0);
+  }
+};
