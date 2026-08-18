@@ -405,5 +405,465 @@ const RUN_CARDS = [
           why: '安全ですが一般論すぎて、議論が深まりません。' }
       ]
     }]
+  },
+  {
+    id: 'poster-own-visitor',
+    title: '自分のポスターに人が来た',
+    partner: 'ポスターを覗きに来た研究者',
+    focus: ['confidence', 'english'],
+    turns: [{
+      situation: 'あなたのポスターの前に、一人の研究者が立ち止まって図を眺めています。まだ何も言ってきません。',
+      limitSec: 12,
+      choices: [
+        { text: 'Hi! Would you like me to walk you through it? It takes about two minutes.', delta: 3, best: true,
+          why: '**こちらから声をかけ、所要時間を先に伝える**のが最強です。相手は「長く捕まらない」と分かって安心して聞けます。' },
+        { text: 'Hello. Any questions?', delta: 1,
+          why: '悪くありませんが、相手はまだ内容を把握していないので「質問は?」は答えにくい問いです。' },
+        { text: '(相手が読み終わるまで黙って待つ)', delta: -1,
+          why: '遠慮しすぎです。ポスターは「話しかけてもらう場」ではなく「話しかける場」。黙っていると通り過ぎられます。' },
+        { text: 'This is my poster. I am Hideki from Japan. I study chromatin. It is very interesting research and I have many data.', delta: -2,
+          why: '前置きが長く、相手が知りたい「何が分かったのか」に届きません。自己紹介より先に中身を1文で。' }
+      ]
+    }]
+  },
+  {
+    id: 'one-minute-pitch',
+    title: '「1分で説明して」',
+    partner: '足早に回っている大御所',
+    focus: ['confidence', 'topic'],
+    turns: [{
+      situation: '「I only have a minute — what\'s the main finding?」 大御所が腕時計を見ながら聞いてきました。',
+      limitSec: 12,
+      choices: [
+        { text: 'We found that X controls Y. Before, people thought Z — this changes that.', delta: 3, best: true,
+          why: '**結論 → これまでの常識 → 何が変わるか**の3文。1分しかない相手には、背景ではなく結論から渡します。' },
+        { text: 'So, first let me explain the background of this field. In 2015, a group reported...', delta: -3,
+          why: '「1分で」と言われて背景から始めるのは最悪の返しです。相手は途中で離れてしまいます。' },
+        { text: 'We found that X controls Y.', delta: 2,
+          why: '結論から入れたのは正解。もう一言「だから何が新しいか」を添えると、相手の記憶に残ります。' },
+        { text: 'It\'s a bit complicated to explain in a minute...', delta: -2,
+          why: '「1分では説明できない」は、要点を掴めていないと受け取られます。どんな研究も1文には縮められます。' }
+      ]
+    }]
+  },
+  {
+    id: 'qa-self-intro',
+    title: '質問の前の名乗り',
+    partner: 'セッションの発表者',
+    focus: ['confidence', 'english'],
+    turns: [{
+      situation: '質疑応答。マイクの前に立ちました。会場全員が聞いています。',
+      limitSec: 12,
+      choices: [
+        { text: 'Hideki Yamada, from Kyoto. Thank you for the talk — I have one question about Figure 3.', delta: 3, best: true,
+          why: '**名前と所属 → 短い感謝 → 質問箇所の明示**。国際学会の質疑の標準形で、これだけで「慣れている人」に見えます。' },
+        { text: '(いきなり)In Figure 3, why did you use that control?', delta: 0,
+          why: '内容は良いのですが、名乗りがないと座長も発表者も誰の質問か分かりません。ひと呼吸で名乗りましょう。' },
+        { text: 'Hello, my name is Hideki Yamada and I am a postdoc at the Institute of... and I work on chromatin, and today I really enjoyed...', delta: -2,
+          why: '自己紹介が長すぎます。質疑の時間は発表者と会場のものです。名乗りは10秒以内に。' },
+        { text: 'Sorry, my English is not good, but...', delta: -1,
+          why: '謝罪から入ると、聞き手の注意が内容ではなくあなたの英語に向いてしまいます。堂々と質問だけ言えば十分です。' }
+      ]
+    }]
+  },
+  {
+    id: 'cant-answer',
+    title: '答えられない質問',
+    partner: '鋭い質問をした参加者',
+    focus: ['confidence', 'english'],
+    turns: [{
+      situation: '質疑で「そのデータの統計処理は?」と聞かれましたが、共同研究者が担当した部分で即答できません。',
+      limitSec: 12,
+      choices: [
+        { text: 'Good question — that part was done by my collaborator. Could I check and get back to you after the session?', delta: 3, best: true,
+          why: '**分からないと認める + 誰が知っているか + いつ答えるか**。これは弱さではなく誠実さで、むしろ信頼されます。' },
+        { text: 'I think it was probably a t-test... maybe.', delta: -2,
+          why: '曖昧な推測は最も危険です。あとで違っていたら、その研究全体の信頼が揺らぎます。' },
+        { text: 'I don\'t know.', delta: 0,
+          why: '正直なのは良いのですが、そこで会話が終わります。「調べて後で答える」まで言えると印象が変わります。' },
+        { text: 'That\'s not really important for the main conclusion.', delta: -3,
+          why: '質問をはねつける返しです。会場全体に「都合の悪い指摘を避けた」と伝わってしまいます。' }
+      ]
+    }]
+  },
+  {
+    id: 'chair-greeting',
+    title: '発表前、座長への挨拶',
+    partner: 'あなたのセッションの座長',
+    focus: ['network', 'confidence'],
+    turns: [{
+      situation: 'セッション開始15分前。会場に座長らしき人がいます。あなたはこのセッションの発表者です。',
+      limitSec: 12,
+      choices: [
+        { text: 'Excuse me, are you Prof. Han? I\'m Hideki Yamada — I\'m giving the third talk. Nice to meet you.', delta: 3, best: true,
+          why: '**発表前に座長へ名乗る**のは国際学会の礼儀です。名前の読み方も伝わり、紹介がスムーズになります。' },
+        { text: '(何も言わず自分の席に座る)', delta: -1,
+          why: '悪いことではありませんが、大きな機会損失です。座長は分野の要人であることが多く、この30秒が人脈になります。' },
+        { text: 'Hello! Could you please introduce me with my full title and mention my funding agency?', delta: -2,
+          why: '紹介の注文をつけるのは越権です。座長には名乗るだけで十分。' },
+        { text: 'Hi, I am the third speaker.', delta: 1,
+          why: '必要な情報は伝わりますが、名前を言わないと座長が困ります。名乗りはセットで。' }
+      ]
+    }]
+  },
+  {
+    id: 'late-entry',
+    title: '遅れて入室',
+    partner: '満席の会場',
+    focus: ['confidence'],
+    turns: [{
+      situation: '聞きたい発表に5分遅れました。会場は暗く、前の方にしか空席が見えません。',
+      limitSec: 10,
+      choices: [
+        { text: '(静かに入り、後方の壁際に立って聞く)', delta: 3, best: true,
+          why: '**発表を妨げないのが最優先**。前の空席へ横切るより、壁際に立つほうがずっと印象が良い選択です。' },
+        { text: '(前方の空席まで通路を歩いて座る)', delta: -1,
+          why: '暗い会場を横切ると視線を集め、発表者の集中を切ってしまいます。' },
+        { text: '(諦めて外で待つ)', delta: 0,
+          why: '迷惑はかけませんが、聞きたかった発表を丸ごと逃します。静かに入れば大丈夫です。' },
+        { text: '(隣の人に「What did I miss?」と小声で聞く)', delta: -2,
+          why: '発表中の私語は、周囲にとって最も気になる迷惑です。あとで聞きましょう。' }
+      ]
+    }]
+  },
+  {
+    id: 'badge-recognized',
+    title: '名札を見られた',
+    partner: '名札を覗き込んだ研究者',
+    focus: ['network', 'confidence'],
+    turns: [{
+      situation: '相手があなたの名札をちらりと見て、「Oh — you\'re the one who published that paper on chromatin?」と言いました。',
+      limitSec: 12,
+      choices: [
+        { text: 'Yes, that\'s me! Are you working on something related?', delta: 3, best: true,
+          why: '**素直に認めて、すぐ相手に話を振り返す**。相手はあなたの論文を知っているので、共通の話題がすでにあります。' },
+        { text: 'Oh, it\'s nothing special, really. Just a small paper.', delta: -2,
+          why: '日本的な謙遜ですが、国際的な場では「本当に大したことがない」と受け取られます。せっかくの評価を自分で下げないこと。' },
+        { text: 'Yes, that\'s me.', delta: 1,
+          why: '認めたのは正解。ただ会話がそこで止まります。ひとこと質問を返せば関係が始まります。' },
+        { text: 'Yes! Did you read it? What did you think of the third figure? Actually there were four more experiments we could not include...', delta: -1,
+          why: '嬉しさが先走っています。相手はまだ挨拶の段階なので、一気に詳細へ行くと引かれます。' }
+      ]
+    }]
+  },
+  {
+    id: 'lunch-seat',
+    title: 'ランチの相席',
+    partner: '同じテーブルの見知らぬ参加者',
+    focus: ['network', 'english'],
+    turns: [{
+      situation: 'ランチ会場。ほぼ満席で、4人掛けのテーブルに1つだけ空きがあります。3人は知らない人です。',
+      limitSec: 10,
+      choices: [
+        { text: 'Excuse me, is this seat taken? — Thanks. I\'m Hideki, from Japan.', delta: 3, best: true,
+          why: '**一言断って座り、そのまま名乗る**。学会のランチは人脈作りの最高の場で、黙って座ると気まずいまま終わります。' },
+        { text: '(空席を避けて、一人で立って食べる)', delta: -2,
+          why: '一番もったいない選択です。ランチの相席は「話しかけていい」場として全員が了解しています。' },
+        { text: '(黙って座り、スマホを見ながら食べる)', delta: -1,
+          why: '座れたのは良いのですが、スマホを見た瞬間に「話しかけないで」の合図になります。' },
+        { text: 'Is this seat taken?', delta: 1,
+          why: '礼儀としては十分。名乗りを足すだけで、そこから会話が始まります。' }
+      ]
+    }]
+  },
+  {
+    id: 'shuttle-bus',
+    title: 'シャトルバスの隣席',
+    partner: '隣に座った参加者',
+    focus: ['network', 'topic'],
+    turns: [{
+      situation: '会場行きのバス。隣に座った人と目が合いました。移動は20分ほどあります。',
+      limitSec: 12,
+      choices: [
+        { text: 'Morning. Is this your first time at this conference?', delta: 3, best: true,
+          why: '**誰にでも答えられて、そこから話が広がる質問**。「初めて」でも「10回目」でも次の話題が生まれます。' },
+        { text: 'Hello. Nice weather today.', delta: 1,
+          why: '無難な入り口です。ただ天気の話は続きにくいので、もう一歩踏み込む問いがあると良いでしょう。' },
+        { text: '(会釈だけしてイヤホンをつける)', delta: -1,
+          why: '疲れているときは仕方ありませんが、20分の相席は貴重な機会です。' },
+        { text: 'What is your h-index?', delta: -3,
+          why: '業績を数字で聞くのは、初対面ではかなり失礼にあたります。給料を聞くのと同じ感覚です。' }
+      ]
+    }]
+  },
+  {
+    id: 'photo-permission',
+    title: 'ポスターの写真',
+    partner: 'ポスター発表者',
+    focus: ['english', 'network'],
+    turns: [{
+      situation: '興味深いポスターを見つけました。あとで読み返したいので写真を撮りたいのですが、発表者が横にいます。',
+      limitSec: 12,
+      choices: [
+        { text: 'This is really interesting — would it be OK if I took a photo for my own reference?', delta: 3, best: true,
+          why: '**必ず一言断る**のが鉄則です。未発表データが含まれることも多く、無断撮影はトラブルのもとになります。' },
+        { text: '(黙ってスマホで撮る)', delta: -3,
+          why: '学会によっては規約違反です。未発表データの流出を心配させ、相手を強く不快にさせます。' },
+        { text: 'Can I take a photo?', delta: 2,
+          why: '断っているので問題ありません。「for my own reference(自分用に)」を足すと、相手はより安心します。' },
+        { text: 'Could you send me the PDF of this poster by email?', delta: 0,
+          why: '悪くはありませんが、相手に手間をかけます。まずその場で撮らせてもらうほうが自然です。' }
+      ]
+    }]
+  },
+  {
+    id: 'out-of-cards',
+    title: '名刺を切らした',
+    partner: '名刺を差し出した研究者',
+    focus: ['confidence', 'network'],
+    turns: [{
+      situation: '相手が名刺を差し出しました。しかし、あなたの名刺入れはもう空です。',
+      limitSec: 12,
+      choices: [
+        { text: 'Thank you! I\'m out of cards — may I email you right now so you have my address?', delta: 3, best: true,
+          why: '**その場で解決策を出す**のが最善。目の前でメールを送れば、名刺以上に確実に連絡先が残ります。' },
+        { text: 'Sorry, I have no card.', delta: 0,
+          why: '正直ですが、そこで連絡先の交換が終わってしまいます。代わりの手段を出しましょう。' },
+        { text: '(受け取るだけで何も言わない)', delta: -2,
+          why: '一方的に受け取るだけになり、関係が片道で終わります。' },
+        { text: 'I\'m so sorry, that\'s very rude of me, I should have prepared more, I apologize...', delta: -1,
+          why: '謝りすぎです。名刺切れはよくあることで、相手も気にしていません。' }
+      ]
+    }]
+  },
+  {
+    id: 'collab-offer',
+    title: '共同研究の打診',
+    partner: '同じ手法を使っているPI',
+    focus: ['network', 'confidence'],
+    turns: [{
+      situation: '「We should collaborate — we have the mouse line you need.」 その場で共同研究を持ちかけられました。',
+      limitSec: 14,
+      choices: [
+        { text: 'That sounds great. Let me talk to my PI, and I\'ll email you this week — is that OK?', delta: 3, best: true,
+          why: '**乗り気を示しつつ、持ち帰る**。ボスに確認が必要なのは相手も分かっています。期限を切ると本気度が伝わります。' },
+        { text: 'Yes! Let\'s do it. I\'ll send you the samples next month.', delta: -1,
+          why: '前のめりすぎます。試料の送付は所属機関の合意(MTA)が要ることが多く、独断で約束すると後で困ります。' },
+        { text: 'Hmm, I need to think about it.', delta: 0,
+          why: '慎重なのは良いのですが、次のアクションがないと話は自然消滅します。' },
+        { text: 'Sorry, we are already doing that ourselves.', delta: -2,
+          why: '事実でも、扉を閉じる言い方です。「今はこう進めているが、この部分なら一緒にできるかも」と余地を残しましょう。' }
+      ]
+    }]
+  },
+  {
+    id: 'ask-slides',
+    title: 'スライドをもらいたい',
+    partner: '参考になる発表をした人',
+    focus: ['english', 'network'],
+    turns: [{
+      situation: '発表の一枚のスライドが自分の研究にそのまま役立ちそうです。発表後、本人に話しかけました。',
+      limitSec: 12,
+      choices: [
+        { text: 'Your slide on the workflow was really useful. Is there a paper I could cite, or could I ask you for that figure?', delta: 3, best: true,
+          why: '**まず論文を尋ねる**のが礼儀です。未発表なら図をお願いする、という順番なら相手も断りやすく、頼みやすくなります。' },
+        { text: 'Could you send me all your slides?', delta: -2,
+          why: '未発表データを含む全スライドの要求は重いお願いです。ほぼ断られ、気まずくなります。' },
+        { text: 'Where can I find that data?', delta: 1,
+          why: '悪くありませんが、少し素っ気なく聞こえます。何が良かったかを先に言うと印象が変わります。' },
+        { text: '(あとでメールしようと思い、その場では何も言わない)', delta: 0,
+          why: 'メールは届きますが、顔を合わせた今のほうが圧倒的に返事をもらいやすいです。' }
+      ]
+    }]
+  },
+  {
+    id: 'join-busy-pair',
+    title: '話し中の2人',
+    partner: '立ち話をしている2人',
+    focus: ['network', 'confidence'],
+    turns: [{
+      situation: '話したかった研究者が、別の人と真剣な様子で立ち話をしています。もうすぐ次のセッションが始まります。',
+      limitSec: 12,
+      choices: [
+        { text: '(近くで待ち、会話が途切れた瞬間に)Sorry to interrupt — do you have two minutes later today?', delta: 3, best: true,
+          why: '**割り込まず、区切りで、短い時間だけ**を求める。相手も断りにくく、あなたも確実に時間を取れます。' },
+        { text: '(2人の会話に入って自己紹介を始める)', delta: -2,
+          why: '真剣な話の途中で割り込むと、相手にも一緒にいる人にも失礼になります。' },
+        { text: '(諦めて立ち去る)', delta: -1,
+          why: '安全ですが、学会の残り時間は限られています。「あとで2分だけ」なら十分頼めます。' },
+        { text: '(2人の横にずっと立って、じっと見つめて待つ)', delta: -1,
+          why: '待つ姿勢は正しいのですが、至近距離で見つめると相手が話しづらくなります。少し離れて待ちましょう。' }
+      ]
+    }]
+  },
+  {
+    id: 'receive-praise',
+    title: '褒められたときの返し',
+    partner: '発表を褒めてくれた参加者',
+    focus: ['confidence', 'english'],
+    turns: [{
+      situation: '「That was a very clear presentation. I really liked it.」 発表後に声をかけられました。',
+      limitSec: 10,
+      choices: [
+        { text: 'Thank you, that means a lot. Which part was most useful for you?', delta: 3, best: true,
+          why: '**素直に受け取り、質問で返す**。日本語では謙遜が礼儀ですが、英語では受け取ることが礼儀です。質問を足せば会話が続きます。' },
+        { text: 'No no, my English is terrible and the slides were messy.', delta: -2,
+          why: '強い否定は、褒めた相手の判断を否定することになります。国際的な場では受け取るのが礼儀です。' },
+        { text: 'Thank you.', delta: 1,
+          why: '十分に礼儀正しい返しです。ただ会話はそこで終わってしまいます。' },
+        { text: 'I know, I practiced a lot.', delta: -1,
+          why: '事実でも自慢に聞こえます。まず感謝を伝えてから、努力の話をしましょう。' }
+      ]
+    }]
+  },
+  {
+    id: 'banquet-toast',
+    title: '突然の乾杯の音頭',
+    partner: '同じテーブルの参加者たち',
+    focus: ['confidence', 'english'],
+    turns: [{
+      situation: '懇親会。テーブルの誰かが「Let\'s have someone from Japan say a few words!」とあなたを指名しました。',
+      limitSec: 14,
+      choices: [
+        { text: '(立ち上がって)Thank you! To a great conference, and to new collaborations — cheers!', delta: 3, best: true,
+          why: '**短く・明るく・全員に関係のあること**。乾杯の挨拶は10秒で十分で、長さより即答できることが評価されます。' },
+        { text: 'Oh no, no, please ask someone else.', delta: -2,
+          why: '断ると場の空気が止まり、指名した人も気まずくなります。一言でいいので受けましょう。' },
+        { text: 'Cheers!', delta: 1,
+          why: '受けたこと自体が正解です。ひとこと足すだけで、ぐっと場が温まります。' },
+        { text: 'Well, first I would like to thank the organizers, the sponsors, my supervisor, and everyone who...', delta: -1,
+          why: '謝辞の長いスピーチは懇親会の乾杯には重すぎます。グラスを持った全員が待っています。' }
+      ]
+    }]
+  },
+  {
+    id: 'slow-down',
+    title: 'ゆっくり話してほしい',
+    partner: '早口のネイティブスピーカー',
+    focus: ['english', 'confidence'],
+    turns: [{
+      situation: '相手の英語がとても速く、話の半分ほどしか掴めていません。会話はまだ続きそうです。',
+      limitSec: 12,
+      choices: [
+        { text: 'Sorry — could you speak a little more slowly? English isn\'t my first language.', delta: 3, best: true,
+          why: '**はっきり頼む**のが最善です。ほとんどの人は快く応じます。言わなければ相手は速さに気づけません。' },
+        { text: '(分かったふりをして相槌を打ち続ける)', delta: -3,
+          why: '最も危険です。話が進むほどズレが大きくなり、あとで取り返しがつかなくなります。' },
+        { text: 'Sorry, what?', delta: 0,
+          why: 'その一文は聞き返せますが、次の文もまた速いままです。速度そのものを頼みましょう。' },
+        { text: 'Sorry, my English is very bad.', delta: -1,
+          why: '自分を下げるだけで、状況は変わりません。求めているのは謝罪ではなく「ゆっくり」です。' }
+      ]
+    }]
+  },
+  {
+    id: 'student-asks',
+    title: '学生からの質問',
+    partner: '緊張した様子の大学院生',
+    focus: ['network', 'confidence'],
+    turns: [{
+      situation: 'ポスターの前で、学生が緊張しながら「Sorry, this may be a basic question, but...」と切り出しました。',
+      limitSec: 12,
+      choices: [
+        { text: 'Not basic at all — that\'s exactly the point people ask most. So, ...', delta: 3, best: true,
+          why: '**まず質問を肯定する**。学生は勇気を出して聞いています。ここで安心させられる人は、必ず覚えてもらえます。' },
+        { text: 'Yes, that is quite basic. It\'s in any textbook.', delta: -3,
+          why: '相手を萎縮させ、周囲で聞いている人にも冷たい印象を与えます。' },
+        { text: '(質問に淡々と答える)', delta: 1,
+          why: '答えとしては十分ですが、相手の緊張をほぐす一言があると、関係の質が変わります。' },
+        { text: 'Let me explain from the very beginning of the field, in 1998...', delta: -1,
+          why: '親切のつもりでも、聞かれていないことまで話すと相手は逃げ場を失います。まず質問に答えましょう。' }
+      ]
+    }]
+  },
+  {
+    id: 'awkward-silence',
+    title: '会話が途切れた',
+    partner: '話していた研究者',
+    focus: ['topic', 'confidence'],
+    turns: [{
+      situation: '数分話しましたが、話題が尽きて沈黙が流れました。相手もどうしようか探っている様子です。',
+      limitSec: 10,
+      choices: [
+        { text: 'By the way, are you going to the session on single-cell after this?', delta: 3, best: true,
+          why: '**その場で共有している話題(プログラム)に戻す**のが最も自然な立て直しです。相手も答えやすい問いです。' },
+        { text: '(沈黙に耐えられず、その場を離れる)', delta: -1,
+          why: '沈黙は失敗ではありません。数秒の間は普通のことで、一言あれば会話は戻ります。' },
+        { text: 'So... yeah.', delta: 0,
+          why: '沈黙は埋まりますが、話題は戻りません。次の一手を用意しておきましょう。' },
+        { text: 'It was nice talking to you. Enjoy the rest of the conference!', delta: 2,
+          why: '**きれいに切り上げるのも正解**です。無理に続けるより、良い印象のまま終われます。' }
+      ]
+    }]
+  },
+  {
+    id: 'last-day-farewell',
+    title: '最終日の別れ際',
+    partner: '何度か話した研究者',
+    focus: ['network', 'english'],
+    turns: [{
+      situation: '学会最終日。何度か話した相手と、会場の出口で最後に顔を合わせました。',
+      limitSec: 12,
+      choices: [
+        { text: 'It was really good to meet you. I\'ll send you that paper we talked about — see you at the next meeting.', delta: 3, best: true,
+          why: '**具体的な約束を1つ残す**と、帰国後のメールが自然になります。「また会いましょう」だけでは連絡は途切れます。' },
+        { text: 'Bye! See you!', delta: 1,
+          why: '明るくて良いのですが、これだけだと次につながりません。' },
+        { text: 'Thank you for everything. I hope we can keep in touch someday if possible.', delta: 0,
+          why: '丁寧ですが曖昧で、社交辞令に聞こえます。何を・いつ、が入ると本物になります。' },
+        { text: '(気づかないふりをして出口へ向かう)', delta: -2,
+          why: '数日かけて作った関係を、最後の10秒で手放すことになります。' }
+      ]
+    }]
+  },
+  {
+    id: 'talk-overlap',
+    title: '同時に喋ってしまった',
+    partner: '会話中の研究者',
+    focus: ['english', 'confidence'],
+    turns: [{
+      situation: '相手と同時に話し始めてしまい、お互いに言葉が止まりました。',
+      limitSec: 10,
+      choices: [
+        { text: 'Sorry — please, go ahead.', delta: 3, best: true,
+          why: '**先を譲る**のが最もスマートです。一瞬で場が整い、相手も気持ちよく話せます。英語圏では定番のやり取りです。' },
+        { text: '(構わず自分の話を続ける)', delta: -2,
+          why: '相手の話を押しのける形になり、会話の主導権を奪った印象を与えます。' },
+        { text: '(気まずくなって黙り込む)', delta: -1,
+          why: 'どちらも黙ると沈黙が長引きます。一言譲れば済む場面です。' },
+        { text: 'Sorry, sorry, what were you saying? Sorry.', delta: 0,
+          why: '謝罪の繰り返しは、かえって気まずさを長引かせます。一度で十分です。' }
+      ]
+    }]
+  },
+  {
+    id: 'wrong-assumption',
+    title: '勘違いされた',
+    partner: '別の研究者と間違えた相手',
+    focus: ['english', 'confidence'],
+    turns: [{
+      situation: '「You\'re the one working on the zebrafish model, right?」— 別の研究者と勘違いされています。',
+      limitSec: 12,
+      choices: [
+        { text: 'Ah, that\'s someone else — I work on chromatin in mouse cells. But I\'d love to hear about the zebrafish work.', delta: 3, best: true,
+          why: '**訂正 → 自分の説明 → 相手の話へ**。誤解を正しつつ会話を切らさない、いちばん良い流れです。' },
+        { text: 'Yes, that\'s right.', delta: -3,
+          why: '話を合わせると、あとで必ず矛盾します。学会は狭い世界なので、誤解は早く解くほど安全です。' },
+        { text: 'No, that\'s not me.', delta: 0,
+          why: '正しい訂正ですが、そこで会話が止まります。自分が何をしているかを続けて言いましょう。' },
+        { text: 'No. Do I look like that person?', delta: -2,
+          why: '相手を責める響きになります。名札の多い会場では、取り違えは誰にでも起こります。' }
+      ]
+    }]
+  },
+  {
+    id: 'gift-exchange',
+    title: '日本からのお土産',
+    partner: '世話になった現地の研究者',
+    focus: ['network', 'confidence'],
+    turns: [{
+      situation: '会場を案内してくれた現地の研究者に、日本から持ってきた小さなお土産を渡したい場面です。',
+      limitSec: 12,
+      choices: [
+        { text: 'This is a small thing from Japan — thank you for showing me around today.', delta: 3, best: true,
+          why: '**小さいと添えて、理由を言って渡す**。相手が受け取りやすく、お返しの負担も感じさせません。' },
+        { text: '(黙って袋を差し出す)', delta: 0,
+          why: '気持ちは伝わりますが、なぜ渡すのかが分からないと相手は戸惑います。' },
+        { text: 'This is just a cheap thing, it\'s nothing, sorry it\'s so small.', delta: -1,
+          why: '過度な謙遜は、贈り物自体の価値を下げてしまいます。「small」の一言で十分です。' },
+        { text: 'I brought this for you. Please give me your feedback on my manuscript later.', delta: -3,
+          why: '見返りを条件にすると、贈り物ではなく取引になります。相手を強く困らせます。' }
+      ]
+    }]
   }
 ];

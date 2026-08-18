@@ -123,6 +123,8 @@ const Run = {
       if (!s.map || !Array.isArray(s.map.layers) || !Array.isArray(s.map.edges)) return false;
       if (!s.day) s.day = 1;
       if (s.day > 3) s.day = 3;
+      // 旧セーブ(Day制)は午前のプログラムとして読み替える
+      if (typeof s.session !== 'number') s.session = Math.min(2, s.day);
       if (!Array.isArray(s.items)) s.items = [];
       if (!Array.isArray(s.usedCards)) s.usedCards = [];
       if (!Array.isArray(s.qaUsed)) s.qaUsed = [];
@@ -162,6 +164,7 @@ const Run = {
     this.state = {
       active: true,
       day: 1,
+      session: 1,         // 1 = 🌅午前のプログラム / 2 = 🌇午後のプログラム
       hp: maxHp, maxHp,
       funds: 45 + (perk.funds || 0),
       items: [],
@@ -174,7 +177,7 @@ const Run = {
       topicUsed: [],      // 話題トークで登場済みの相手ID
       badge: null,        // 名刺交換の状態(1ランに1回だけ・マスではなくランダム発生)
       bossesSeen: [],     // このランで戦ったボス(同じ相手が続けて出ないように)
-      dayBonus: 1,        // 「もう1日続ける」を選ぶたびに上がる報酬倍率
+      dayBonus: 1,        // 「午後へ進む」を選ぶと上がる報酬倍率
       map: null
     };
     // マップ生成はstate確定後に(名刺交換の出現判定がstateを見るため)
@@ -198,9 +201,10 @@ const Run = {
   },
 
   genMap() {
-    /* 1ラン = 1日 = 11層。1層につき1マスしか通れないので踏破は11マス。
-     * 幅3〜4なので地図には約33マスが並び、「どう回るか」を選ぶ余地が大きい。 */
-    const LAYERS = 11;
+    /* 1マップ = 午前 or 午後のプログラム = 8層。踏破は8マス。
+     * 幅3〜4なので地図には約24マスが並び、「どう回るか」を選ぶ余地は保たれる。
+     * 午前だけで切り上げても1回の遊びとして完結する長さ。 */
+    const LAYERS = 8;
     const layers = [];
     let eliteLeft = 1;      // ⭐エリートは1ランに1つまで
     let topicLeft = 3;      // 🎴話題トークは3つまで
@@ -252,16 +256,14 @@ const Run = {
       candidates[Math.floor(Math.random() * candidates.length)].type = type;
       return true;
     };
-    place('shop', 1, 3);      // 🛒お店は序盤・中盤・終盤に1軒ずつ
-    place('shop', 4, 6);      //   1ランが短いので、買った物を使う機会を確保する
-    place('shop', 7, 8);
-    place('rest', 2, 5);      // ☕休憩所は中盤とボス前
-    place('rest', 7, 8);
-    place('stroll', 2, 5);    // 🚶コーヒーブレイクは2回
-    place('stroll', 5, 8);
-    // 🎴話題トークが1つも出なかった日は、重複しない層に1つだけ足す
+    place('shop', 1, 3);      // 🛒お店は序盤と中盤に1軒ずつ
+    place('shop', 3, 5);      //   買った物を使う機会を確保する
+    place('rest', 4, 5);      // ☕休憩所はボス前に必ず1つ
+    if (Math.random() < 0.5) place('rest', 1, 3);   // たまに序盤にもう1つ
+    place('stroll', 2, 5);    // 🚶コーヒーブレイクは1回
+    // 🎴話題トークが1つも出なかったときは、重複しない層に1つだけ足す
     const topicCount = layers.slice(1, -2).flat().filter((n) => n.type === 'topic').length;
-    if (topicCount < 1) place('topic', 1, 8);
+    if (topicCount < 1) place('topic', 1, 5);
 
     /* 層間の接続: 各マスから「対応する位置とその左右」へ引く。
      * v1.27.0までは1本＋40%で2本だったため、6割以上の場面で行き先が1つしかなかった。
@@ -369,8 +371,8 @@ const Run = {
   /* ---------- マップ表示 ---------- */
   renderMap() {
     this.renderHud();
-    const dayInfo = (typeof DAY_INFO !== 'undefined')
-      ? DAY_INFO[(this.state.day || 1) - 1] : null;
+    const dayInfo = (typeof SESSION_INFO !== 'undefined')
+      ? SESSION_INFO[(this.state.session || 1) - 1] : null;
     const h = document.querySelector('#screen-run-map h2');
     if (h) {
       const m = this.state.dailyMult || 1;
@@ -586,9 +588,11 @@ const Run = {
     const s = this.state;
     if (s.badge && s.badge.met) return false;
     if (type === 'boss' || type === 'qa') return false;
-    const total = s.map.layers.length;
-    const lastChance = layer >= total - 4;    // ここを逃すと再会する余裕が無くなる
-    if (!lastChance && Math.random() >= 0.3) return false;
+    /* 再会は☕休憩所で起こるので、そこへ行く余地が残っている層までしか出さない。
+     * 締切の層まで来てまだ起きていなければ、そこで必ず起こす。 */
+    const deadline = s.map.layers.length - 5;
+    if (layer > deadline) return false;
+    if (layer < deadline && Math.random() >= 0.35) return false;
     this._pendingNode = this.state.map.layers[layer][this.state.nodeIndex];
     this.openBadgeMeet();
     return true;
@@ -693,7 +697,7 @@ const Run = {
   },
 
   startBossBattle() {
-    const day = this.state.day || 1;
+    const session = this.state.session || 1;
     const boss = this.pickBoss();
     this.state.bossesSeen = (this.state.bossesSeen || []).concat(boss.id);
     // コーヒーはボス戦でも消費される
@@ -704,7 +708,7 @@ const Run = {
     }
     this.save();
     this.battle = {
-      isElite: false, isBoss: true, bossDay: day, bossId: boss.id,
+      isElite: false, isBoss: true, bossSession: session, bossId: boss.id,
       bossReward: boss.reward || { funds: 60, gems: 2 },
       title: boss.title, partner: boss.partner,
       turns: boss.turns, focus: boss.focus, coffee,
@@ -922,7 +926,7 @@ const Run = {
     if (b.isBoss) reward += (b.bossReward && b.bossReward.funds) || 60;
     reward = Math.round(reward * (b.rewardMult || 1));
     reward = Math.round(reward * (this.state.dailyMult || 1));     // 本日初回ボーナス等
-    reward = Math.round(reward * (this.state.dayBonus || 1));      // 「もう1日続ける」の上乗せ
+    reward = Math.round(reward * (this.state.dayBonus || 1));      // 午後へ進んだぶんの上乗せ
     if (this.hasItem('shirt')) reward = Math.round(reward * 1.25);
     if (this.hasItem('mic')) reward = Math.round(reward * 1.15);   // 座長の推薦状
     this.state.funds += reward;
@@ -963,12 +967,13 @@ const Run = {
     if (b.isBoss && missed.length === 0 && typeof Achievements !== 'undefined') {
       Achievements.unlock('boss-perfect');
     }
-    /* 1ラン = 1日が基本。ボスを倒したら「ここで終える」か「もう1日続ける」かを選ぶ。
-     * 平日は1日で切り上げ、時間のある日は伸ばす、という使い分けができる。 */
-    const day = b.bossDay || 1;
-    const canContinue = b.isBoss && day < 3;
-    const nextBonus = Math.round((1 + 0.3 * day) * 100) / 100;
-    const nextLabel = b.isBoss ? '🎓 ここで学会を終える(成果を持ち帰る)' : 'マップに戻る';
+    /* 1マップ = 午前 or 午後。午前のボスを倒したら「ここで切り上げる」か
+     * 「午後のプログラムへ進む」かを選ぶ。忙しい日は午前だけで完結する。 */
+    const session = b.bossSession || 1;
+    const canContinue = b.isBoss && session < 2;
+    const nextInfo = canContinue ? SESSION_INFO[session] : null;
+    const nextBonus = 1.3;
+    const nextLabel = b.isBoss ? '🎓 ここで切り上げる(成果を持ち帰る)' : 'マップに戻る';
 
     const html = `
       <div class="convo-result">
@@ -982,11 +987,10 @@ const Run = {
         ${levelUps.map((l) =>
           `<div class="levelup-box">🎉 <strong>${Stats.KEYS[l.key].label}</strong> が Lv.${l.level} に!</div>`).join('')}
         ${canContinue ? `<div class="nextday-box">
-          🌅 <strong>もう1日続けますか?</strong><br>
-          続けると 🧠+15 回復し、💰とアイテムはそのまま持ち越して
-          「${escapeHtml((DAY_INFO[day] || {}).name || '次の日')}」へ。<br>
+          ${nextInfo.icon} <strong>${escapeHtml(nextInfo.name)}へ進みますか?</strong><br>
+          ${escapeHtml(nextInfo.intro)} 🧠+15 回復し、💰とアイテムはそのまま持ち越します。<br>
           報酬倍率が <strong>×${nextBonus}</strong> に上がり、まだ倒していないボスが待っています。<br>
-          ここで終えても、成果はすべて持ち帰れます。
+          ここで切り上げても、成果はすべて持ち帰れます。
         </div>` : ''}
         ${merged ? '' : (missed.length ? `<div class="review-item" style="margin-top:10px">
           <div class="md-body review-situation">${renderMarkdown(missed[0].situation)}</div>
@@ -997,7 +1001,7 @@ const Run = {
           : '<p class="all-best">全ターンでベスト選択!</p>'))}
       </div>
       ${canContinue
-        ? `<button class="btn-large primary" id="btn-run-continue">🌅 もう1日続ける(報酬 ×${nextBonus})</button>
+        ? `<button class="btn-large primary" id="btn-run-continue">${nextInfo.icon} ${escapeHtml(nextInfo.name)}へ進む(報酬 ×${nextBonus})</button>
            <button class="btn-large" id="btn-run-battle-done" style="margin-top:10px">${nextLabel}</button>`
         : `<button class="btn-large primary" id="btn-run-battle-done">${nextLabel}</button>`}`;
 
@@ -1017,44 +1021,23 @@ const Run = {
     const cont = document.getElementById('btn-run-continue');
     if (cont) cont.addEventListener('click', () => {
       this.state.dayBonus = nextBonus;
-      this.nextDay(true);
+      this.nextSession();
       showScreen('run-map');
     });
   },
 
-  /**
-   * 次の日へ: マップを再生成し、一晩の休息で少し回復する。
-   * silent=true なら画面を出さず、次の日の DAY_INFO を返すだけ
-   * (ボスの結果画面に「一晩明けた」ことを一緒に載せるため)。
-   */
-  nextDay(silent) {
+  /** 午後のプログラムへ: マップを作り直し、昼食で少し回復する */
+  nextSession() {
     const s = this.state;
-    s.day = (s.day || 1) + 1;
+    s.session = (s.session || 1) + 1;
+    s.day = s.session;                 // 旧セーブとの互換のため合わせておく
     s.hp = Math.min(s.maxHp, s.hp + 15);
     s.layer = -1;
     s.nodeIndex = -1;
     s.map = this.genMap();
     this.save();
-    const info = DAY_INFO[s.day - 1];
-    if (silent) { this.renderHud(); return info; }
-    showScreen('run-result');
-    document.getElementById('run-result-content').innerHTML = `
-      <div class="rank-badge" style="color:var(--accent);border-color:var(--accent)">
-        <span class="rank-letter">🌅</span></div>
-      <p class="rank-label">Day ${s.day - 1} クリア!</p>
-      <p class="field-note" style="margin-bottom:14px">
-        ホテルでぐっすり眠った。🧠が15回復。<br>
-        明日は「${escapeHtml(info.name)}」— さらに手強い相手が待っている。
-      </p>
-      <div class="xp-gains">
-        <span class="xp-chip points">💰 ${s.funds} は持ち越し</span>
-        <span class="xp-chip">🎒 アイテムも持ち越し</span>
-      </div>
-      <button class="btn-large primary" id="btn-next-day" style="margin-top:14px">${escapeHtml(info.name)} を始める</button>`;
-    document.getElementById('btn-next-day').addEventListener('click', () => {
-      showScreen('run-map');
-    });
-    return info;
+    this.renderHud();
+    return SESSION_INFO[s.session - 1];
   },
 
   /* ---------- お店 ---------- */
@@ -1160,7 +1143,7 @@ const Run = {
     // 名刺交換した相手との再会イベント(1ランに1回、少し時間が経ってから)
     const b = this.state.badge;
     if (b && b.met && !b.resolved &&
-        (this.state.day > b.day || this.state.layer >= b.layer + 2)) {
+        ((this.state.session || 1) > (b.session || 1) || this.state.layer >= b.layer + 1)) {
       this.renderBadgeRecall();
       return;
     }
@@ -1861,7 +1844,8 @@ const Run = {
     const person = BADGE_PEOPLE[Math.floor(Math.random() * BADGE_PEOPLE.length)];
     this.state.badge = {
       met: true, resolved: false,
-      day: this.state.day, layer: this.state.layer, people: [person]
+      day: this.state.day, session: this.state.session || 1,
+      layer: this.state.layer, people: [person]
     };
     this.save();
     showScreen('run-event');
@@ -2031,9 +2015,9 @@ const Run = {
   /* ---------- 終了 ---------- */
   clearRun() {
     const funds = this.state.funds;
-    const days = this.state.day || 1;
-    // 1ラン=1日が基本になったので完走ボーナスは控えめに。続けた日数ぶんは上乗せする
-    const bonus = 60 * days;
+    const sessions = this.state.session || 1;
+    // 午前だけで切り上げても完結する設計。通しで回ったぶんは上乗せする
+    const bonus = 60 * sessions;
 
     // 所持しているレリックの完走ボーナスを精算
     const relicRows = [];
@@ -2057,16 +2041,16 @@ const Run = {
       Achievements.unlock('run-clear');
       if (relicRows.length >= 2) Achievements.unlock('relic-collector');
     }
-    const gems = 2 + days + relicGems;
+    const gems = 2 + sessions + relicGems;
     if (typeof Gems !== 'undefined') Gems.add(gems, '学会をやりきった');
     this.end();
     showScreen('run-result');
     document.getElementById('run-result-content').innerHTML = `
       <div class="rank-badge" style="color:var(--success);border-color:var(--success)">
         <span class="rank-letter">🎓</span></div>
-      <p class="rank-label">${days >= 3 ? '学会制覇!' : 'おつかれさま!'}</p>
+      <p class="rank-label">${sessions >= 2 ? '一日やりきった!' : 'おつかれさま!'}</p>
       <p class="field-note" style="margin-bottom:14px">
-        ${days}日間の会話を乗り切りました。<br>
+        ${sessions >= 2 ? '午前と午後、通しで' : '午前のプログラムを'}乗り切りました。<br>
         名刺と、次につながる約束を持って帰ります。
         ${(typeof BossLog !== 'undefined' && BossLog.allBeaten())
           ? '<br>👑 3人のボスすべてに勝ったことがあります。' : ''}
@@ -2085,7 +2069,6 @@ const Run = {
   /** 途中で切り上げる。ゲームオーバーより有利(研究費の40%を持ち帰り) */
   retire() {
     const keep = Math.round(this.state.funds * 0.4);
-    const day = this.state.day || 1;
     Gami.addPoints(keep);
     if (typeof Achievements !== 'undefined') Achievements.unlock('give-up');
     this.end();
@@ -2095,7 +2078,7 @@ const Run = {
         <span class="rank-letter">🏳️</span></div>
       <p class="rank-label">撤退</p>
       <p class="field-note" style="margin-bottom:14px">
-        Day ${day} で学会を切り上げました。<br>
+        ${escapeHtml((SESSION_INFO[(this.state.session || 1) - 1] || {}).name || '午前のプログラム')}の途中で切り上げました。<br>
         引き際を見極めるのも大事な判断です。獲得したXPはすべて残ります。
       </p>
       <div class="xp-gains">
