@@ -406,6 +406,109 @@ const Stroll = {
   /** いま(elapsed分経過)このスポットを訪ねられるか */
   canVisit(spot, elapsed) {
     return elapsed < spot.leaveBy && elapsed + spot.cost <= this.TIME_BUDGET;
+  },
+
+  /** 会えない理由('gone' もう帰った / 'notime' 時間が足りない / null 会える) */
+  blockedBy(spot, elapsed) {
+    if (elapsed >= spot.leaveBy) return 'gone';
+    if (elapsed + spot.cost > this.TIME_BUDGET) return 'notime';
+    return null;
+  },
+
+  /**
+   * 報酬を「価値」という1つの数値に換算する。
+   * 💰・🧠・XP・アイテムを横並びで比べられるようにするための共通のものさし。
+   * これがあると「どれが正解だったか」をあとから採点できる。
+   *   🧠1 ≒ 💰2 / XP10 ≒ 💰8 / ドリンク1個 ≒ 💰20
+   */
+  value(spot) {
+    const r = (spot && spot.reward) || {};
+    let v = r.funds || 0;
+    v += (r.hp || 0) * 2;
+    if (r.xp) v += Object.keys(r.xp).reduce((a, k) => a + r.xp[k], 0) * 0.8;
+    if (r.item) v += 20;
+    return Math.round(v);
+  },
+
+  /** 順路(spotsのindex配列)の合計価値。時間的に回れない順路なら null */
+  routeValue(spots, order) {
+    let elapsed = 0;
+    let v = 0;
+    for (let i = 0; i < order.length; i++) {
+      const sp = spots[order[i]];
+      if (!sp || !this.canVisit(sp, elapsed)) return null;
+      elapsed += sp.cost;
+      v += this.value(sp);
+    }
+    return v;
+  },
+
+  /**
+   * 総当たりで「最善の回り方」を求める。
+   * 5人なので探索は最大326通り(1+5+20+60+120+120)で一瞬で終わる。
+   */
+  bestRoute(spots) {
+    let best = { value: 0, order: [] };
+    const used = spots.map(() => false);
+    const order = [];
+    const walk = (elapsed, v) => {
+      if (v > best.value) best = { value: v, order: order.slice() };
+      for (let i = 0; i < spots.length; i++) {
+        if (used[i] || !this.canVisit(spots[i], elapsed)) continue;
+        used[i] = true;
+        order.push(i);
+        walk(elapsed + spots[i].cost, v + this.value(spots[i]));
+        order.pop();
+        used[i] = false;
+      }
+    };
+    walk(0, 0);
+    return best;
+  },
+
+  /** 得点率からランクとボーナスを決める(純関数) */
+  rank(got, best) {
+    if (!best || best <= 0) {
+      return { key: 'none', icon: '🚶', label: '今回は誰にも会えない配置でした', bonus: 0, pct: 0 };
+    }
+    const pct = Math.round(got / best * 100);
+    if (got >= best) return { key: 'perfect', icon: '🏆', label: 'パーフェクト! これが最善の回り方でした', bonus: 25, pct };
+    if (pct >= 80) return { key: 'great', icon: '😄', label: '上出来! ほぼ最善に近い動線でした', bonus: 15, pct };
+    if (pct >= 50) return { key: 'ok', icon: '🙂', label: 'まずまず。もう少し欲張れました', bonus: 5, pct };
+    return { key: 'poor', icon: '😅', label: '時間を持て余しました。次はこう回ってみましょう', bonus: 0, pct };
+  },
+
+  /**
+   * 最善ルートと比べて「何が足りなかったか」の一言アドバイス(純関数)。
+   * visited は訪問した spot.id の配列、bestOrder は bestRoute().order。
+   */
+  advice(spots, visited, bestOrder) {
+    const find = (id) => spots.filter((s) => s.id === id)[0];
+    const bestIds = bestOrder.map((i) => spots[i].id);
+    if (visited.length === bestIds.length && visited.every((id, i) => id === bestIds[i])) return '';
+
+    const missed = bestIds.filter((id) => visited.indexOf(id) < 0).map(find);
+    // ①「先に帰ってしまう人」の取りこぼしが、いちばん多い失敗
+    const early = missed.filter((s) => s.leaveBy < this.TIME_BUDGET)
+      .sort((a, b) => a.leaveBy - b.leaveBy)[0];
+    if (early) {
+      return `${early.icon} ${early.name}は${early.leaveBy}分で帰ってしまいます。` +
+        '先に帰る人から回ると、残りの時間で最後までいる人にも会えます。';
+    }
+    // ②時間は足りたはずなのに会えなかった人がいる
+    if (missed.length) {
+      const m = missed.sort((a, b) => this.value(b) - this.value(a))[0];
+      return `${m.icon} ${m.name}(価値${this.value(m)})にも手が届きました。` +
+        '短い会話を先に挟むと、残り時間の使い道が広がります。';
+    }
+    // ③価値の低い人に時間を使ってしまった
+    const extra = visited.filter((id) => bestIds.indexOf(id) < 0).map(find)
+      .sort((a, b) => this.value(a) - this.value(b))[0];
+    if (extra) {
+      return `${extra.icon} ${extra.name}(価値${this.value(extra)}・${extra.cost}分)に使った時間を、` +
+        'もっと価値の高い人に回せました。';
+    }
+    return '会う人は同じでも、順番を変えるともう1人入れられました。';
   }
 };
 

@@ -373,6 +373,7 @@ const ACHIEVEMENT_DEFS = [
   { id: 'lang-voice',     icon: '❤️', name: 'ふたりの教科書', desc: 'パートナーのお手本録音を初めて保存した' },
   { id: 'topic-heart',    icon: '🎴', name: '話題の名手', desc: '話題トークで相手の機嫌を最高潮(10)にした' },
   { id: 'qa-perfect',     icon: '🛡️', name: '鉄壁の質疑応答', desc: '質疑応答ディフェンスを全問正解で切り抜けた' },
+  { id: 'stroll-perfect', icon: '🚶', name: '完璧な動線', desc: 'コーヒーブレイクで最善の回り方を見つけた' },
   { id: 'badge-remember', icon: '👥', name: '名前を覚える人', desc: '名刺交換した相手の名前を再会時に思い出せた' },
   { id: 'sniper-combo8',  icon: '🎧', name: '耳のスナイパー', desc: '聞き取りスナイパーで8コンボを達成した' },
   { id: 'route-first',    icon: '🚉', name: '出発進行', desc: '路線図モードで最初の駅をクリアした' },

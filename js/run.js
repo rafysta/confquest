@@ -652,7 +652,7 @@ const Run = {
       this.renderBattleTurn();
     };
     stage.addEventListener('click', begin, { once: true });
-    setTimeout(begin, 3400);
+    setTimeout(begin, 2600);   // タップでいつでもスキップできる
   },
 
   battleTimeMs(limitSec) {
@@ -775,8 +775,11 @@ const Run = {
     const cls = delta > 0 ? 'good' : (dmg > 0 ? 'bad' : 'neutral');
     const showBest = (timedOut || !choice.best);
     const best = turn.choices.find((c) => c.best);
+    // 最終ターンかつ生存中なら、結果を同じ画面に続けて出す(ボスだけは
+    // 撃破の余韻を専用画面で見せたいので従来どおり分ける)
+    const merge = !b.isBoss && this.state.hp > 0 && b.turnIndex >= b.turns.length - 1;
     document.getElementById('run-battle-stage').innerHTML = `
-      <details class="fb-situation" open>
+      <details class="fb-situation" ${merge ? '' : 'open'}>
         <summary>状況をもう一度読む</summary>
         <div class="md-body">${renderMarkdown(turn.situation)}</div>
       </details>
@@ -793,9 +796,10 @@ const Run = {
         ${revived ? '<div class="levelup-box">🧿 お守りが砕けて、あなたを守った! (HP15で復活)</div>' : ''}
         ${typeof LangHelp !== 'undefined' ? LangHelp.buttonsHtml() : ''}
       </div>
+      ${merge ? '<div id="run-battle-endbox"></div>' : `
       <button class="btn-large primary" id="btn-run-battle-next">
         ${this.state.hp <= 0 ? '…' : (b.turnIndex < b.turns.length - 1 ? '次へ' : '会話を終える')}
-      </button>`;
+      </button>`}`;
 
     if (typeof LangHelp !== 'undefined') {
       LangHelp.wire(document.getElementById('run-battle-stage'), {
@@ -803,6 +807,11 @@ const Run = {
         chosen: timedOut ? '' : choice.text,
         best: best ? best.text : ''
       });
+    }
+    if (merge) {
+      // 最終ターンの手ごたえと結果を1画面にまとめる(「次へ」のタップを省く)
+      this.endBattle(true);
+      return;
     }
     document.getElementById('btn-run-battle-next').addEventListener('click', () => {
       if (this.state.hp <= 0) { this.gameOver(); return; }
@@ -815,7 +824,11 @@ const Run = {
     });
   },
 
-  endBattle() {
+  /**
+   * 会話の締め。merged=true なら、フィードバックの下に結果を差し込む
+   * (ボス以外は「次へ」→結果 の2タップを1タップに減らす)。
+   */
+  endBattle(merged) {
     const b = this.battle;
     let reward = 8 + 3 * b.totalDelta;
     if (b.isElite) reward = Math.round(reward * 2.5) + 20;
@@ -856,10 +869,15 @@ const Run = {
     if (b.isBoss && missed.length === 0 && typeof Achievements !== 'undefined') {
       Achievements.unlock('boss-perfect');
     }
+    // Day 1・2 のボスを倒したら、ここで一晩明けまで済ませてしまう。
+    // 「ボス撃破」と「Day Nクリア」で画面を2枚使わないためのテンポ改善。
+    const toNextDay = b.isBoss && b.bossDay < 3;
+    const nextInfo = toNextDay ? this.nextDay(true) : null;
     const nextLabel = b.isBoss
-      ? (b.bossDay >= 3 ? '🎓 学会を終える' : '次の日へ')
+      ? (b.bossDay >= 3 ? '🎓 学会を終える' : `${nextInfo.name} を始める`)
       : 'マップに戻る';
-    document.getElementById('run-battle-stage').innerHTML = `
+
+    const html = `
       <div class="convo-result">
         <p class="rank-label">${b.isBoss ? '👑 ボス撃破!' : '会話終了'}</p>
         <div class="xp-gains">
@@ -870,28 +888,41 @@ const Run = {
         ${itemNote}
         ${levelUps.map((l) =>
           `<div class="levelup-box">🎉 <strong>${Stats.KEYS[l.key].label}</strong> が Lv.${l.level} に!</div>`).join('')}
-        ${missed.length ? `<div class="review-item" style="margin-top:10px">
+        ${toNextDay ? `<div class="nextday-box">
+          🌅 ホテルでぐっすり眠った。<strong>🧠 +15</strong> 回復。💰とアイテムはそのまま持ち越し。<br>
+          明日は「${escapeHtml(nextInfo.name)}」— さらに手強い相手が待っている。
+        </div>` : ''}
+        ${merged ? '' : (missed.length ? `<div class="review-item" style="margin-top:10px">
           <div class="md-body review-situation">${renderMarkdown(missed[0].situation)}</div>
           <p class="review-chosen">選んだ: ${escapeHtml(missed[0].chosen)}</p>
           <p class="review-best">ベスト: ${escapeHtml(missed[0].best.text)}</p>
         </div>` : (b.turns.length === 1
           ? '<p class="all-best">ベストな返しができた!</p>'
-          : '<p class="all-best">全ターンでベスト選択!</p>')}
+          : '<p class="all-best">全ターンでベスト選択!</p>'))}
       </div>
       <button class="btn-large primary" id="btn-run-battle-done">${nextLabel}</button>`;
 
+    // merged のときはフィードバックの下に差し込む(画面を作り直さない)
+    const box = merged ? document.getElementById('run-battle-endbox') : null;
+    if (box) {
+      box.innerHTML = html;
+      try { box.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) { /* 古い端末 */ }
+    } else {
+      document.getElementById('run-battle-stage').innerHTML = html;
+    }
+
     document.getElementById('btn-run-battle-done').addEventListener('click', () => {
-      if (b.isBoss) {
-        if (b.bossDay >= 3) this.clearRun();
-        else this.nextDay();
-      } else {
-        showScreen('run-map');
-      }
+      if (b.isBoss && b.bossDay >= 3) { this.clearRun(); return; }
+      showScreen('run-map');
     });
   },
 
-  /** 次の日へ: マップを再生成し、一晩の休息で少し回復 */
-  nextDay() {
+  /**
+   * 次の日へ: マップを再生成し、一晩の休息で少し回復する。
+   * silent=true なら画面を出さず、次の日の DAY_INFO を返すだけ
+   * (ボスの結果画面に「一晩明けた」ことを一緒に載せるため)。
+   */
+  nextDay(silent) {
     const s = this.state;
     s.day = (s.day || 1) + 1;
     s.hp = Math.min(s.maxHp, s.hp + 15);
@@ -899,8 +930,9 @@ const Run = {
     s.nodeIndex = -1;
     s.map = this.genMap();
     this.save();
-    showScreen('run-result');
     const info = DAY_INFO[s.day - 1];
+    if (silent) { this.renderHud(); return info; }
+    showScreen('run-result');
     document.getElementById('run-result-content').innerHTML = `
       <div class="rank-badge" style="color:var(--accent);border-color:var(--accent)">
         <span class="rank-letter">🌅</span></div>
@@ -917,6 +949,7 @@ const Run = {
     document.getElementById('btn-next-day').addEventListener('click', () => {
       showScreen('run-map');
     });
+    return info;
   },
 
   /* ---------- お店 ---------- */
@@ -1405,6 +1438,26 @@ const Run = {
     this.renderStroll(true);
   },
 
+  /** 15分の時間帯を横棒で表す。いつまでいるか・何分かかるかを一目で分かるように */
+  strollTrack(sp, elapsed) {
+    const B = Stroll.TIME_BUDGET;
+    const pct = (n) => Math.max(0, Math.min(100, n / B * 100));
+    const nowPct = pct(elapsed);
+    // その人がいる時間帯(0〜leaveBy)と、いま行った場合に使う時間(now〜now+cost)
+    return `<span class="stroll-track" aria-hidden="true">
+      <span class="stroll-window" style="width:${pct(sp.leaveBy)}%"></span>
+      <span class="stroll-need" style="left:${nowPct}%;width:${pct(elapsed + sp.cost) - nowPct}%"></span>
+      <span class="stroll-now" style="left:${nowPct}%"></span>
+    </span>`;
+  },
+
+  /** いま確保できている価値の合計 */
+  strollGot() {
+    const st = this.strollGame;
+    return st.visited.reduce((a, id) =>
+      a + Stroll.value(st.spots.filter((s) => s.id === id)[0]), 0);
+  },
+
   renderStroll(intro) {
     const st = this.strollGame;
     this.renderHud();
@@ -1413,21 +1466,34 @@ const Run = {
       !st.visited.includes(sp.id) && Stroll.canVisit(sp, st.elapsed));
     document.getElementById('run-event-content').innerHTML = `
       ${this.eventHead('🚶', 'コーヒーブレイク',
-        intro ? '休憩は15分。全員には会えない — 誰に、どの順で会いに行く?' : '')}
-      <div class="stroll-clock card">⏰ 残り <strong>${left}</strong> 分</div>
+        intro ? '休憩は15分。全員には会えません — 誰に、どの順で会いに行く?' : '')}
+      <div class="stroll-clock card">
+        <span class="stroll-left">⏰ 残り <strong>${left}</strong> 分</span>
+        <span class="stroll-score">いまの成果 <strong>価値 ${this.strollGot()}</strong></span>
+      </div>
+      ${intro ? `<p class="field-note" style="margin:-4px 0 10px">
+        💡「価値」は 💰・🧠・XP・アイテムをまとめて比べるための目安です。
+        先に帰ってしまう人から回ると、より多くの人に会えます。</p>` : ''}
       ${st.lastNote ? `<div class="card topic-line">${st.lastNote}</div>` : ''}
       ${st.spots.map((sp, i) => {
         const done = st.visited.includes(sp.id);
-        const can = !done && Stroll.canVisit(sp, st.elapsed);
-        const gone = !done && st.elapsed >= sp.leaveBy;
+        const why = done ? null : Stroll.blockedBy(sp, st.elapsed);
+        const can = !done && !why;
+        const status = done ? '✅ 会えた'
+          : why === 'gone' ? '💨 もう帰ってしまった'
+          : why === 'notime' ? `⏰ 残り${left}分では会話${sp.cost}分に足りない`
+          : (sp.leaveBy < Stroll.TIME_BUDGET
+            ? `⏳ ${sp.leaveBy}分までに行けば会える` : '🪑 最後までいる');
         return `
-        <div class="shop-row ${done ? 'stroll-done' : ''} ${gone ? 'stroll-gone' : ''}">
+        <div class="shop-row stroll-row ${done ? 'stroll-done' : ''} ${why ? 'stroll-gone' : ''}">
           <span class="shop-icon">${sp.icon}</span>
-          <span class="shop-body"><strong>${escapeHtml(sp.name)}</strong>
+          <span class="shop-body">
+            <strong>${escapeHtml(sp.name)}</strong>
+            <span class="stroll-value">価値 ${Stroll.value(sp)}</span>
             <span class="field-note">${escapeHtml(sp.desc)} ・ ${sp.rewardLabel}</span>
-            <span class="field-note">⏱ 会話${sp.cost}分 ・ ${done ? '✅ 会えた' :
-              (gone ? '💨 もういない…' :
-                (sp.leaveBy < Stroll.TIME_BUDGET ? `⏳ ${sp.leaveBy}分までに行かないと離席` : '🪑 最後までいる'))}</span></span>
+            ${this.strollTrack(sp, st.elapsed)}
+            <span class="field-note">⏱ 会話${sp.cost}分 ・ ${status}</span>
+          </span>
           <button class="btn-control ${can ? 'primary' : ''}" data-stroll-visit="${i}"
             ${can ? '' : 'disabled'}>${done ? '済' : '会う'}</button>
         </div>`;
@@ -1469,25 +1535,56 @@ const Run = {
     this.renderStroll(false);
   },
 
+  /** 順路を「☕コーヒースタンド(2分) → 📔編集者(5分)」の形に整える */
+  strollRouteHtml(spots, idxList) {
+    if (!idxList.length) return '<span class="stroll-route-none">(誰にも会わなかった)</span>';
+    return idxList.map((i) => {
+      const sp = spots[i];
+      return `<span class="stroll-step">${sp.icon} ${escapeHtml(sp.name)}` +
+        `<span class="stroll-step-min">${sp.cost}分</span></span>`;
+    }).join('<span class="stroll-arrow">→</span>');
+  },
+
   endStroll() {
     const st = this.strollGame;
-    let bonus = 0;
-    if (st.visited.length >= 3) {
-      bonus = 10;
-      this.state.funds += bonus;
-    }
+    const idxOf = (id) => st.spots.findIndex((s) => s.id === id);
+    const mine = st.visited.map(idxOf);
+    const got = this.strollGot();
+    // 総当たりで「最善の回り方」を求め、自分の動線と並べて採点する
+    const best = Stroll.bestRoute(st.spots);
+    const rk = Stroll.rank(got, best.value);
+    const tip = Stroll.advice(st.spots, st.visited, best.order);
+    const perfect = rk.key === 'perfect' && st.visited.length > 0;
+
+    if (rk.bonus) this.state.funds += rk.bonus;
     const levelUps = Object.keys(st.xp).length ? Stats.add(st.xp) : [];
+    if (perfect && typeof Achievements !== 'undefined') Achievements.unlock('stroll-perfect');
     this.save();
     this.renderHud();
+
+    const usedMin = mine.reduce((a, i) => a + st.spots[i].cost, 0);
+    const bestMin = best.order.reduce((a, i) => a + st.spots[i].cost, 0);
     document.getElementById('run-event-content').innerHTML = `
       ${this.eventHead('🚶', '休憩終了', '')}
       <div class="convo-result">
-        <p class="rank-label">${st.visited.length}人に会えた</p>
-        ${st.visited.length === 0
-          ? '<p class="field-note">誰にも会わずに終わった。次の休憩は動線を考えてみよう。</p>' : ''}
+        <p class="rank-label">${rk.icon} ${escapeHtml(rk.label)}</p>
+        <div class="stroll-score-row">
+          <span>あなた <strong>価値 ${got}</strong></span>
+          <span class="stroll-slash">/</span>
+          <span>最善 <strong>価値 ${best.value}</strong></span>
+          <span class="stroll-pct">${rk.pct}%</span>
+        </div>
+        <div class="stroll-compare">
+          <p class="stroll-compare-label">あなたの回り方 (${st.visited.length}人・${usedMin}分)</p>
+          <div class="stroll-route mine">${this.strollRouteHtml(st.spots, mine)}</div>
+          ${perfect ? `<p class="stroll-compare-label ok">✓ これが最善の回り方でした</p>`
+            : `<p class="stroll-compare-label">最善の回り方 (${best.order.length}人・${bestMin}分)</p>
+               <div class="stroll-route best">${this.strollRouteHtml(st.spots, best.order)}</div>`}
+          ${tip ? `<p class="stroll-tip">💡 ${escapeHtml(tip)}</p>` : ''}
+        </div>
         <div class="xp-gains">
           ${st.funds ? `<span class="xp-chip points">💰 +${st.funds}</span>` : ''}
-          ${bonus ? `<span class="xp-chip points">🏃 3人達成ボーナス 💰+${bonus}</span>` : ''}
+          ${rk.bonus ? `<span class="xp-chip points">${rk.icon} 動線ボーナス 💰+${rk.bonus}</span>` : ''}
           ${st.hp ? `<span class="xp-chip">🧠 +${st.hp}</span>` : ''}
           ${Object.entries(st.xp).map(([k, v]) =>
             `<span class="xp-chip">${Stats.KEYS[k].icon} ${Stats.KEYS[k].label} +${v}XP</span>`).join('')}
@@ -1727,11 +1824,17 @@ const Run = {
       const r = document.getElementById('roulette');
       if (r) r.textContent = icons[n++ % icons.length];
     }, 110);
-    setTimeout(() => {
+    // 待たされるのはテンポが悪いので、タップすればすぐ結果に進めるようにする
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
       clearInterval(spin);
       const events = ['elevator', 'spill', 'lost', 'lottery', 'friend'];
       this.resolveRandom(events[Math.floor(Math.random() * events.length)]);
-    }, 1700);
+    };
+    el.addEventListener('click', finish, { once: true });
+    setTimeout(finish, 1400);
   },
 
   resolveRandom(type) {

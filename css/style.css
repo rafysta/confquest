@@ -1877,3 +1877,78 @@ audio { width: 100%; margin-bottom: 12px; }
   flex: 1; font-size: 0.85rem; padding: 11px 8px;
   border: 1px solid rgba(255,255,255,0.18);
 }
+
+/* ---------- 🚶 コーヒーブレイク: 動線パズルの可視化 (v1.27.0) ---------- */
+.stroll-clock {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+}
+.stroll-left { white-space: nowrap; }
+.stroll-score { font-size: 0.82rem; color: var(--text-dim); }
+.stroll-score strong { color: var(--accent); font-size: 0.95rem; }
+.stroll-row .shop-body { gap: 3px; }
+.stroll-value {
+  display: inline-block; align-self: flex-start;
+  background: rgba(56, 189, 248, 0.14); color: var(--accent);
+  border-radius: 999px; padding: 1px 9px;
+  font-size: 0.74rem; font-weight: 700; margin: 2px 0;
+}
+/* 15分の時間帯を1本の帯で表す: 薄い部分=その人がいる時間、濃い部分=いま行くと使う時間 */
+.stroll-track {
+  position: relative; display: block;
+  height: 7px; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07); margin: 4px 0 2px;
+}
+.stroll-window {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  background: rgba(56, 189, 248, 0.3); border-radius: 4px;
+}
+.stroll-need {
+  position: absolute; top: 0; bottom: 0;
+  background: rgba(250, 204, 21, 0.55); border-radius: 4px;
+}
+.stroll-now {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: var(--text); border-radius: 1px;
+}
+.stroll-row.stroll-gone .stroll-window { background: rgba(255, 255, 255, 0.12); }
+.stroll-row.stroll-gone .stroll-need { background: rgba(255, 255, 255, 0.12); }
+
+/* 結果: あなたの回り方 vs 最善の回り方 */
+.stroll-score-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; font-size: 0.9rem;
+}
+.stroll-score-row strong { color: var(--accent); }
+.stroll-slash { color: var(--text-dim); }
+.stroll-pct {
+  background: var(--bg-card); border-radius: 999px;
+  padding: 2px 10px; font-weight: 700; font-size: 0.82rem;
+}
+.stroll-compare { text-align: left; margin: 10px 0; }
+.stroll-compare-label {
+  font-size: 0.78rem; color: var(--text-dim); margin: 10px 0 4px;
+}
+.stroll-compare-label.ok { color: var(--success); font-weight: 700; }
+.stroll-route {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  background: var(--bg-card); border-radius: 10px; padding: 8px 10px;
+  border-left: 3px solid rgba(255, 255, 255, 0.15);
+}
+.stroll-route.best { border-left-color: var(--success); }
+.stroll-route.mine { border-left-color: var(--accent); }
+.stroll-step { font-size: 0.82rem; white-space: nowrap; }
+.stroll-step-min { color: var(--text-dim); font-size: 0.72rem; margin-left: 3px; }
+.stroll-arrow { color: var(--text-dim); font-size: 0.78rem; }
+.stroll-route-none { color: var(--text-dim); font-size: 0.82rem; }
+.stroll-tip {
+  font-size: 0.8rem; line-height: 1.6; margin-top: 10px;
+  background: rgba(250, 204, 21, 0.08); border-radius: 10px; padding: 9px 11px;
+}
+
+/* ボス撃破画面に「一晩明けた」を同居させる (v1.27.0) */
+.nextday-box {
+  background: rgba(56, 189, 248, 0.1); border-radius: 12px;
+  padding: 11px 13px; margin-top: 12px;
+  font-size: 0.85rem; line-height: 1.7; text-align: left;
+}
