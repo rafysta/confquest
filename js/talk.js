@@ -67,6 +67,52 @@ const Talk = {
     this.updateUI();
   },
 
+  /**
+   * 📁 録音装置で録った音声ファイルを、録音したのと同じ状態にセットする(v1.31.0)。
+   * AudioImport.prepare() が作ったセグメントをそのまま Talk.segments に入れるので、
+   * このあとの文字起こし・要約・共有・保存・やり直しは録音とまったく同じ経路を通る。
+   *
+   * prepared: { segments:[{blob,startSec,durationSec}], notes, durationSec, files }
+   */
+  loadImported(meta, prepared) {
+    this.discardAudio();
+    clearInterval(this.timer);
+    this.timer = null;
+    this.stream = null;
+    this.recorder = null;
+    this.paused = false;
+
+    this.segments = prepared.segments;
+    this.audioUrls = this.segments.map((s) => URL.createObjectURL(s.blob));
+    this.audioUrl = this.audioUrls[0] || null;
+    this.audioBlob = this.segments[0] ? this.segments[0].blob : null;
+
+    const names = (prepared.files || []).map((f) => f.name);
+    this.current = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      kind: meta.kind === 'meeting' ? 'meeting' : 'talk',
+      title: meta.title || (meta.kind === 'meeting' ? '無題のミーティング' : '無題の講演'),
+      speaker: meta.speaker || '',
+      venue: meta.venue || '',
+      lang: meta.lang != null ? meta.lang : '',
+      marks: [],                        // 読み込みでは「ここは重要」が押せないので常に空
+      note: '',
+      transcript: '',
+      summary: '',
+      durationMs: Math.round((prepared.durationSec || 0) * 1000),
+      startTime: Date.now(),
+      pausedMs: 0,
+      source: 'import',                 // 録音ではなく読み込み(結果画面の表示に使う)
+      sourceFiles: names,
+      // 読み込めなかったファイルの記録。transcribe() が partNotes を作り直すので、
+      // そちらに引き継がせるために importNotes として別に持っておく
+      importNotes: (prepared.notes && prepared.notes.length) ? prepared.notes.slice() : null,
+      partNotes: (prepared.notes && prepared.notes.length) ? prepared.notes.slice() : null
+    };
+    return this.current;
+  },
+
   /** 現在のストリームで新しいMediaRecorderを開始する */
   _startRecorder() {
     // ★受け皿はこのレコーダー専用にする(this.chunks を参照してはいけない)
@@ -332,6 +378,10 @@ const Talk = {
         // "OggS"
         return h[0] === 0x4F && h[1] === 0x67 && h[2] === 0x67 && h[3] === 0x53;
       }
+      if (t.indexOf('wav') >= 0) {
+        // "RIFF" — 読み込んだ音声ファイルを変換したもの
+        return h[0] === 0x52 && h[1] === 0x49 && h[2] === 0x46 && h[3] === 0x46;
+      }
       return true;   // mp4/mp3など、ここでは判別しない形式は通す
     } catch (_) {
       return true;
@@ -350,7 +400,8 @@ const Talk = {
     if (!segs.length) throw new Error('録音データがありません。');
 
     const MAX = 24 * 1024 * 1024;
-    const notes = [];
+    // 読み込みの段階で落ちたファイルがあれば、その記録を引き継ぐ(上書きして消さない)
+    const notes = (this.current && this.current.importNotes) ? this.current.importNotes.slice() : [];
     const usable = [];
     for (let i = 0; i < segs.length; i++) {
       const sg = segs[i];
@@ -368,7 +419,7 @@ const Talk = {
 
     if (!usable.length) {
       const err = new Error('文字起こしに使えるパートがありませんでした。\n' +
-        notes.map((n) => `・パート${n.part}: ${n.why}`).join('\n'));
+        notes.map((n) => `・${n.file ? n.file : 'パート' + n.part}: ${n.why}`).join('\n'));
       err.partNotes = notes;
       this.current.partNotes = notes;
       throw err;
@@ -395,7 +446,7 @@ const Talk = {
     this.current.partNotes = notes;
     if (!all.length) {
       const err = new Error('どのパートも文字起こしできませんでした。\n' +
-        notes.map((n) => `・パート${n.part}: ${n.why}`).join('\n'));
+        notes.map((n) => `・${n.file ? n.file : 'パート' + n.part}: ${n.why}`).join('\n'));
       err.partNotes = notes;
       throw err;
     }
@@ -496,7 +547,11 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
     doc += `- ${c.kind === 'meeting' ? '参加者' : '発表者'}: ${c.speaker || '不明'}\n`;
     if (c.venue) doc += `- ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue}\n`;
     doc += `- 日時: ${dateStr}\n`;
-    doc += `- 録音時間: ${PracticeUtil.fmtTime(c.durationMs)}\n`;
+    doc += `- ${c.source === 'import' ? '音声の長さ' : '録音時間'}: ${PracticeUtil.fmtTime(c.durationMs)}\n`;
+    // どの音声から作った要約なのかは、あとで見返すときに効くので必ず残す
+    if (c.source === 'import' && c.sourceFiles && c.sourceFiles.length) {
+      doc += `- 元の音声ファイル: ${c.sourceFiles.join(' / ')}\n`;
+    }
     if (c.note) doc += `\n## 自分のメモ\n\n${c.note}\n`;
     doc += `\n${c.summary}\n`;
     if (c.markedText && c.markedText.length) {
@@ -588,7 +643,8 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       title: c.title, speaker: c.speaker, venue: c.venue,
       durationMs: c.durationMs, summary: c.summary, transcript: c.transcript,
       markedText: c.markedText || [], note: c.note,
-      lang: c.lang || '', partNotes: c.partNotes || null
+      lang: c.lang || '', partNotes: c.partNotes || null,
+      source: c.source || 'record', sourceFiles: c.sourceFiles || null
     };
     // 同じIDが既にあれば置きかえる(文字起こしのやり直しで二重に増やさない)
     const list = JSON.parse(localStorage.getItem('lq_talks') || '[]')

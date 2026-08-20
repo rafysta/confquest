@@ -1464,6 +1464,134 @@ document.getElementById('btn-talk-start').addEventListener('click', async () => 
 document.getElementById('btn-talk-mark').addEventListener('click', () => Talk.addMark());
 document.getElementById('btn-talk-pause').addEventListener('click', () => Talk.togglePause());
 
+/* ---------- 📁 録音装置の音声ファイルを読み込む(v1.31.0) ---------- */
+/* 選ばれたファイル。確認画面と読み込み処理で共有する */
+let _importFiles = [];
+
+function talkMetaFromForm() {
+  return {
+    kind: document.getElementById('talk-kind').value,
+    title: document.getElementById('talk-title').value.trim(),
+    speaker: document.getElementById('talk-speaker').value.trim(),
+    venue: document.getElementById('talk-venue').value.trim(),
+    lang: document.getElementById('talk-lang').value
+  };
+}
+
+document.getElementById('btn-talk-import').addEventListener('click', () => {
+  if (typeof AudioImport === 'undefined' || !AudioImport.supported()) {
+    appAlert('このブラウザでは音声ファイルの読み込みに対応していません。' +
+      '\n\nPCのChromeなど、別のブラウザでお試しください。', '📁 読み込み');
+    return;
+  }
+  if (!AI.ensureKey('openai', '音声ファイルの文字起こし')) return;
+  const input = document.getElementById('talk-file-input');
+  input.value = '';        // 同じファイルを選び直しても changeが発火するように
+  input.click();
+});
+
+document.getElementById('talk-file-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  const problem = AudioImport.precheck(files);
+  if (problem) { appAlert(problem, '📁 読み込み'); return; }
+  _importFiles = files.slice().sort((a, b) => AudioImport.compareName(a.name, b.name));
+  showScreen('talk-import');
+  renderImportConfirm();
+});
+
+/** 読み込む前の確認画面。何がどの順でつながるかを、始める前に見せる。
+ *  文字起こしはAPIの料金がかかるので、「押す前に長さが分かる」ことを大事にする。 */
+async function renderImportConfirm() {
+  const el = document.getElementById('talk-import-content');
+  const meta = talkMetaFromForm();
+  const total = _importFiles.reduce((s, f) => s + f.size, 0);
+  const many = _importFiles.length > 1;
+  const risky = _importFiles.filter((f) => AudioImport.likelyUnsupported(f));
+
+  el.innerHTML = '<div class="card" style="text-align:center"><div class="spinner"></div>' +
+    '<p class="field-note">ファイルを確認しています…</p></div>';
+  const probed = await AudioImport.probeAll(_importFiles);
+  if (!document.getElementById('talk-import-content') ||
+      document.querySelector('.screen.active').id !== 'screen-talk-import') return;   // 待っている間に画面を離れた
+  const totalSec = probed.reduce((s, p) => s + (p.sec || 0), 0);
+  const knownAll = probed.every((p) => p.sec != null);
+
+  el.innerHTML = `
+    <div class="card">
+      <p class="field-note" style="margin-bottom:8px">
+        ${many ? `${_importFiles.length}個のファイルを<strong>名前順につないで1本の${meta.kind === 'meeting' ? 'ミーティング' : '講演'}</strong>として扱います。`
+                : 'このファイルを文字起こしします。'}
+      </p>
+      <ol class="import-list">
+        ${probed.map((p) => `<li>
+          <span class="import-name">${escapeHtml(p.file.name)}</span>
+          <span class="meta">${AudioImport.fmtSec(p.sec)} · ${Backup.fmtBytes(p.file.size)}</span>
+        </li>`).join('')}
+      </ol>
+      <p class="field-note" style="margin-top:8px">
+        合計 ${knownAll ? `<strong>${AudioImport.fmtSec(totalSec)}</strong> · ` : ''}${Backup.fmtBytes(total)}
+        ${knownAll ? ` / 約${AudioImport.estimateParts(totalSec)}回に分けて文字起こしします` : ''}
+      </p>
+    </div>
+    ${risky.length ? `<div class="card" style="border-left:4px solid var(--warn,#e0a020)">
+      <p class="field-note"><strong>⚠ ブラウザが開けない形式かもしれません</strong><br>
+      ${risky.map((f) => escapeHtml(f.name)).join('<br>')}<br>
+      読み込めなかった場合は、レコーダー付属のソフトでMP3かWAVに変換してからお試しください。</p>
+    </div>` : ''}
+    <div class="card">
+      <p class="field-note"><strong>${escapeHtml(meta.title || '(タイトル未入力)')}</strong>
+        ${meta.speaker ? ' · ' + escapeHtml(meta.speaker) : ''}
+        · 言語: ${escapeHtml({ '': '自動判定', en: '英語', ja: '日本語', ko: '韓国語' }[meta.lang] || meta.lang)}</p>
+      <p class="field-note" style="margin-top:6px">
+        タイトルなどを直したいときは「←」で前の画面に戻ってください。未入力ならファイル名を使います。
+      </p>
+    </div>
+    <p class="field-note">
+      音声はこの端末の中で16kHzのモノラルに変換してから、8分ほどのかたまりに分けて文字起こしします。
+      切れ目は、なるべく静かなところ(息継ぎ・文の切れ目)を選びます。
+    </p>
+    <button class="btn-large primary" id="btn-import-go">📝 文字起こしを始める</button>
+    <button class="btn-large" id="btn-import-cancel">やめる</button>`;
+  el.querySelector('#btn-import-go').addEventListener('click', runImport);
+  el.querySelector('#btn-import-cancel').addEventListener('click', () => showScreen('talk-setup'));
+}
+
+/** 変換 → 文字起こし → 要約。結果画面から先は録音とまったく同じ経路を通る */
+async function runImport() {
+  const el = document.getElementById('talk-import-content');
+  const meta = talkMetaFromForm();
+  if (!meta.title) {
+    // タイトル未入力ならファイル名(拡張子なし)を使う。無題より探しやすい
+    meta.title = String(_importFiles[0].name).replace(/\.[^.]+$/, '').slice(0, 80);
+  }
+  el.innerHTML = `<div class="card" style="text-align:center">
+    <div class="spinner"></div>
+    <p class="field-note" id="import-progress">音声を読み込んでいます…</p>
+    <p class="field-note">長い音声は数分かかることがあります。この画面のままお待ちください。</p>
+  </div>`;
+  const prog = document.getElementById('import-progress');
+
+  let prepared;
+  try {
+    prepared = await AudioImport.prepare(_importFiles, (i, n, name) => {
+      prog.textContent = n > 1
+        ? `音声を読み込んでいます… (${i}/${n}) ${name}`
+        : `「${name}」を読み込んでいます…`;
+    });
+  } catch (err) {
+    el.innerHTML = `<p class="md-error">${escapeHtml(err.message)}</p>
+      <button class="btn-large" id="btn-import-back">← 選び直す</button>`;
+    el.querySelector('#btn-import-back').addEventListener('click', () => showScreen('talk-setup'));
+    return;
+  }
+
+  Talk.loadImported(meta, prepared);
+  showScreen('talk-result');
+  document.getElementById('talk-share-status').textContent = '';
+  await talkTranscribeStep();
+}
+
 document.getElementById('btn-talk-finish').addEventListener('click', async () => {
   Talk.current.note = document.getElementById('talk-note').value.trim();
   await Talk.stop();
@@ -1523,17 +1651,20 @@ function renderTalkRetry(len) {
   const el = document.getElementById('talk-result-content');
   const cur = Talk.current.lang || '';
   const langNames = { '': '自動判定', en: '英語', ja: '日本語', ko: '韓国語' };
+  const imported = Talk.current.source === 'import';
   el.innerHTML = `
     <div class="card">
       <h3 style="font-size:1rem;margin-bottom:6px">⚠ 文字起こしがほぼ空でした(${len}文字)</h3>
       <p class="field-note" style="margin-bottom:8px">
-        録音自体は残っています(下で再生できます)。よくある原因:
+        ${imported ? '読み込んだ音声は残っています' : '録音自体は残っています'}(下で再生できます)。よくある原因:
       </p>
       <p class="field-note" style="margin-bottom:8px">
         ① <strong>言語設定のずれ</strong> — 今回は「${escapeHtml(langNames[cur] !== undefined ? langNames[cur] : cur)}」で文字起こししました。
         指定した言語はWhisperに強制されるため、実際の音声と違うと空になることがあります。<br>
-        ② マイクから遠い・音が小さい(再生して確認を)<br>
-        ③ 大部分が無音・雑音だった
+        ${imported
+          ? '② 下のプレイヤーで音が聞こえるか確かめてください。無音なら、レコーダー側の録音そのものが失敗しています<br>' +
+            '③ 別のファイル(ステレオの片側だけ無音、など)を選んでいないか'
+          : '② マイクから遠い・音が小さい(再生して確認を)<br>③ 大部分が無音・雑音だった'}
       </p>
       <label class="field">
         <span>言語を選び直して再試行</span>
@@ -1546,7 +1677,7 @@ function renderTalkRetry(len) {
       ${len > 0 ? '<button class="btn-large" id="btn-talk-force">この結果のまま要約する</button>' : ''}
     </div>
     ${partNotesHtml()}
-    <p class="field-note">録音の確認:</p>
+    <p class="field-note">${imported ? '読み込んだ音声の確認:' : '録音の確認:'}</p>
     <div id="talk-audio-box"></div>`;
   el.querySelector('#btn-talk-retry').addEventListener('click', () =>
     talkTranscribeStep(el.querySelector('#talk-retry-lang').value));
@@ -1579,6 +1710,8 @@ function renderTalkResult() {
         ${c.speaker ? escapeHtml(c.speaker) + ' · ' : ''}${PracticeUtil.fmtTime(c.durationMs)}
         ${c.markedText && c.markedText.length ? ' · ⭐' + c.markedText.length : ''}
       </p>
+      ${c.source === 'import' && c.sourceFiles && c.sourceFiles.length
+        ? `<p class="field-note" style="margin-top:4px">📁 ${escapeHtml(c.sourceFiles.join(' / '))} から読み込み</p>` : ''}
     </div>
     <div id="talk-audio-box"></div>
     ${partNotesHtml()}
@@ -1617,12 +1750,14 @@ function talkAudioHtml() {
 function partNotesHtml() {
   const notes = (Talk.current && Talk.current.partNotes) || [];
   if (!notes.length) return '';
+  // 読み込んだファイルが原因のものは「パート3」ではなくファイル名で示す(そのほうが直せる)
+  const label = (n) => escapeHtml(n.file ? String(n.file) : `パート${n.part}`);
   return `<div class="card" style="border-left:4px solid var(--warn,#e0a020)">
-    <p class="field-note" style="margin-bottom:4px"><strong>⚠ 一部のパートは文字起こしできませんでした</strong></p>
+    <p class="field-note" style="margin-bottom:4px"><strong>⚠ 一部は文字起こしできませんでした</strong></p>
     <p class="field-note">${notes.map((n) =>
-      `・パート${n.part}: ${escapeHtml(String(n.why || '不明'))}`).join('<br>')}</p>
+      `・${label(n)}: ${escapeHtml(String(n.why || '不明'))}`).join('<br>')}</p>
     <p class="field-note" style="margin-top:6px">
-      要約は、残りのパートだけから作っています。音声を端末に保存してあれば、下の「🔁 やり直す」で再試行できます。
+      要約は、残りのぶんだけから作っています。音声を端末に保存してあれば、下の「🔁 やり直す」で再試行できます。
     </p>
   </div>`;
 }
@@ -1692,10 +1827,14 @@ async function renderTalkAudioBox() {
   }
 
   if (Talk.hasMemoryAudio()) {
+    // 読み込んだ音声は元ファイルが手元にあるので、「消えます」の重みが違う。文言を分ける
+    const imported = c.source === 'import';
     box.innerHTML = `<div class="card audio-box">
       ${talkAudioHtml()}
-      <p class="field-note">⚠ この画面を離れると、録音音声は破棄されます(要約と文字起こしは残ります)。</p>
-      <button class="btn-audio-keep" id="btn-audio-save" type="button">🎵 この録音の音声を端末に残す</button>
+      <p class="field-note">${imported
+        ? 'ℹ この画面を離れると、変換した音声はメモリから破棄されます(要約と文字起こしは残ります)。元のファイルはそのままですので、必要ならまた読み込めます。'
+        : '⚠ この画面を離れると、録音音声は破棄されます(要約と文字起こしは残ります)。'}</p>
+      <button class="btn-audio-keep" id="btn-audio-save" type="button">🎵 ${imported ? 'この音声を端末に残す(やり直しが早くなります)' : 'この録音の音声を端末に残す'}</button>
       <p class="field-note">毎回残したい場合は、⚙設定の「録音音声を端末に残す」をオンにしてください。</p>
     </div>`;
     box.querySelector('#btn-audio-save').addEventListener('click', async () => {
