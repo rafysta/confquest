@@ -12,11 +12,21 @@ const Talk = {
   pauseStartedAt: 0,
 
   /* ---------- 録音 ----------
-   * 長時間対応: SEGMENT_SEC ごとに録音を「セグメント」として確定し、新しい
-   * MediaRecorderで続きを録る。各セグメントは独立した完全な音声ファイルに
-   * なるので、Whisperの25MB制限を気にせず何時間でも録音できる。
+   * 長時間対応: 一定のサイズ/時間ごとに録音を「セグメント」として確定し、新しい
+   * MediaRecorderで続きを録る。各セグメントは独立した完全な音声ファイルになるので、
+   * Whisperの25MB制限を気にせず何時間でも録音できる。
+   *
+   * ⚠ ここは一度壊した箇所なので注意してください(v1.30.1で修正)。
+   * MediaRecorder.stop() を呼んでも、最後の dataavailable と onstop は
+   * 「非同期」で後から届きます。受け皿を this.chunks のような共有の場所にすると、
+   * すぐ次のレコーダーを起動した時点で受け皿が差し替わっているため、
+   * 古いレコーダーの最後のデータが【次のセグメントの中に紛れ込みます】。
+   * その結果、パート2以降は別ストリームの断片が挟まったファイルになり、
+   * 再生できず、Whisperにも "Invalid file format" (400) で弾かれます。
+   * → 受け皿は必ずレコーダーごとのクロージャに閉じ込めること。
    */
-  SEGMENT_SEC: 600,   // 10分ごとに区切る(32kbpsで1パート約2.4MB)
+  SEGMENT_SEC: 2700,                    // 45分。多くの講演は1パートに収まる
+  SEGMENT_BYTES: 18 * 1024 * 1024,      // 18MB(APIの25MB上限に余裕を持たせる)
   stream: null,
   segments: [],       // 確定済みセグメント [{blob, startSec}]
   segStartSec: 0,     // 現在録音中セグメントの開始位置(全体の経過秒)
@@ -59,31 +69,61 @@ const Talk = {
 
   /** 現在のストリームで新しいMediaRecorderを開始する */
   _startRecorder() {
-    this.chunks = [];
-    // 32kbps mono: 10分で約2.4MB。Whisperの25MB上限に余裕をもって収まる
+    // ★受け皿はこのレコーダー専用にする(this.chunks を参照してはいけない)
+    const chunks = [];
+    let rec;
+    // 32kbps mono: 1時間で約14MB。Whisperの25MB上限に余裕をもって収まる
     try {
-      this.recorder = new MediaRecorder(this.stream, { audioBitsPerSecond: 32000 });
+      rec = new MediaRecorder(this.stream, { audioBitsPerSecond: 32000 });
     } catch (_) {
-      this.recorder = new MediaRecorder(this.stream);
+      rec = new MediaRecorder(this.stream);
     }
-    this.recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) this.chunks.push(e.data);
+    rec._chunks = chunks;
+    rec.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
     };
-    this.recorder.start(5000); // 5秒ごとにデータを確保(長時間録音でのメモリ対策)
+    this.recorder = rec;
+    this.chunks = chunks;      // 互換のため「いまのレコーダーの受け皿」を指しておく
+    rec.start(5000);           // 5秒ごとにデータを確保(長時間録音でのメモリ対策)
   },
 
-  /** SEGMENT_SECを超えていたらセグメントを確定して録音を続ける(updateUIから呼ばれる) */
-  maybeRotate() {
-    if (!this.recorder || this.paused || this.recorder.state !== 'recording') return;
-    if (this.elapsedMs() / 1000 - this.segStartSec < this.SEGMENT_SEC) return;
+  /** いま録音中のセグメントのバイト数 */
+  currentBytes() {
+    const c = this.recorder && this.recorder._chunks;
+    if (!c) return 0;
+    let n = 0;
+    for (let i = 0; i < c.length; i++) n += c[i].size;
+    return n;
+  },
+
+  /**
+   * いまのレコーダーを閉じて1セグメントとして確定する。
+   * 先に「場所」を確保してから閉じるので、非同期で確定しても順番が入れ替わらない。
+   */
+  _closeSegment() {
     const rec = this.recorder;
-    const chunks = this.chunks;
-    const startSec = this.segStartSec;
+    if (!rec || rec.state === 'inactive') return null;
+    const slot = { blob: null, startSec: this.segStartSec };
+    this.segments.push(slot);
     rec.onstop = () => {
-      this.segments.push({ blob: new Blob(chunks, { type: rec.mimeType }), startSec });
+      slot.blob = new Blob(rec._chunks, { type: rec.mimeType || 'audio/webm' });
     };
     this.segStartSec = this.elapsedMs() / 1000;
     rec.stop();
+    return slot;
+  },
+
+  /**
+   * サイズか時間が上限に達していたらセグメントを確定して録音を続ける。
+   * サイズでも見るのは、端末によっては指定したビットレートが効かず、
+   * 時間だけで区切ると1パートが25MBを超えてしまうことがあるため。
+   * (updateUIから呼ばれる)
+   */
+  maybeRotate() {
+    if (!this.recorder || this.paused || this.recorder.state !== 'recording') return;
+    const secs = this.elapsedMs() / 1000 - this.segStartSec;
+    if (secs < this.SEGMENT_SEC && this.currentBytes() < this.SEGMENT_BYTES) return;
+    this._closeSegment();
     this._startRecorder();   // 同じストリームで即座に続きを録る
   },
 
@@ -224,16 +264,26 @@ const Talk = {
       if (!this.recorder || this.recorder.state === 'inactive') { resolve(); return; }
       this.current.durationMs = this.elapsedMs();
       const rec = this.recorder;
-      const chunks = this.chunks;
-      const startSec = this.segStartSec;
+      const slot = { blob: null, startSec: this.segStartSec };
+      this.segments.push(slot);
       rec.onstop = () => {
-        this.segments.push({ blob: new Blob(chunks, { type: rec.mimeType }), startSec });
-        // 再生用URL(セグメントごと)。audioBlob/audioUrlは互換のため先頭を指す
-        this.audioUrls = this.segments.map((s) => URL.createObjectURL(s.blob));
-        this.audioUrl = this.audioUrls[0] || null;
-        this.audioBlob = this.segments[0] ? this.segments[0].blob : null;
-        if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
-        resolve();
+        slot.blob = new Blob(rec._chunks, { type: rec.mimeType || 'audio/webm' });
+        // 直前のセグメントの確定がまだ終わっていない可能性があるので少し待つ
+        let waited = 0;
+        const finish = () => {
+          if (this.segments.some((sg) => !sg.blob) && waited < 60) {
+            waited++;
+            setTimeout(finish, 30);
+            return;
+          }
+          this.segments = this.segments.filter((sg) => sg.blob && sg.blob.size > 0);
+          this.audioUrls = this.segments.map((sg) => URL.createObjectURL(sg.blob));
+          this.audioUrl = this.audioUrls[0] || null;
+          this.audioBlob = this.segments[0] ? this.segments[0].blob : null;
+          if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+          resolve();
+        };
+        finish();
       };
       rec.stop();
     });
@@ -263,34 +313,100 @@ const Talk = {
   },
 
   /* ---------- 文字起こし ---------- */
-  /** 全セグメントを順に文字起こしして結合する。onProgress(done, total)で進捗を通知 */
+
+  /**
+   * そのBlobが「ちゃんとした音声ファイル」として始まっているかを見る。
+   * webm/ogg は先頭の数バイトで判別できる。判別できない形式は通す(誤って弾かない)。
+   * 壊れたパートをAPIに送っても400で弾かれるだけなので、手前で気づくためのもの。
+   */
+  async looksPlayable(blob) {
+    if (!blob || blob.size < 8) return false;
+    const t = String(blob.type || '').toLowerCase();
+    try {
+      const h = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+      if (t.indexOf('webm') >= 0 || t.indexOf('matroska') >= 0) {
+        // EBML: 1A 45 DF A3
+        return h[0] === 0x1A && h[1] === 0x45 && h[2] === 0xDF && h[3] === 0xA3;
+      }
+      if (t.indexOf('ogg') >= 0) {
+        // "OggS"
+        return h[0] === 0x4F && h[1] === 0x67 && h[2] === 0x67 && h[3] === 0x53;
+      }
+      return true;   // mp4/mp3など、ここでは判別しない形式は通す
+    } catch (_) {
+      return true;
+    }
+  },
+
+  /**
+   * 全セグメントを順に文字起こしして結合する。onProgress(done, total)で進捗を通知。
+   * 1つのパートが駄目でも全体を止めず、無事なパートだけで文字起こしを作る。
+   * 駄目だったパートは current.partNotes に理由つきで残す。
+   */
   async transcribe(onProgress) {
     const segs = (this.segments && this.segments.length)
       ? this.segments
       : (this.audioBlob ? [{ blob: this.audioBlob, startSec: 0 }] : []);
-    if (!segs.length || segs.every((s) => !s.blob || s.blob.size === 0)) {
-      throw new Error('録音データがありません。');
-    }
+    if (!segs.length) throw new Error('録音データがありません。');
+
     const MAX = 24 * 1024 * 1024;
-    const all = [];
+    const notes = [];
+    const usable = [];
     for (let i = 0; i < segs.length; i++) {
-      const s = segs[i];
-      if (!s.blob || s.blob.size === 0) continue;
-      if (s.blob.size > MAX) {
-        throw new Error(`録音パート${i + 1}が大きすぎます (${(s.blob.size / 1048576).toFixed(1)}MB)。APIの上限は25MBです。`);
+      const sg = segs[i];
+      const part = i + 1;
+      if (!sg.blob || sg.blob.size === 0) {
+        notes.push({ part, why: '中身が空でした' });
+      } else if (sg.blob.size > MAX) {
+        notes.push({ part, why: `大きすぎます (${(sg.blob.size / 1048576).toFixed(1)}MB / 上限25MB)` });
+      } else if (!(await this.looksPlayable(sg.blob))) {
+        notes.push({ part, why: '音声ファイルとして壊れていました(再生もできません)' });
+      } else {
+        usable.push({ sg, part });
       }
-      if (onProgress) onProgress(i + 1, segs.length);
-      const part = await STT.transcribe(s.blob, this.current.lang);
-      // セグメント内の相対時刻を、録音全体の時刻に直して結合する
-      part.forEach((sg) => all.push({ start: sg.start + s.startSec, end: sg.end + s.startSec, text: sg.text }));
     }
-    this.current.transcript = all.map((s) => s.text.trim()).join(' ');
+
+    if (!usable.length) {
+      const err = new Error('文字起こしに使えるパートがありませんでした。\n' +
+        notes.map((n) => `・パート${n.part}: ${n.why}`).join('\n'));
+      err.partNotes = notes;
+      this.current.partNotes = notes;
+      throw err;
+    }
+
+    const all = [];
+    for (let k = 0; k < usable.length; k++) {
+      if (onProgress) onProgress(k + 1, usable.length);
+      try {
+        const res = await STT.transcribe(usable[k].sg.blob, this.current.lang);
+        // セグメント内の相対時刻を、録音全体の時刻に直して結合する
+        res.forEach((x) => all.push({
+          start: x.start + usable[k].sg.startSec,
+          end: x.end + usable[k].sg.startSec,
+          text: x.text
+        }));
+      } catch (err) {
+        // APIキーの問題は全体を止める(1パートずつ失敗させても意味がない)
+        if (err && (err.noKey || err.badKey)) throw err;
+        notes.push({ part: usable[k].part, why: (err && err.message) || '不明なエラー' });
+      }
+    }
+
+    this.current.partNotes = notes;
+    if (!all.length) {
+      const err = new Error('どのパートも文字起こしできませんでした。\n' +
+        notes.map((n) => `・パート${n.part}: ${n.why}`).join('\n'));
+      err.partNotes = notes;
+      throw err;
+    }
+
+    this.current.transcript = all.map((x) => x.text.trim()).join(' ');
     // マーク時刻の前後を抜き出して「注目箇所」にする
-    this.current.markedText = this.current.marks.map((t) => {
-      const near = all.filter((s) => s.end >= t - 25 && s.start <= t + 10);
-      const txt = near.map((s) => s.text.trim()).join(' ');
+    this.current.markedText = (this.current.marks || []).map((t) => {
+      const near = all.filter((x) => x.end >= t - 25 && x.start <= t + 10);
+      const txt = near.map((x) => x.text.trim()).join(' ');
       return `[${PracticeUtil.fmtTime(t * 1000)}] ${txt}`.trim();
-    }).filter((s) => s.length > 12);
+    }).filter((x) => x.length > 12);
     return this.current.transcript;
   },
 
@@ -467,13 +583,17 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
   /* ---------- 保存 ---------- */
   save() {
     const c = this.current;
-    const list = JSON.parse(localStorage.getItem('lq_talks') || '[]');
-    list.unshift({
+    const entry = {
       id: c.id, date: c.date, kind: c.kind || 'talk',
       title: c.title, speaker: c.speaker, venue: c.venue,
       durationMs: c.durationMs, summary: c.summary, transcript: c.transcript,
-      markedText: c.markedText || [], note: c.note
-    });
+      markedText: c.markedText || [], note: c.note,
+      lang: c.lang || '', partNotes: c.partNotes || null
+    };
+    // 同じIDが既にあれば置きかえる(文字起こしのやり直しで二重に増やさない)
+    const list = JSON.parse(localStorage.getItem('lq_talks') || '[]')
+      .filter((t) => t.id !== c.id);
+    list.unshift(entry);
     // 端末の保存領域を圧迫しないよう50件まで
     localStorage.setItem('lq_talks', JSON.stringify(list.slice(0, 50)));
   },
@@ -485,6 +605,8 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       this.current = Object.assign({ marks: [], lang: '', kind: 'talk' }, found);
       this.audioUrl = null;
       this.audioUrls = [];
+      this.segments = [];      // 前の録音のパートが残っていると、それを文字起こししてしまう
+      this.audioBlob = null;
     }
     return found;
   }

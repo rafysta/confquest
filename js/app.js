@@ -1545,6 +1545,7 @@ function renderTalkRetry(len) {
       <button class="btn-large primary" id="btn-talk-retry">🔁 もう一度文字起こしする</button>
       ${len > 0 ? '<button class="btn-large" id="btn-talk-force">この結果のまま要約する</button>' : ''}
     </div>
+    ${partNotesHtml()}
     <p class="field-note">録音の確認:</p>
     <div id="talk-audio-box"></div>`;
   el.querySelector('#btn-talk-retry').addEventListener('click', () =>
@@ -1563,6 +1564,7 @@ function talkErrorView(err) {
     el.innerHTML += `<p class="field-note">文字起こしは保存しました。「聴講した講演」から確認できます。</p>
       <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
   }
+  el.innerHTML += partNotesHtml();
   el.innerHTML += '<div id="talk-audio-box" style="margin-top:12px"></div>';
   renderTalkAudioBox();
 }
@@ -1579,6 +1581,7 @@ function renderTalkResult() {
       </p>
     </div>
     <div id="talk-audio-box"></div>
+    ${partNotesHtml()}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
     ${c.transcript ? `
       <details class="card" style="margin-top:10px">
@@ -1589,15 +1592,39 @@ function renderTalkResult() {
   renderTalkAudioBox();
 }
 
+/** 「◯分〜」のラベル。パートの開始時刻は実際の分割位置から取る(固定間隔ではない) */
+function partStartLabel(startSec) {
+  return `${Math.round((startSec || 0) / 60)}分〜`;
+}
+
 /** 録音の再生プレイヤーHTML(長時間録音はパートごとに分かれる) */
 function talkAudioHtml() {
   const urls = (Talk.audioUrls && Talk.audioUrls.length)
     ? Talk.audioUrls
     : (Talk.audioUrl ? [Talk.audioUrl] : []);
   if (!urls.length) return '';
+  const segs = Talk.segments || [];
   return urls.map((u, i) => `
-    ${urls.length > 1 ? `<p class="field-note" style="margin:6px 0 2px">パート ${i + 1}(${i * 10}分〜)</p>` : ''}
+    ${urls.length > 1
+      ? `<p class="field-note" style="margin:6px 0 2px">パート ${i + 1}(${partStartLabel(segs[i] && segs[i].startSec)})</p>` : ''}
     <audio controls src="${u}"></audio>`).join('');
+}
+
+/**
+ * 文字起こしできなかったパートがあれば、その理由を表に出す。
+ * 黙って短い要約を返すより、「どこが欠けたか」が分かるほうが対処できる。
+ */
+function partNotesHtml() {
+  const notes = (Talk.current && Talk.current.partNotes) || [];
+  if (!notes.length) return '';
+  return `<div class="card" style="border-left:4px solid var(--warn,#e0a020)">
+    <p class="field-note" style="margin-bottom:4px"><strong>⚠ 一部のパートは文字起こしできませんでした</strong></p>
+    <p class="field-note">${notes.map((n) =>
+      `・パート${n.part}: ${escapeHtml(String(n.why || '不明'))}`).join('<br>')}</p>
+    <p class="field-note" style="margin-top:6px">
+      要約は、残りのパートだけから作っています。音声を端末に保存してあれば、下の「🔁 やり直す」で再試行できます。
+    </p>
+  </div>`;
 }
 
 /* ---------- 🎵 録音音声の保存(既定は破棄) ---------- */
@@ -1627,18 +1654,30 @@ async function renderTalkAudioBox() {
     const parts = (rec && rec.parts) || [];
     if (parts.length) {
       _savedAudioUrls = parts.map((p) => URL.createObjectURL(p.blob));
+      const many = parts.length > 1;
       box.innerHTML = `<div class="card audio-box">
-        <p class="field-note">🎵 この録音の音声は端末に保存されています(${Backup.fmtBytes(rec.bytes || 0)})。</p>
+        <p class="field-note">🎵 この録音の音声は端末に保存されています(${Backup.fmtBytes(rec.bytes || 0)}${many ? ` / ${parts.length}パート` : ''})。</p>
         ${_savedAudioUrls.map((u, i) => `
-          ${_savedAudioUrls.length > 1
-            ? `<p class="field-note" style="margin:6px 0 2px">パート ${i + 1}(${Math.round((parts[i].startSec || 0) / 60)}分〜)</p>` : ''}
-          <audio controls src="${u}"></audio>`).join('')}
-        <div class="audio-actions">
-          <button class="btn-control" id="btn-audio-dl" type="button">⬇ 音声ファイルを書き出す</button>
+          ${many ? `<p class="field-note" style="margin:6px 0 2px">パート ${i + 1}(${partStartLabel(parts[i].startSec)}・${Backup.fmtBytes(parts[i].blob.size)})</p>` : ''}
+          <audio controls src="${u}"></audio>
+          <div class="audio-actions">
+            <button class="btn-control" data-dl-part="${i}" type="button">⬇ ${many ? `パート${i + 1}を書き出す` : '音声ファイルを書き出す'}</button>
+          </div>`).join('')}
+        <div class="audio-actions" style="margin-top:8px">
+          <button class="btn-control" id="btn-audio-retry" type="button">🔁 この音声から文字起こしをやり直す</button>
           <button class="btn-control danger" id="btn-audio-del" type="button">🗑 音声を削除</button>
         </div>
       </div>`;
-      box.querySelector('#btn-audio-dl').addEventListener('click', () => downloadTalkAudio(parts, c));
+      /* ⬇ は「押した瞬間に」ダウンロードを始めること。
+       * setTimeoutで遅らせると、スマホのブラウザはユーザー操作と結びつかない
+       * ダウンロードとみなして黙って捨てる(=何も起きない)。だからパートごとにボタンを分ける。 */
+      box.querySelectorAll('[data-dl-part]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const i = Number(btn.dataset.dlPart);
+          downloadOnePart(parts[i], i, parts.length, c);
+        });
+      });
+      box.querySelector('#btn-audio-retry').addEventListener('click', () => retranscribeSaved(parts));
       box.querySelector('#btn-audio-del').addEventListener('click', async () => {
         const ok = await appConfirm(
           `「${c.title}」の録音音声を端末から削除しますか?\n(要約と文字起こしは残ります。音声は元に戻せません)`,
@@ -1683,23 +1722,45 @@ async function renderTalkAudioBox() {
   box.innerHTML = '<p class="field-note">🎵 この録音の音声は保存されていません(既定では要約のあと破棄されます)。</p>';
 }
 
-/** 保存した音声をファイルとして書き出す(パートごと) */
-function downloadTalkAudio(parts, c) {
-  const d = new Date(c.date);
-  const day = d.toISOString().slice(0, 10);
-  const safe = String(c.title || '録音').replace(/[\\/:*?"<>|]/g, '_').slice(0, 50);
-  parts.forEach((p, i) => {
-    setTimeout(() => {
-      const ext = Backup.extFor(p.blob.type);
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(p.blob);
-      a.download = parts.length > 1
-        ? `${day}_${safe}_part${i + 1}.${ext}` : `${day}_${safe}.${ext}`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    }, i * 600);   // 連続ダウンロードはブラウザに間隔が必要
-  });
-  showToast(parts.length > 1 ? `⬇ ${parts.length}個のファイルを保存中…` : '⬇ 保存しました');
+/**
+ * 保存した音声を1パートだけファイルに書き出す。
+ * ★この関数の中で await や setTimeout を挟んではいけない。
+ *   クリックとダウンロード開始のあいだに非同期処理が入ると、ブラウザは
+ *   「ユーザー操作によるダウンロード」と認めず、警告も出さずに無視する。
+ */
+function downloadOnePart(p, i, total, c) {
+  try {
+    const day = new Date(c.date).toISOString().slice(0, 10);
+    const safe = String(c.title || '録音').replace(/[\\/:*?"<>|]/g, '_').slice(0, 50);
+    const ext = Backup.extFor(p.blob.type);
+    const url = URL.createObjectURL(p.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = total > 1 ? `${day}_${safe}_part${i + 1}.${ext}` : `${day}_${safe}.${ext}`;
+    a.rel = 'noopener';
+    document.body.appendChild(a);   // Firefoxなどは文書に入っていないと反応しない
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) { /* 無視 */ } }, 60000);
+    showToast(`⬇ ${a.download} を保存しました`);
+  } catch (err) {
+    appAlert('書き出せませんでした: ' + err.message, '⬇ 音声の書き出し');
+  }
+}
+
+/** 端末に保存した音声を読み直して、文字起こしからやり直す */
+async function retranscribeSaved(parts) {
+  const ok = await appConfirm(
+    '保存してある音声から、文字起こしと要約をやり直します。\n' +
+    '(いまの文字起こし・要約は新しい結果で置きかわります)\n\n' +
+    'APIの利用料が新たにかかります。よろしいですか?',
+    '🔁 文字起こしのやり直し');
+  if (!ok) return;
+  // Talk.transcribe は segments を見るので、保存した音声をそこへ入れ直す
+  Talk.segments = parts.map((p) => ({ blob: p.blob, startSec: p.startSec || 0 }));
+  Talk.audioBlob = null;
+  Talk.current.partNotes = null;
+  await talkTranscribeStep();
 }
 
 /* 共有・保存・コピー */
