@@ -779,8 +779,19 @@ function renderMarkdown(src) {
 
   const lines = text.split('\n');
   const out = [];
-  let listType = null;   // 'ul' | 'ol' | null
   let para = [];
+
+  /* ---------- 箇条書きの入れ子 ----------
+   * ⚠ v1.31.1まで、行頭の空白を捨てて `openList('ul')` を呼んでいたため、
+   *   - 見出し
+   *     - 内訳          ← Markdownでは1段下がる
+   *   が画面上では同じ高さに並び、どれが小見出しでどれが中身か分からなかった。
+   *   (Markdownファイルとして開くと入れ子で表示されるので、見え方が食い違っていた)
+   * ここでは字下げの深さをスタックで持ち、本物の入れ子として組み立てる。
+   * 入れ子のリストは親の <li> の「中」に置く必要があるので、
+   * <li> を閉じるタイミングもスタックで管理する。 */
+  const MAX_DEPTH = 5;              // 5段より深いものは同じ段として扱う(壊れた出力対策)
+  const stack = [];                 // [{ type:'ul'|'ol', indent:number, liOpen:boolean }]
 
   const flushPara = () => {
     if (para.length) {
@@ -788,12 +799,55 @@ function renderMarkdown(src) {
       para = [];
     }
   };
-  const closeList = () => {
-    if (listType) { out.push(`</${listType}>`); listType = null; }
+  /** いちばん内側のリストを1つ閉じる */
+  const closeOne = () => {
+    const top = stack.pop();
+    if (!top) return;
+    if (top.liOpen) out.push('</li>');
+    out.push(`</${top.type}>`);
   };
-  const openList = (type) => {
-    if (listType !== type) { closeList(); out.push(`<${type}>`); listType = type; }
+  const closeList = () => { while (stack.length) closeOne(); };
+
+  /** 字下げの深さ w、種類 t の箇条書き項目を1つ置く */
+  const pushItem = (w, t, html) => {
+    // 自分より深い段はここで終わり
+    while (stack.length && w < stack[stack.length - 1].indent) closeOne();
+    const top = stack[stack.length - 1];
+    if (!top) {
+      out.push(`<${t}>`);
+      stack.push({ type: t, indent: w, liOpen: false });
+    } else if (w >= top.indent + 2 && stack.length < MAX_DEPTH) {
+      // 1段深い: 親の <li> は開けたまま、その中に新しいリストを開く
+      out.push(`<${t}>`);
+      stack.push({ type: t, indent: w, liOpen: false });
+    } else {
+      // 同じ段
+      if (top.liOpen) { out.push('</li>'); top.liOpen = false; }
+      if (top.type !== t) {           // ・ と 1. が混ざったら種類を切り替える
+        out.push(`</${top.type}>`);
+        out.push(`<${t}>`);
+        top.type = t;
+      }
+      if (w < top.indent) top.indent = w;
+    }
+    const cur = stack[stack.length - 1];
+    out.push(`<li>${html}`);
+    cur.liOpen = true;
   };
+
+  /** 箇条書きの続き行(字下げされた地の文)を、いま開いている項目に足す */
+  const appendToItem = (html) => {
+    const top = stack[stack.length - 1];
+    if (!top || !top.liOpen) return false;
+    for (let k = out.length - 1; k >= 0; k--) {
+      if (out[k].startsWith('<li>')) { out[k] += ' ' + html; return true; }
+      if (out[k].startsWith('</')) return false;   // すでに何かが閉じられている
+    }
+    return false;
+  };
+
+  /** 行頭の空白の「深さ」。タブは4つぶんとして数える */
+  const indentOf = (s) => s.replace(/\t/g, '    ').length;
 
   // テーブル用: 行を | で分割(前後の | は除去)
   const splitRow = (s) => s.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
@@ -808,7 +862,13 @@ function renderMarkdown(src) {
       out.push(line.trim());
       continue;
     }
-    if (!line.trim()) { flushPara(); closeList(); continue; }
+    // 空行では箇条書きを閉じない。閉じてしまうと
+    //   - 見出し
+    //
+    //     - 内訳
+    // のように行間を空けた出力で入れ子が切れてしまう。
+    // リストは、見出し・地の文・表など「明らかに別のもの」が来たときに閉じる。
+    if (!line.trim()) { flushPara(); continue; }
 
     // テーブル: ヘッダ行の次が区切り行(|---|---|)なら表として処理
     if (line.includes('|') && i + 1 < lines.length && isTableSep(lines[i + 1])) {
@@ -855,12 +915,16 @@ function renderMarkdown(src) {
       } else {
         out.push(`<blockquote class="md-quote">${inline(m[1])}</blockquote>`);
       }
-    } else if ((m = line.match(/^\s*(?:[-*+])\s+(.*)$/))) {
-      flushPara(); openList('ul');
-      out.push(`<li>${inline(m[1])}</li>`);
-    } else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
-      flushPara(); openList('ol');
-      out.push(`<li>${inline(m[1])}</li>`);
+    } else if ((m = line.match(/^([ \t]*)(?:[-*+])\s+(.*)$/))) {
+      flushPara();
+      pushItem(indentOf(m[1]), 'ul', inline(m[2]));
+    } else if ((m = line.match(/^([ \t]*)\d+[.)]\s+(.*)$/))) {
+      flushPara();
+      pushItem(indentOf(m[1]), 'ol', inline(m[2]));
+    } else if (stack.length && /^[ \t]+\S/.test(line) && !para.length &&
+               appendToItem(inline(line.trim()))) {
+      // 箇条書きの続き行(字下げされた地の文)。項目の本文として足す
+      continue;
     } else {
       closeList();
       para.push(line.trim());
@@ -868,7 +932,39 @@ function renderMarkdown(src) {
   }
   flushPara(); closeList();
 
-  return out.join('\n').replace(/BLOCK(\d+)/g, (_, i) => blocks[i]);
+  return groupUnderHeadings(out).join('\n').replace(/BLOCK(\d+)/g, (_, i) => blocks[i]);
+}
+
+/**
+ * 見出しの下の中身を <div class="md-sec"> でくるみ、一段下げて表示できるようにする。
+ * Markdownファイルとして開けば見出しと中身の関係が見て取れるのに、
+ * 画面では全部が同じ左端に並んでいて「どこからどこまでが1つの節か」が読めなかった。
+ * ### の小見出しは ## の節の中に入れ子にするので、2段の階層がそのまま見た目に出る。
+ */
+function groupUnderHeadings(blocks) {
+  const out = [];
+  let openH3 = false;    // ## の節が開いているか
+  let openH4 = false;    // ### の節が開いているか
+  const closeH4 = () => { if (openH4) { out.push('</div>'); openH4 = false; } };
+  const closeH3 = () => { closeH4(); if (openH3) { out.push('</div>'); openH3 = false; } };
+
+  for (const b of blocks) {
+    if (b.startsWith('<h3 class="md-h">')) {
+      closeH3();
+      out.push(b);
+      out.push('<div class="md-sec">');
+      openH3 = true;
+    } else if (b.startsWith('<h4 class="md-h">')) {
+      closeH4();
+      out.push(b);                       // 小見出し自体は親の節の中に置く
+      out.push('<div class="md-sec md-sec-sub">');
+      openH4 = true;
+    } else {
+      out.push(b);
+    }
+  }
+  closeH3();
+  return out;
 }
 
 /* ---------- AIフィードバック ---------- */

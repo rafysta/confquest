@@ -415,10 +415,55 @@ table.slide-table {
   padding-bottom: 4px;
 }
 .md-body h3.md-h { font-size: 1.02rem; }
-.md-body h4.md-h { font-size: 0.95rem; border-bottom: none; padding-bottom: 0; }
+/* 小見出しは、地の文と混ざらないよう左に短い印をつける */
+.md-body h4.md-h {
+  font-size: 0.95rem;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin: 12px 0 4px;
+  color: var(--text);
+}
+.md-body h4.md-h::before {
+  content: '';
+  display: inline-block;
+  width: 3px; height: 0.85em;
+  margin-right: 7px;
+  vertical-align: -1px;
+  border-radius: 2px;
+  background: var(--accent);
+}
 .md-body ul, .md-body ol { margin: 0 0 10px; padding-left: 1.4em; }
 .md-body li { margin-bottom: 6px; line-height: 1.6; }
 .md-body li::marker { color: var(--accent); }
+/* 入れ子の箇条書き: 内訳が親項目の下にぶら下がっていると分かるようにする。
+   段ごとに印を変えて(● → ‣ → –)、深さが一目で見分けられるようにする */
+.md-body li > ul, .md-body li > ol { margin: 6px 0 2px; padding-left: 1.2em; }
+.md-body li > ul > li::marker { color: var(--text-dim); content: '‣  '; }
+.md-body li > ul > li > ul > li::marker { content: '–  '; }
+/* 内訳は字を少しだけ小さくする。ただし色は落とさない
+   — 数値や実験条件など、いちばん知りたい中身がここに来るため */
+.md-body li > ul > li, .md-body li > ol > li {
+  font-size: 0.95em;
+  margin-bottom: 4px;
+}
+/* 中身が入れ子を持つ親項目は、小見出しとして少し目立たせる */
+.md-body li:has(> ul), .md-body li:has(> ol) { margin-bottom: 10px; }
+
+/* 見出しの下の中身を一段下げる。左の細い線で「ここまでが1つの節」を示す */
+.md-body .md-sec {
+  padding-left: 11px;
+  margin: 0 0 14px;
+  border-left: 2px solid rgba(148, 163, 184, 0.22);
+}
+.md-body .md-sec:last-child { margin-bottom: 0; }
+.md-body .md-sec > *:last-child { margin-bottom: 0; }
+.md-body .md-sec-sub {
+  padding-left: 9px;
+  margin: 6px 0 12px;
+  border-left-color: rgba(148, 163, 184, 0.14);
+}
+/* 節が始まる位置をそろえるため、見出しの下の余白は節側で持つ */
+.md-body .md-h + .md-sec { margin-top: 2px; }
 .md-body strong { color: #fff; }
 .md-body em { color: var(--text); }
 .md-body .md-quote {
