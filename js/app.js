@@ -376,6 +376,8 @@ function loadSettings() {
     localStorage.getItem('lq_stt_model') || 'whisper-1';
   document.getElementById('time-scale').value =
     localStorage.getItem('lq_time_scale') || '1.5';
+  const _pf = document.getElementById('learn-profile');
+  if (_pf && typeof Profile !== 'undefined') _pf.value = Profile.current();
   document.getElementById('new-per-day').value =
     localStorage.getItem('lq_new_per_day') || '5';
   document.getElementById('review-cap').value =
@@ -431,6 +433,8 @@ document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_openai_model', document.getElementById('openai-model').value);
   localStorage.setItem('lq_stt_model', document.getElementById('stt-model').value);
   localStorage.setItem('lq_time_scale', document.getElementById('time-scale').value);
+  const _pfSel = document.getElementById('learn-profile');
+  if (_pfSel && typeof Profile !== 'undefined') Profile.set(_pfSel.value);
   localStorage.setItem('lq_new_per_day', document.getElementById('new-per-day').value);
   localStorage.setItem('lq_review_cap', document.getElementById('review-cap').value);
   localStorage.setItem('lq_fillers', document.getElementById('filler-words').value);

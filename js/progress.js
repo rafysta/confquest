@@ -380,6 +380,7 @@ const ACHIEVEMENT_DEFS = [
   { id: 'route-first',    icon: '🚉', name: '出発進行', desc: '路線図モードで最初の駅をクリアした' },
   { id: 'route-clear',    icon: '🚄', name: 'Korea Route制覇', desc: 'Korea Routeの全駅をクリアした' },
   { id: 'wedding-clear',  icon: '💒', name: 'Wedding Quest制覇', desc: 'Hong Kong Routeの全駅をクリアした' },
+  { id: 'seoul-clear',    icon: '🌷', name: 'Seoul Route制覇', desc: 'Seoul Routeの全駅をクリアした' },
   { id: 'drive-full',     icon: '🚗', name: '2時間ドライブ完走', desc: 'AI自由会話でフルドライブ(20往復)を完走した' },
   { id: 'sim-all',        icon: '🎭', name: '実戦フルコース', desc: 'AI自由会話でドライブ・懇親会・Dinnerの3場面すべてを完走した' }
 ];

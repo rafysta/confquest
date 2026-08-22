@@ -1926,6 +1926,31 @@ audio { width: 100%; margin-bottom: 12px; }
   border: 1px solid rgba(255,255,255,0.18);
 }
 
+/* ---------- 🌷 学習プロフィールの切り替え (v1.32.0) ----------
+   「いま誰のコースを見ているか」が常に分かるよう、いちばん上に置く */
+.profile-chip {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; margin: 0 0 10px; padding: 10px 12px;
+  background: rgba(56, 189, 248, 0.07);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 12px;
+  color: var(--text); text-align: left; cursor: pointer;
+  font-family: inherit;
+}
+.profile-chip:active { background: rgba(56, 189, 248, 0.14); }
+.profile-chip-icon { font-size: 1.35rem; line-height: 1; flex-shrink: 0; }
+.profile-chip-body { flex: 1; min-width: 0; }
+.profile-chip-body strong { display: block; font-size: 0.94rem; }
+.profile-chip-body span {
+  display: block; font-size: 0.78rem; color: var(--text-dim);
+  line-height: 1.45; margin-top: 2px;
+}
+.profile-chip-go {
+  flex-shrink: 0; font-size: 0.76rem; color: var(--accent);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 999px; padding: 4px 10px;
+}
+
 /* ---------- 📁 音声ファイルの読み込み (v1.31.0) ---------- */
 /* 「録音を開始」と並べても主役を取らないよう、区切り線で一段下げて見せる */
 .import-entry {

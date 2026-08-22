@@ -137,7 +137,8 @@ const SRS = {
   dueCards(lang, now) {
     const d = this.data();
     const today = localDayKey(now);
-    return Phrases.all()
+    // いまのプロフィールのコースだけを対象にする(相手のカードを復習に混ぜない)
+    return Phrases.inCourse()
       .filter((c) => (!lang || c.lang === lang))
       .filter((c) => d.cards[c.id] && d.cards[c.id].due <= today)
       .filter((c) => typeof ReviewFlags === 'undefined' || ReviewFlags.get(c.id) !== 'fix')
@@ -188,9 +189,9 @@ const SRS = {
   checkCollectAchievements() {
     if (typeof Achievements === 'undefined') return;
     const d = this.data();
-    const bloomed = Phrases.all().filter((c) => d.cards[c.id] && d.cards[c.id].lv >= 3);
+    const bloomed = Phrases.inCourse().filter((c) => d.cards[c.id] && d.cards[c.id].lv >= 3);
     if (bloomed.length >= 30) Achievements.unlock('lang-bloom30');
-    for (const u of PHRASE_UNITS) {
+    for (const u of Phrases.allUnits()) {
       if (u.cards.every((c) => d.cards[c.id] && d.cards[c.id].lv >= 3)) {
         Achievements.unlock('lang-unit');
         break;
@@ -215,17 +216,25 @@ const EventDates = {
     const today = new Date(base.getFullYear(), base.getMonth(), base.getDate());
     return Math.round((target - today) / 86400000);
   },
-  chip(lang) {
+  /** 表示名。韓国語はプロフィールで呼び名を変える(学会に出ない人に「ISSY39」は他人事) */
+  label(lang) {
     const meta = LEARN_LANGS[lang];
+    if (lang === 'ko' && typeof Profile !== 'undefined' && Profile.isPartner()) {
+      return { icon: '✈️', name: '韓国へ出発' };
+    }
+    return { icon: meta.eventIcon, name: meta.event };
+  },
+  chip(lang) {
+    const meta = this.label(lang);
     const left = this.daysLeft(lang);
     if (left === null) {
-      return `<button class="countdown-chip unset" data-nav="settings">${meta.eventIcon} ${meta.event}の日付を設定 →</button>`;
+      return `<button class="countdown-chip unset" data-nav="settings">${meta.icon} ${meta.name}の日付を設定 →</button>`;
     }
     if (left > 0) {
-      return `<span class="countdown-chip">${meta.eventIcon} ${meta.event}まで <strong>あと${left}日</strong></span>`;
+      return `<span class="countdown-chip">${meta.icon} ${meta.name}まで <strong>あと${left}日</strong></span>`;
     }
-    if (left === 0) return `<span class="countdown-chip today">${meta.eventIcon} ${meta.event}は今日! 楽しんで!</span>`;
-    return `<span class="countdown-chip past">${meta.eventIcon} ${meta.event} おつかれさまでした!</span>`;
+    if (left === 0) return `<span class="countdown-chip today">${meta.icon} ${meta.name}は今日! 楽しんで!</span>`;
+    return `<span class="countdown-chip past">${meta.icon} ${meta.name} おつかれさまでした!</span>`;
   }
 };
 
@@ -308,8 +317,38 @@ const Learn = {
     this.renderHome();
   },
 
+  /**
+   * 誰のコースで学ぶかを選んでもらう。
+   * 進捗はカードIDで区別されるので、切り替えても互いの記録は消えない。
+   */
+  async askProfile(firstRun) {
+    if (typeof Profile === 'undefined') return;
+    const cur = Profile.current();
+    const opts = Object.values(Profile.DEFS).map((m) => ({
+      label: `${m.icon} ${m.name}${m.key === cur ? '(いま選択中)' : ''}`,
+      desc: m.desc,
+      value: m.key,
+      primary: m.key === cur
+    }));
+    const pick = await appChoice(
+      '🇰🇷 どちらのコースで学びますか?<br>' +
+      '<span class="field-note">習ったカードの記録はそれぞれ残るので、いつでも戻せます</span>', opts);
+    // 初回に「キャンセル」されたら既定(英樹さん)で確定させ、毎回聞かないようにする
+    if (!pick && firstRun) { Profile.set('self'); return; }
+    if (!pick || pick === cur) return;
+    Profile.set(pick);
+    this.renderHome();
+    if (typeof showToast !== 'undefined') {
+      showToast(`${Profile.meta().icon} ${Profile.meta().name}のコースに切り替えました`);
+    }
+  },
+
   /* ----- ホーム(言語タブ・復習CTA・ユニット一覧) ----- */
   renderHome() {
+    // 初回だけ「誰のコースか」を尋ねる。描き終えてから出す
+    if (typeof Profile !== 'undefined' && Profile.isUnset()) {
+      setTimeout(() => { if (Profile.isUnset()) this.askProfile(true); }, 250);
+    }
     const lang = this.lang;
     const meta = LEARN_LANGS[lang];
     const counts = SRS.counts(lang);
@@ -327,16 +366,38 @@ const Learn = {
           </button>`).join('')}
       </div>
 
+      ${typeof Profile !== 'undefined' ? (() => {
+        const m = Profile.meta();
+        return `<button class="profile-chip" id="btn-profile-switch">
+          <span class="profile-chip-icon">${m.icon}</span>
+          <span class="profile-chip-body">
+            <strong>${escapeHtml(m.name)}のコース</strong>
+            <span>${escapeHtml(m.desc)}</span>
+          </span>
+          <span class="profile-chip-go">切り替え</span>
+        </button>`;
+      })() : ''}
+
       <div class="countdown-row">${EventDates.chip(lang)}</div>
 
       ${typeof Route !== 'undefined' ? (() => {
-        const rkey = lang === 'ko' ? 'korea' : 'hk';
+        // 韓国語の路線はプロフィールで変わる(英樹さん=Korea / パートナー=Seoul)
+        const rkey = lang === 'ko'
+          ? (typeof Profile !== 'undefined' ? Profile.koRouteKey() : 'korea') : 'hk';
         const r = ROUTES[rkey];
+        if (!r) return '';
+        const icon = { korea: '🚄', seoul: '🌷', hk: '💒' }[rkey] || '🚄';
+        const sub = {
+          korea: '11月の旅程を先取りする路線図',
+          seoul: '懇親会と観光でソウルを過ごす1週間',
+          hk: '結婚式までの物語を進む路線図'
+        }[rkey] || '';
+        const name = rkey === 'hk' ? 'Hong Kong Route(Wedding Quest)' : r.title.replace(/^\S+\s*/, '');
         return `<button class="learn-cta card route-cta" id="btn-open-route" data-route="${rkey}">
-          <span class="learn-cta-icon">${rkey === 'ko' || rkey === 'korea' ? '🚄' : '💒'}</span>
+          <span class="learn-cta-icon">${icon}</span>
           <span class="learn-cta-body">
-            <strong>${rkey === 'korea' ? 'Korea Route' : 'Hong Kong Route(Wedding Quest)'}</strong>
-            <span class="field-note">${rkey === 'korea' ? '11月の旅程を先取りする路線図' : '結婚式までの物語を進む路線図'} ・ ${Route.clearedCount(rkey)}/${r.list.length}駅クリア</span>
+            <strong>${name}</strong>
+            <span class="field-note">${sub} ・ ${Route.clearedCount(rkey)}/${r.list.length}駅クリア</span>
           </span>
           <span class="learn-cta-go">▶</span>
         </button>`;
@@ -439,6 +500,8 @@ const Learn = {
       }).join('')}
     `;
 
+    const pf = document.getElementById('btn-profile-switch');
+    if (pf) pf.addEventListener('click', () => this.askProfile());
     el.querySelectorAll('[data-learn-lang]').forEach((b) =>
       b.addEventListener('click', () => this.setLang(b.dataset.learnLang)));
     el.querySelectorAll('[data-nav]').forEach((b) =>
