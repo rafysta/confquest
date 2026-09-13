@@ -865,5 +865,490 @@ const RUN_CARDS = [
           why: '見返りを条件にすると、贈り物ではなく取引になります。相手を強く困らせます。' }
       ]
     }]
+  },
+  /* ===================================================================
+   * v1.33.0 追加分 — 2026年11月 ISSY39(ソウル・酵母の国際学会)と
+   * Chung-Ang大学シンポジウムを念頭に置いた場面。
+   * 特定の個人名は出さず「役どころ」で書いてある(他の学会でも使えるように)。
+   * =================================================================== */
+  {
+    id: 'applied-audience',
+    title: '「で、何の役に立つの?」',
+    partner: '発酵メーカーの研究者',
+    focus: ['topic', 'confidence'],
+    turns: [{
+      situation: 'コーヒーブレイク。あなたの基礎研究の発表を聞いていた企業の研究者が寄ってきました。\n\n> "Interesting talk. But — what can I actually do with it?"',
+      limitSec: 14,
+      choices: [
+        { text: 'Fair question. Right now it\'s a measurement tool — if your strain behaves oddly under stress, this can show you where the genome reorganizes. Would that be useful to you?', delta: 3, best: true,
+          why: '**今できること**に限定して答え、最後に相手へ質問を返しています。応用の聴衆は「壮大な将来像」より「明日使えるか」を聞いています。' },
+        { text: 'It is basic science, so there is no application. I just want to understand how the genome works.', delta: -1,
+          why: '正直ですが、会話をそこで終わらせています。「今はない」でも「測る道具にはなる」と言えば続きます。' },
+        { text: 'In the future this could revolutionize fermentation, strain engineering, drug discovery, and probably cancer therapy as well.', delta: -2,
+          why: '大風呂敷は、応用の現場を知っている人ほど見抜きます。信用を落とす答えです。' },
+        { text: 'Well, applied research always needs basic research first, doesn\'t it?', delta: 0,
+          why: '正論ですが、質問に答えていません。説教に聞こえるリスクもあります。' }
+      ]
+    }]
+  },
+  {
+    id: 'single-track-neighbor',
+    title: '一日中となりの席',
+    partner: '朝から同じ列に座っている参加者',
+    focus: ['network'],
+    turns: [{
+      situation: '単一トラックの学会で、朝から3回も同じ人の隣になりました。まだ一度も話していません。',
+      limitSec: 12,
+      choices: [
+        { text: 'I think we\'ve been sitting next to each other all day. I\'m Hideki — which talk are you here for?', delta: 3, best: true,
+          why: '**状況そのものを話の入口にする**のが一番自然です。単一トラックの学会は「隣の人」が一日続く最大の資産になります。' },
+        { text: '(会釈だけして、また前を向く)', delta: 0,
+          why: '失礼ではありませんが、3回目です。学会で一番もったいない時間の使い方かもしれません。' },
+        { text: 'Are you following me?', delta: -2,
+          why: '冗談のつもりでも、初対面の相手には距離感を間違えた印象が残ります。' },
+        { text: 'This session is quite boring, isn\'t it?', delta: -3,
+          why: '同意を強いる悪口です。相手が演者の指導教員である可能性を、学会では常に考えてください。' }
+      ]
+    }]
+  },
+  {
+    id: 'after-keynote',
+    title: '直前の基調講演を受けて',
+    partner: 'あなたの直前に話した基調講演者',
+    focus: ['topic', 'network'],
+    turns: [{
+      situation: '自分の講演の直前。同じセッションの基調講演が終わり、演者が席に戻ってきました。あなたの出番まであと5分です。',
+      limitSec: 13,
+      choices: [
+        { text: 'Great timing — you just set up my talk perfectly. I\'ll pick up right where your aging story ends.', delta: 3, best: true,
+          why: '直前の講演を**自分の導入に使う**と宣言しています。演者も嬉しく、聴衆にとってもセッションが一本の線になります。' },
+        { text: 'Nice talk. (そのまま登壇の準備に戻る)', delta: 1,
+          why: '悪くありませんが、この5分は「セッションを一つの物語にする」千載一遇の機会でした。' },
+        { text: 'Our topics are completely different, so don\'t worry — the audience will get a nice break.', delta: -1,
+          why: '自分の講演の価値を自分で下げています。謙遜が過ぎると聴衆の集中も下がります。' },
+        { text: 'I didn\'t really follow the second half. Could you explain it to me now?', delta: -2,
+          why: '登壇5分前は相手も自分も落ち着きません。その質問は休憩時間にとっておきましょう。' }
+      ]
+    }]
+  },
+  {
+    id: 'baton-next-speaker',
+    title: '次の演者と内容がかぶる',
+    partner: '直後に話す共同研究者',
+    focus: ['network', 'topic'],
+    turns: [{
+      situation: '前夜、次の演者(長年の共同研究者)とスライドを見せ合ったら、土台の説明が3枚もかぶっていました。',
+      limitSec: 14,
+      choices: [
+        { text: 'Let\'s split it — I\'ll do the background in two slides and hand over to you for the regulation part. I\'ll say your name on that slide.', delta: 3, best: true,
+          why: '**分担を先に決め、相手に渡すと宣言**しています。時間の節約になり、聴衆には二人の信頼関係まで伝わります。' },
+        { text: 'You go ahead and cut yours — mine comes first anyway.', delta: -2,
+          why: '順番を根拠に相手に削らせるのは、共同研究者への物言いとしては強すぎます。' },
+        { text: 'It\'s fine. Repetition helps the audience remember.', delta: 0,
+          why: '一理ありますが、20分の枠で3枚の重複は聴衆の集中を確実に削ります。' },
+        { text: 'I will remove all the background. You can explain everything.', delta: 1,
+          why: '譲るのは優しさですが、土台なしでは自分の話が宙に浮きます。全部か無かではなく、分担を。' }
+      ]
+    }]
+  },
+  {
+    id: 'confirm-time-limit',
+    title: '持ち時間を確認する',
+    partner: '学会事務局のスタッフ',
+    focus: ['confidence', 'english'],
+    turns: [{
+      situation: '受付にて。プログラムには「20分」とだけあり、質疑が含まれるのか書いてありません。',
+      limitSec: 12,
+      choices: [
+        { text: 'Quick question about my slot — is the 20 minutes including Q&A, or 20 plus discussion?', delta: 3, best: true,
+          why: '**一文で具体的に**聞いています。5分の差は講演の設計をまるごと変えるので、遠慮せず当日中に確認すべきことです。' },
+        { text: '(聞かずに、20分ぶんのスライドを用意しておく)', delta: -2,
+          why: '質疑込みだった場合、時間切れで結論まで行けません。学会で最も多い事故です。' },
+        { text: 'Sorry to bother you, I know you are very busy, it is not important at all, but maybe, if possible, could I perhaps ask about the schedule?', delta: 0,
+          why: '前置きが長すぎて、忙しいスタッフを余計に拘束します。用件から入るのが親切です。' },
+        { text: 'I need more time than 20 minutes. Can you change the program?', delta: -3,
+          why: '当日のプログラム変更要求は運営を困らせます。時間は与えられた枠に合わせるものです。' }
+      ]
+    }]
+  },
+  {
+    id: 'nonmodel-request',
+    title: '「うちの菌でもできますか?」',
+    partner: '非モデル酵母を扱う研究者',
+    focus: ['topic', 'network'],
+    turns: [{
+      situation: '発表後、ゲノム配列すら完成していない酵母を扱う研究者から声をかけられました。\n\n> "Could your method work on my species? We don\'t even have a good assembly."',
+      limitSec: 14,
+      choices: [
+        { text: 'Actually that\'s the best case — the same data can help finish your assembly and find the centromeres. Send me your genome and I\'ll take a look.', delta: 3, best: true,
+          why: '相手の弱点(アセンブリ未完成)を**手法の利点に読み替え**、具体的な次の一歩まで示しています。共同研究はこうして始まります。' },
+        { text: 'Probably. It depends on many things.', delta: 0,
+          why: '嘘ではありませんが、相手は次に何をすればいいか分かりません。会話がここで止まります。' },
+        { text: 'Without a reference genome it is impossible. Sorry.', delta: -2,
+          why: '事実としても誤りです。可能性を閉じる答えは、共同研究の芽も閉じます。' },
+        { text: 'Sure! It works on anything. Just send me samples and I will do it for you next month.', delta: -1,
+          why: '安請け合いです。できない約束は、学会で最も早く評判を落とします。' }
+      ]
+    }]
+  },
+  {
+    id: 'slow-for-student',
+    title: '緊張した学生の質問',
+    partner: '英語で質問しようとしている大学院生',
+    focus: ['english', 'network'],
+    turns: [{
+      situation: '招待先の大学でのセミナー後。学生が手を挙げましたが、途中で言葉に詰まってしまいました。会場が静かになります。',
+      limitSec: 13,
+      choices: [
+        { text: 'Take your time. Are you asking about how we decide the boundaries? (ゆっくり、笑顔で)', delta: 3, best: true,
+          why: '待つ姿勢を示し、**質問を先回りして言い換えて**あげています。学生が最後まで言い切れる形を作るのが演者の仕事です。' },
+        { text: '(助け船を出さず、相手が言い終わるまで黙って待つ)', delta: 1,
+          why: '尊重ではありますが、詰まってしまった学生には長い沈黙がつらいこともあります。' },
+        { text: 'Sorry, I don\'t understand. Next question please.', delta: -3,
+          why: 'この一言で、その学生は二度と国際学会で手を挙げないかもしれません。' },
+        { text: 'Maybe you can ask me in Korean and someone will translate?', delta: 0,
+          why: '善意ですが、本人が英語で言い切りたい場合もあります。まずは待って、言い換えを助けましょう。' }
+      ]
+    }]
+  },
+  {
+    id: 'student-data-review',
+    title: '学生のデータを見せられる',
+    partner: '訪問先の研究室の大学院生',
+    focus: ['topic', 'confidence'],
+    turns: [{
+      situation: '訪問先の研究室で、学生が解析結果を見せてくれました。図はきれいですが、対照実験がありません。',
+      limitSec: 15,
+      choices: [
+        { text: 'This is a nice figure. One thing I\'d add — what does it look like in a randomized control? That\'s the first thing a reviewer will ask.', delta: 3, best: true,
+          why: '先に良い点を認め、**指摘を「査読者ならこう聞く」という形**に置き換えています。人ではなくデータへの指摘になります。' },
+        { text: 'You have no control. This result means nothing.', delta: -3,
+          why: '内容は正しくても、学生の前での言い方としては最悪です。指導教員の顔もつぶれます。' },
+        { text: 'Looks great! Very nice work.', delta: -1,
+          why: 'せっかく時間をとって見せてくれたのに、何も持ち帰らせていません。褒めるだけは親切ではありません。' },
+        { text: 'Which software did you use? Ah, I see. OK. (それだけ聞いて次の話題へ)', delta: 0,
+          why: '興味を示したように見えて、相手の研究そのものには触れていません。' }
+      ]
+    }]
+  },
+  {
+    id: 'korean-pour',
+    title: '目上の人がグラスを持った',
+    partner: '隣に座った年配の教授',
+    focus: ['network'],
+    turns: [{
+      situation: '韓国式のバンケット。隣の年配の教授が、あなたのグラスにお酒を注いでくれようとしています。',
+      limitSec: 11,
+      choices: [
+        { text: '(グラスを両手で持ち、少し掲げて受ける) Thank you very much.', delta: 3, best: true,
+          why: '東アジアの多くの場で、**両手で受ける**のが敬意の形です。言葉が分からなくても、所作は伝わります。' },
+        { text: '(片手でグラスを差し出す) Thanks!', delta: 1,
+          why: '大きな失礼ではありませんが、両手にするだけで印象がはっきり変わる場面です。' },
+        { text: 'No thank you, I can pour it myself.', delta: -2,
+          why: '自分で注ぐのは、相手の厚意を断る形になります。飲めないなら理由を添えて断りましょう。' },
+        { text: 'Actually I don\'t drink. (グラスを手で覆う)', delta: 0,
+          why: '断ること自体は問題ありません。ただ一言 "but please let me pour for you" を足すと、場が続きます。' }
+      ]
+    }]
+  },
+  {
+    id: 'credit-others',
+    title: '手柄の所在',
+    partner: '手法を褒めてくれた研究者',
+    focus: ['confidence', 'network'],
+    turns: [{
+      situation: '> "That analysis pipeline is impressive. Did you build all of it yourself?"\n\n実際には、中心部分は共同研究者と学生が書いたものです。',
+      limitSec: 12,
+      choices: [
+        { text: 'The core was written by a student in our collaborator\'s lab — I\'ll introduce you, he\'s here today.', delta: 3, best: true,
+          why: '**正確にクレジットし、さらに人をつなげて**います。手柄を渡す人は、結局いちばん信頼されます。' },
+        { text: 'Yes, I built it.', delta: -3,
+          why: '一言の誇張が、その場にいる共同研究者に伝われば取り返しがつきません。' },
+        { text: 'It was a team effort.', delta: 1,
+          why: '無難で正しい答えですが、誰の貢献かが伝わらず、相手は次につなげられません。' },
+        { text: 'Most of it is just other people\'s code. I didn\'t really do anything.', delta: -1,
+          why: '謙遜しすぎです。自分の貢献まで消すと、質問への答えとしても不正確になります。' }
+      ]
+    }]
+  },
+  {
+    id: 'too-technical',
+    title: '「難しかった」と言われた',
+    partner: '分野の違う参加者',
+    focus: ['english', 'confidence'],
+    turns: [{
+      situation: '> "I have to be honest — I got lost after your third slide."\n\n悪気はなさそうですが、少し申し訳なさそうに言われました。',
+      limitSec: 13,
+      choices: [
+        { text: 'That\'s useful to hear, thank you. In one sentence: chromosomes fold at three different scales, and a different machine builds each one. Does that help?', delta: 3, best: true,
+          why: '礼を言い、**その場で一文に圧縮して**言い直しています。この一文は次の学会でも使える資産になります。' },
+        { text: 'Sorry, it is a very specialized field.', delta: -1,
+          why: '相手の理解力のせいにしたように聞こえます。伝わらなかったのは話し手の責任です。' },
+        { text: 'Which slide exactly? Let me open my laptop and go through it again from the beginning.', delta: 0,
+          why: '熱意はありますが、休憩時間に全部やり直すのは相手には重すぎます。まず一文で。' },
+        { text: 'Yes, everyone says that. (笑って流す)', delta: -2,
+          why: 'せっかくのフィードバックを捨てています。分かりにくさを直す機会でした。' }
+      ]
+    }]
+  },
+  {
+    id: 'reviewing-their-paper',
+    title: '査読中の相手に会う',
+    partner: 'あなたが査読中の論文の著者',
+    focus: ['confidence'],
+    turns: [{
+      situation: '会場で挨拶をした相手は、いまあなたが査読している論文の著者でした。相手はそれを知りません。',
+      limitSec: 13,
+      choices: [
+        { text: '(査読には一切触れず) Good to see you. How has the meeting been for you so far?', delta: 3, best: true,
+          why: '査読は匿名・守秘が原則です。**話題にしない**のが唯一の正解で、それが分かっている人だと相手にも伝わります。' },
+        { text: 'By the way, I think I am reviewing your paper right now. Don\'t worry, I like it.', delta: -3,
+          why: '守秘義務違反です。好意的な内容であっても、査読制度そのものを壊します。' },
+        { text: 'I heard you submitted something to FEMS recently. How is it going?', delta: -2,
+          why: '直接は言っていなくても、著者には十分伝わります。探りを入れたと受け取られます。' },
+        { text: '(気まずくなり、挨拶だけして離れる)', delta: 0,
+          why: '守秘は守れていますが、不自然な態度が逆に何かを匂わせます。普通に雑談して構いません。' }
+      ]
+    }]
+  },
+  {
+    id: 'thank-local-host',
+    title: '現地ホストへのお礼',
+    partner: 'あなたを招いてくれた現地のオーガナイザー',
+    focus: ['network'],
+    turns: [{
+      situation: '学会の最終日。あなたを招待し、ホテルから会場まで毎日気にかけてくれたホストに会いました。',
+      limitSec: 13,
+      choices: [
+        { text: 'Thank you for everything — especially for arranging the lab visit. Meeting your students was the best part of this trip for me.', delta: 3, best: true,
+          why: '**何が良かったかを具体的に**挙げています。「ありがとう」に中身があると、次の招待につながります。' },
+        { text: 'Thank you so much for inviting me. It was a great conference.', delta: 1,
+          why: '礼儀としては十分ですが、誰にでも言える言葉です。一つ具体例を足すだけで変わります。' },
+        { text: 'Thank you. Next time please invite me for a longer stay, and maybe cover the business class ticket.', delta: -3,
+          why: '感謝の場で待遇の交渉をするのは最も印象が悪い振る舞いです。' },
+        { text: 'It must have been a lot of work for you. I hope you can rest now. (それだけ言って別れる)', delta: 2,
+          why: '相手を気遣う良い一言です。あとは自分にとって何が良かったかを添えれば満点でした。' }
+      ]
+    }]
+  },
+  {
+    id: 'overlap-scooped',
+    title: '同じ話を先にされた',
+    partner: '直前のセッションの発表者',
+    focus: ['confidence', 'topic'],
+    turns: [{
+      situation: '午前の発表で、自分が午後に話す予定の結論とよく似た内容が出ました。休憩時間、その演者が近くにいます。',
+      limitSec: 14,
+      choices: [
+        { text: 'Your third result is very close to something I\'ll show this afternoon — in a different organism. I\'d love to compare numbers after my talk.', delta: 3, best: true,
+          why: '重なりを**隠さず、比較の提案に変えて**います。独立した2つの結果が一致することは、どちらにとっても強い援護射撃です。' },
+        { text: '(何も言わず、午後は自分の結論のトーンを弱める)', delta: -1,
+          why: '正直な結果を弱める必要はありません。独立再現はむしろ価値です。' },
+        { text: 'I have had the same result for two years already. I just haven\'t published it.', delta: -2,
+          why: '先取権の主張は、証拠のない場では自分の印象を悪くするだけです。' },
+        { text: 'Our results are actually quite different if you look carefully.', delta: 0,
+          why: '違いがあるならその中身を話すべきです。防御的な否定は会話を閉じます。' }
+      ]
+    }]
+  },
+  {
+    id: 'unpublished-photo',
+    title: '未発表スライドの撮影',
+    partner: 'スマホを構えた参加者',
+    focus: ['confidence'],
+    turns: [{
+      situation: '発表中、未発表データのスライドで、前列の参加者がスマホを構えました。',
+      limitSec: 12,
+      choices: [
+        { text: 'Sorry — this one slide is unpublished, so no photos please. I\'m happy to share it once it\'s out.', delta: 3, best: true,
+          why: '理由と**代わりの約束**を同時に示しています。撮影禁止は正当な権利で、丁寧に言えば角が立ちません。' },
+        { text: '(気づいたが、何も言わずに次のスライドへ進める)', delta: 0,
+          why: '流すのも一つですが、未発表データなら一言添えても誰も責めません。' },
+        { text: 'No photos! (強い口調で)', delta: -2,
+          why: '主張は正しくても、会場全体の空気を固くします。理由を添えましょう。' },
+        { text: 'Please don\'t take photos of anything in my talk, including the published figures.', delta: -1,
+          why: '発表済みの図まで禁止すると、閉鎖的な印象を与えます。線引きは必要な範囲に。' }
+      ]
+    }]
+  },
+  {
+    id: 'taxi-share',
+    title: 'タクシーの相乗り',
+    partner: '同じホテルに泊まっている参加者',
+    focus: ['network', 'english'],
+    turns: [{
+      situation: '夜のバンケット会場前。タクシー待ちの列で、同じホテルの参加者と目が合いました。',
+      limitSec: 11,
+      choices: [
+        { text: 'We\'re at the same hotel, right? Want to share a taxi?', delta: 3, best: true,
+          why: '移動時間は最良の会話の場です。**同じ目的地**という事実だけで声をかける理由は十分になります。' },
+        { text: '(声をかけず、それぞれ別のタクシーに乗る)', delta: 0,
+          why: '損はしませんが、15分の会話を1回捨てたことになります。' },
+        { text: 'I\'ll pay for the taxi, so please let me ask you about a possible collaboration on the way.', delta: -1,
+          why: '支払いを持ち出すと取引の空気になります。誘うだけで十分です。' },
+        { text: 'Do you know how to explain our hotel to the driver? I can\'t pronounce it.', delta: 2,
+          why: '助けを求めるのも立派な入口です。ただ、まず相乗りを提案したほうが自然でした。' }
+      ]
+    }]
+  },
+  {
+    id: 'software-demo',
+    title: '自作ソフトを見せてほしい',
+    partner: '発表後に寄ってきた研究者',
+    focus: ['topic', 'confidence'],
+    turns: [{
+      situation: '> "You showed a browser for your Hi-C maps. Is it something I can use?"',
+      limitSec: 13,
+      choices: [
+        { text: 'Yes — it\'s on GitHub, and I have it on my laptop right here. Two minutes?', delta: 3, best: true,
+          why: '**その場で見せる**のが最強です。学会でソフトが広まるのは、論文からではなく実演からです。' },
+        { text: 'It is still under development. Maybe next year.', delta: -1,
+          why: '完成を待っていると誰にも使われません。未完成のまま見せて意見をもらう方が早く良くなります。' },
+        { text: 'Sure, I will send you the link by email later.', delta: 1,
+          why: '悪くありませんが、帰国後のメールは半分は送られません。今その場で見せましょう。' },
+        { text: 'It only works with my own data format, so it is probably useless for you.', delta: -2,
+          why: '自分の作品を自分で否定しています。制約は見せながら伝えれば十分です。' }
+      ]
+    }]
+  },
+  {
+    id: 'seminar-invite',
+    title: '「うちでセミナーを」',
+    partner: '別の大学のPI',
+    focus: ['network', 'confidence'],
+    turns: [{
+      situation: '> "Would you be willing to give a seminar at our department sometime?"\n\n社交辞令かもしれませんし、本気かもしれません。',
+      limitSec: 13,
+      choices: [
+        { text: 'I\'d love to. I\'m usually free in spring — shall we exchange emails and figure out a date?', delta: 3, best: true,
+          why: '**その場で具体化**しています。社交辞令だったとしても失礼にはならず、本気ならこれで実現します。' },
+        { text: 'Thank you, that would be nice someday.', delta: 1,
+          why: '礼儀としては十分ですが、「someday」で終わる話はまず実現しません。' },
+        { text: 'Yes! When? Next month? Can you cover the flight and hotel? How many days?', delta: -1,
+          why: '前のめりすぎて、条件の話まで一気に出しています。まず日程感と連絡先から。' },
+        { text: 'My schedule is very full, but I will think about it.', delta: -2,
+          why: '誘ってくれた相手には、断りにも聞こえます。断るなら理由を、受けるなら次の一歩を。' }
+      ]
+    }]
+  },
+  {
+    id: 'jetlag-morning',
+    title: '時差ぼけの朝',
+    partner: '朝食会場で会った参加者',
+    focus: ['english', 'network'],
+    turns: [{
+      situation: '到着翌朝。ホテルの朝食会場で、昨日のレセプションで少し話した人に会いました。頭がまだ働いていません。',
+      limitSec: 11,
+      choices: [
+        { text: 'Morning! I\'m still on Tokyo time — my brain thinks it\'s lunch. How did you sleep?', delta: 3, best: true,
+          why: '**自分の状態を軽く笑いにして**、相手に質問を返しています。時差ぼけは全員の共通体験で、安全な話題です。' },
+        { text: 'Good morning. (それだけ言って別のテーブルに座る)', delta: 0,
+          why: '失礼ではありませんが、朝食は最も気楽に話せる時間です。' },
+        { text: 'I could not sleep at all. I feel terrible. This trip is exhausting and the hotel bed is too hard.', delta: -2,
+          why: '不満の連続は、聞かされる側には重い朝です。ぼやきは一つまでに。' },
+        { text: 'Are you also here alone? We could eat together every morning this week.', delta: 0,
+          why: '善意ですが、一週間ぶんを初日に決めるのは相手に逃げ場がありません。' }
+      ]
+    }]
+  },
+  {
+    id: 'species-pronounce',
+    title: '学名の発音が違う',
+    partner: '同じ生物を扱う研究者',
+    focus: ['english', 'confidence'],
+    turns: [{
+      situation: '会話の中で、相手があなたと違う発音で学名を言いました。どちらが「正しい」かは、実は決まっていません。',
+      limitSec: 12,
+      choices: [
+        { text: '(相手の発音に合わせて会話を続ける) Right, in pombe we see the same thing.', delta: 3, best: true,
+          why: '学名の発音は国や世代でばらつきます。**相手に合わせる**のが、会話を止めない一番簡単な方法です。' },
+        { text: 'Actually, the correct pronunciation is different.', delta: -2,
+          why: '正解のない話題で相手を訂正すると、内容ではなく発音の議論になってしまいます。' },
+        { text: 'Sorry, which species do you mean?', delta: 0,
+          why: '本当に分からなければ良い質問ですが、分かっている場合はわざとらしく響きます。' },
+        { text: 'Ha, we say it completely differently in Japan! How do you say it in your lab?', delta: 2,
+          why: '違いを笑い話にする良い入り方です。ただ、議論の途中なら先に中身を進めましょう。' }
+      ]
+    }]
+  },
+  {
+    id: 'bridge-to-pathogen',
+    title: '分野の違う人への橋渡し',
+    partner: '病原真菌を扱う研究者',
+    focus: ['topic', 'network'],
+    turns: [{
+      situation: '隣のセッションの病原真菌の研究者と話しています。あなたの手法との接点を探したいところです。',
+      limitSec: 14,
+      choices: [
+        { text: 'We actually ran this on a skin fungus last year — it found the centromeres in a genome nobody had finished. Does your species have a good assembly?', delta: 3, best: true,
+          why: '**相手の生物で実際にやった例**を1つ出し、質問で相手の状況を聞いています。橋は具体例でしか架かりません。' },
+        { text: 'The principles should be conserved in all fungi.', delta: 0,
+          why: '正しいけれど誰でも言えます。相手は「自分の菌で何ができるか」を知りたがっています。' },
+        { text: 'I only work on fission yeast, so probably nothing in common.', delta: -2,
+          why: '接点探しを自分から打ち切っています。学会で隣の分野に会える機会は多くありません。' },
+        { text: 'Pathogenic fungi are more important than model organisms these days, aren\'t they? Funding-wise, I mean.', delta: -1,
+          why: '研究費の比較は、相手にも自分にも得のない話題です。' }
+      ]
+    }]
+  },
+  {
+    id: 'room-mixup',
+    title: '会場を間違えた',
+    partner: '入口に立っているスタッフ',
+    focus: ['english', 'confidence'],
+    turns: [{
+      situation: '部屋に入ったら、まったく違うセッションが進行中でした。会場の視線が集まります。',
+      limitSec: 10,
+      choices: [
+        { text: '(小さく会釈して静かに退出し、外でスタッフに) Sorry, where is the chromatin session?', delta: 3, best: true,
+          why: '**進行を止めずに出て、外で聞く**のが正解です。会場内でのやり取りは全員の集中を奪います。' },
+        { text: '(気まずいので、そのまま最後まで座って聞く)', delta: 1,
+          why: '悪くはありません。思いがけず面白い発表に出会うこともあります。ただ自分の目的は達成できていません。' },
+        { text: '(部屋の中から大きな声で) Is this the chromatin session?', delta: -3,
+          why: '進行中の発表を中断させます。学会で最も嫌われる振る舞いのひとつです。' },
+        { text: '(あわてて出ようとして、扉を大きな音で閉める)', delta: -1,
+          why: '出る判断は正しいので、あとは静かに。焦りが音になります。' }
+      ]
+    }]
+  },
+  {
+    id: 'small-audience',
+    title: '聴衆が少ない朝のセッション',
+    partner: '同じセッションの発表者',
+    focus: ['confidence', 'network'],
+    turns: [{
+      situation: '朝一番のセッション。会場に10人ほどしかいません。次の発表者があなたの隣で浮かない顔をしています。',
+      limitSec: 12,
+      choices: [
+        { text: 'Small room, but these ten are the ones who actually care. I\'d rather have this than a hundred people on their phones.', delta: 3, best: true,
+          why: '状況を**前向きに言い換えて**相手を支えています。実際、少人数の朝のセッションから共同研究が生まれることは多いです。' },
+        { text: 'Yes, terrible. Everyone is still sleeping after the banquet.', delta: 0,
+          why: '共感ではありますが、二人で沈むだけです。事実の指摘で終わっています。' },
+        { text: 'The organizers should have scheduled us better.', delta: -2,
+          why: '運営批判は、その場に運営の人がいる可能性を常に考えるべきです。' },
+        { text: 'Don\'t worry, nobody will notice if your talk goes badly.', delta: -3,
+          why: '励ましたつもりでも、相手の発表の価値を否定しています。' }
+      ]
+    }]
+  },
+  {
+    id: 'ask-for-intro',
+    title: '紹介してもらう',
+    partner: '顔の広い共同研究者',
+    focus: ['network', 'confidence'],
+    turns: [{
+      situation: '会いたかった研究者が、部屋の向こうで話しています。隣にいる共同研究者はその人と親しいはずです。',
+      limitSec: 12,
+      choices: [
+        { text: 'You know her, right? Would you mind introducing me when she\'s free? I\'d like to ask about her deletion library.', delta: 3, best: true,
+          why: '**用件まで添えて**頼んでいます。紹介する側も「なぜ会わせるか」を一言で言えるので、頼まれやすくなります。' },
+        { text: '(自分で声をかけるタイミングを待ち続け、結局話しかけられない)', delta: -1,
+          why: '学会で最も多い後悔です。紹介を頼むのは弱さではなく、普通のやり方です。' },
+        { text: 'Can you introduce me to everyone important here?', delta: -2,
+          why: '漠然としすぎて、相手はどう動けばいいか分かりません。1人ずつ、理由を添えて。' },
+        { text: 'Is she approachable? I heard she can be difficult.', delta: -1,
+          why: '噂の確認から入ると、あなた自身の印象が悪くなります。' }
+      ]
+    }]
   }
 ];

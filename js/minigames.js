@@ -112,8 +112,100 @@ const TRIVIA = [
     choices: ['役職名で呼び合う', '初対面でもファーストネームで呼び合う', '苗字を呼び捨てにする', '名前は呼ばないのが礼儀'],
     correct: 1,
     note: '"Call me David" と言われたら遠慮なくファーストネームで。かたくなに Professor と呼び続けると、むしろ距離を感じさせることも。'
+  },
+  /* ---- v1.33.0 追加: 酵母の国際学会(ISSY)と韓国開催を念頭に ---- */
+  {
+    q: '分裂酵母 Schizosaccharomyces pombe の「pombe」の意味は?',
+    choices: ['ラテン語で「小さい」', 'スワヒリ語で「ビール」', '発見者の名字', 'ギリシャ語で「分裂」'],
+    correct: 1,
+    note: '東アフリカのキビの酒から分離されたため、スワヒリ語の「ビール」が名前になりました(Lindner, 1893)。懇親会で必ず受ける小ネタです。'
+  },
+  {
+    q: '酵母を扱う国際学会 ISSY の主催団体は?',
+    choices: ['国際酵母委員会(ICY)', '世界保健機関', '国際純正・応用化学連合', '各国の醸造組合'],
+    correct: 0,
+    note: 'ISSY = International Specialized Symposium on Yeasts。ICYが大きな国際会議と交互に開催しています。'
+  },
+  {
+    q: '分裂酵母のゲノムサイズはおよそ?',
+    choices: ['1.3 Mb', '12.6 Mb', '126 Mb', '1.3 Gb'],
+    correct: 1,
+    note: '約12.6 Mb、遺伝子は約5,000。ヒトの約240分の1です。小ささゆえに、少ないデータで高い解像度の解析ができます。'
+  },
+  {
+    q: 'Hi-Cという手法が測っているものは?',
+    choices: ['遺伝子の発現量', '核内でDNAのどこ同士が近くにあるか', 'タンパク質の立体構造', '細胞の分裂速度'],
+    correct: 1,
+    note: '「近いDNA同士をつないでから数える」手法です。ゲノム全体の「地図」が描けるので、非モデル生物のゲノム組み立てにも使われます。'
+  },
+  {
+    q: '単一トラック(全員が同じ部屋)の学会での過ごし方として最も得なのは?',
+    choices: ['自分の分野の発表だけ聞く', '隣に座った人と関係を作る', '部屋の後ろで論文を書く', '毎回違う席に座る'],
+    correct: 1,
+    note: '単一トラックでは、隣の席の人と一日中一緒にいます。名刺よりも「隣の席」が最大の人脈資源になります。'
+  },
+  {
+    q: '応用寄りの聴衆に基礎研究を話すとき、最も効くのは?',
+    choices: ['将来の応用可能性を大きく語る', '今その手法で「測れること」を具体的に言う', '基礎研究の重要性を説明する', '専門用語を正確に使う'],
+    correct: 1,
+    note: '企業の研究者ほど大風呂敷を見抜きます。「明日これが測れます」という一文のほうが、10年後の夢より信用されます。'
+  },
+  {
+    q: '国際学会で「Invited talk 20分」と書かれていたとき、まず確認すべきことは?',
+    choices: ['スライドの枚数制限', '質疑応答が20分に含まれるか', '会場の広さ', '発表言語'],
+    correct: 1,
+    note: '「15分講演+5分質疑」の意味であることが多く、5分の差は構成をまるごと変えます。事務局に一文で聞けば済みます。'
+  },
+  {
+    q: '学会のバンケットで「smart casual」と指定されたときの服装は?',
+    choices: ['タキシード', '襟のあるシャツ+ジャケット程度', 'Tシャツとサンダル', '白衣'],
+    correct: 1,
+    note: 'ネクタイは不要ですが、襟のあるシャツにジャケットがあれば間違いありません。写真が公式サイトに載ることもあります。'
+  },
+  {
+    q: '韓国の会食で、目上の人からお酒を注いでもらうときの作法は?',
+    choices: ['グラスをテーブルに置いたまま', 'グラスを両手で持って受ける', '自分で注ぎ足す', '先に飲み干してから受ける'],
+    correct: 1,
+    note: '両手で受けるのが敬意の形です。言葉が通じなくても所作は伝わります。飲めない場合は、理由を添えて断れば失礼になりません。'
+  },
+  {
+    q: '海外の学会で、招待講演者が現地ホストにできる最大の恩返しは?',
+    choices: ['高価な土産を渡す', '学生セッションや若手の発表を聞きに行く', '長めに発表する', '講演料を辞退する'],
+    correct: 1,
+    note: '主催者が最も気にしているのは若手の聴衆です。10分だけでも顔を出す招待講演者は、確実に記憶されます。'
+  },
+  {
+    q: '発表後に「半分しか分かりませんでした」と言われたとき、最も良い反応は?',
+    choices: ['専門的な分野なので仕方ないと伝える', 'その場で一文に要約して言い直す', '論文を送ると約束する', 'もう一度スライドを最初から説明する'],
+    correct: 1,
+    note: '一文に圧縮する練習は、次の学会でも使える資産になります。伝わらなかったのは、聞き手ではなく設計の問題です。'
+  },
+  {
+    q: '査読中の論文の著者と学会で出会ってしまったら?',
+    choices: ['査読していることは話さない', '好意的な内容なら伝えてよい', '改善点だけ口頭で伝える', '編集者に相談してから話す'],
+    correct: 0,
+    note: '査読は守秘が原則です。内容が好意的でも、触れた時点で制度が壊れます。普通に雑談して構いません。'
+  },
+  {
+    q: '非モデル生物を扱う研究者に自分の手法を勧めるとき、最も響く言い方は?',
+    choices: ['どんな生物にも使えます', 'ゲノムが未完成でも、むしろ役に立ちます', '論文を読めば分かります', 'サンプルを送ってくれれば解析します'],
+    correct: 1,
+    note: '相手の弱点(アセンブリ未完成)を、手法の利点に読み替えるのが橋の架け方です。安請け合いは評判を落とします。'
+  },
+  {
+    q: '学会の発表で、未発表データのスライドを撮影されそうになったときの対応は?',
+    choices: ['黙って次へ進む', '理由を添えて撮影を控えてもらい、公開後の共有を約束する', '強い口調で禁止する', '発表全体の撮影を禁止する'],
+    correct: 1,
+    note: '撮影を断るのは正当な権利です。理由と「公開されたら共有します」の一言があれば、角は立ちません。'
+  },
+  {
+    q: '朝一番のセッションで聴衆が少ないとき、演者にとっての実際の利点は?',
+    choices: ['早く終われる', '残っている人は本当に関心がある人', '質問が出ない', '録画されない'],
+    correct: 1,
+    note: '朝一番に来る10人は、その話を聞くために起きた10人です。共同研究の多くは、この小さな部屋から始まります。'
   }
 ];
+
 
 /* 語学クイズ(韓国語 = 2026年11月 ISSY39向け / 広東語 = 2027年1月向け) */
 const LANG_QUIZ = [
@@ -610,8 +702,58 @@ const QA_QUESTIONS = [
   { id: 'qa-fast', speaker: '早口の質問者',
     q: '(早口すぎて後半が聞き取れなかった) ...and how does that affect your conclusion?',
     a: 'clarify',
-    why: '聞き取れないまま答え始めるのが最悪の一手。"Sorry, could you repeat the last part?" は恥ではなく誠実さです。' }
+    why: '聞き取れないまま答え始めるのが最悪の一手。"Sorry, could you repeat the last part?" は恥ではなく誠実さです。' },
+  /* ---- v1.33.0 追加: 酵母の国際学会・分野外の聴衆からの質疑 ---- */
+  { id: 'qa-why-yeast', speaker: '応用系のセッションから来た研究者',
+    q: 'Why fission yeast? Is any of this relevant to humans, or to my production strain?',
+    a: 'answer',
+    why: '「なぜこの生物か」は必ず来る質問で、答えは決まっています。**一文で言える準備**をしておけば、最も気持ちよく返せる質問です。' },
+  { id: 'qa-industrial', speaker: '発酵メーカーの研究者',
+    q: 'Could we apply this to improve the yield of our industrial strain?',
+    a: 'defer',
+    why: 'やっていない応用を「できます」と言うのは危険です。"We have not tried it, but I would be glad to discuss what it could measure." が誠実で、しかも話は続きます。' },
+  { id: 'qa-pathogen', speaker: '病原真菌の研究者',
+    q: 'Have you tried this on Candida or Cryptococcus? Those genomes are messier.',
+    a: 'defer',
+    why: '別の生物への展開は、やっていなければ持ち帰るのが正解。関心を示してくれた相手なので、連絡先の交換につなげる好機です。' },
+  { id: 'qa-reads', speaker: '解析が専門の参加者',
+    q: 'How many reads did you need to reach that resolution?',
+    a: 'answer',
+    why: '自分のデータの基本情報は即答できる質問です。数字を一つ言えるだけで、解析の信頼性がぐっと上がります。' },
+  { id: 'qa-noise', speaker: '腕組みをした年配の研究者',
+    q: 'I am not convinced these small domains are real. It looks like noise to me.',
+    a: 'clarify',
+    why: '否定から入る質問ほど、まず「どの図のどの部分か」を落ち着いて確認。言い換えは反論より強く、考える時間も稼げます。' },
+  { id: 'qa-broken-english', speaker: '緊張した大学院生',
+    q: 'Sorry... my question is, the... when the cell is, ah, the stress condition, the domain is... changing?',
+    a: 'clarify',
+    why: '**聞き取れた部分から言い換えて確認**すると、学生は「通じた」と感じます。"You are asking whether domains change under stress, right?" で十分です。' },
+  { id: 'qa-software', speaker: '別の分野から来た参加者',
+    q: 'Is the software you showed publicly available?',
+    a: 'answer',
+    why: '公開しているものは即答で。可能ならその場でノートPCを開いて見せるのが最強です。ソフトは論文ではなく実演で広まります。' },
+  { id: 'qa-microc', speaker: '同分野の若手',
+    q: 'How does this compare with Micro-C? Others reported gene-scale domains years ago.',
+    a: 'answer',
+    why: '先行研究との関係は必ず聞かれます。先行を認めたうえで自分の新規性を一文で言えると、むしろ信頼が上がります。' },
+  { id: 'qa-old-comment', speaker: '長く分野を見てきた教授',
+    q: 'Not a question — we described something like this in the 1990s, before the sequencing era.',
+    a: 'answer',
+    why: 'コメントには短い感謝と関心を。"I did not know that — could you tell me the reference?" は、その後の会話まで開く返し方です。' },
+  { id: 'qa-function', speaker: '遺伝学が専門の研究者',
+    q: 'What happens if you delete the boundaries? Does the cell care at all?',
+    a: 'defer',
+    why: '機能を問う質問は、実験をしていなければ持ち帰るのが正解。"That is exactly the experiment we are setting up." と前向きに返せます。' },
+  { id: 'qa-conserved', speaker: '座長',
+    q: 'Before we run out of time — how much of this do you expect to be conserved beyond yeasts?',
+    a: 'answer',
+    why: '一般原理として語れるかを試す質問です。断定せず「どこまでが観察で、どこからが予想か」を分けて答えれば、短く正確に返せます。' },
+  { id: 'qa-slide-back', speaker: '会場後方の参加者',
+    q: 'Could you go back to the slide with the three tiers? I have a question about the middle one.',
+    a: 'answer',
+    why: 'スライドを戻す依頼は即応が正解。すぐ戻せるように、主要な図の番号を覚えておくと落ち着いて対応できます。' }
 ];
+
 
 /* ==========================================================
  * 👥 名刺交換(名札記憶ゲーム)

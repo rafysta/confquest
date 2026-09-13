@@ -230,8 +230,212 @@ const BOSSES = [
         ]
       }
     ]
+  },
+
+  /* ===================================================================
+   * v1.33.0 追加分 — 応用寄りの学会(ISSY39)と、大学院生中心のセミナー
+   * (Chung-Ang大シンポジウム)で実際に起きる「山場」を想定したボス。
+   * 名前は役どころ。他の学会でもそのまま使える形にしてある。
+   * =================================================================== */
+  {
+    day: 1,
+    id: 'boss-industry', reward: { funds: 60, gems: 2 },
+    title: '👑 発酵メーカーの研究部長',
+    partner: 'Dr. Park — 大手食品メーカーの研究部長。学会のスポンサーでもある',
+    focus: ['topic', 'confidence'],
+    turns: [
+      {
+        situation: '休憩時間。企業ブースの前を通りかかると、研究部長が声をかけてきました。\n\n> "You were the genome folding talk, right? I confess I understood maybe half."',
+        limitSec: 13,
+        choices: [
+          { text: 'Half is more than I expected, honestly. The one-sentence version: chromosomes fold at three scales, and a different protein builds each one. Which half did I lose you on?', delta: 3, best: true,
+            why: '**一文に圧縮してから、どこで失ったかを聞き返して**います。応用の聴衆に対して最初にすべきことは、要約と質問です。' },
+          { text: 'That is normal. It is a very specialized field.', delta: -2,
+            why: '相手の理解不足として片づけています。分からなかったのは話し手の設計の問題です。' },
+          { text: 'Sorry. I will send you my paper, it explains everything in detail.', delta: 0,
+            why: '論文は読まれません。目の前にいるうちに、口で言えることを言いましょう。' },
+          { text: 'Which half? The first half is the important one, the second half is just controls anyway.', delta: -1,
+            why: '自分の対照実験を「どうでもいい部分」と言ってしまいました。企業の人ほど対照を重視します。' }
+        ]
+      },
+      {
+        situation: '> "Here is my real question. We have a production strain that suddenly drops yield above 34 degrees. Could your method tell us why?"',
+        limitSec: 15,
+        choices: [
+          { text: 'It could tell you whether the genome reorganizes at that temperature — that\'s a real observation, not an explanation. If it does, that narrows down where to look next.', delta: 3, best: true,
+            why: '**できることとできないことを正確に線引き**しています。「観察はできるが原因は言えない」と言える人は、企業から最も信頼されます。' },
+          { text: 'Yes. We could solve that for you.', delta: -2,
+            why: '安請け合いです。相手は何年もこの問題を抱えており、簡単に解けるとは思っていません。' },
+          { text: 'No, our method is only for basic research questions.', delta: -1,
+            why: '実際には測れる問いです。可能性を自分で閉じてしまいました。' },
+          { text: 'That sounds like a heat shock response problem. You should look at the chaperones first.', delta: 1,
+            why: '妥当な助言ですが、相手はすでに試している可能性が高い。まず自分の手法で何が見えるかを答える場面です。' }
+        ]
+      },
+      {
+        situation: '> "We could fund a small joint project. But our lawyers will want the data to stay confidential for three years."\n\n公開データを前提に研究してきたあなたには、重い条件です。',
+        limitSec: 15,
+        choices: [
+          { text: 'Three years is long for a student\'s thesis. Could we split it — your strain data confidential, and the method itself published? That way both sides get what they need.', delta: 3, best: true,
+            why: '**分割して両立させる案**を出しています。断らず、丸呑みもせず、条件を設計し直すのが交渉です。' },
+          { text: 'No problem at all. Three years is fine.', delta: 0,
+            why: 'その場では喜ばれますが、学生の学位や自分の業績に直接響きます。持ち帰るべき条件です。' },
+          { text: 'Sorry, I only work with open data. I cannot accept that.', delta: -2,
+            why: '原則は立派ですが、交渉の余地を探る前に打ち切っています。' },
+          { text: 'I need to ask my university\'s office before I can say anything about contracts. Let me get back to you.', delta: 2,
+            why: '正しい手続きです。ただ、その場で方向性だけでも示せると、話が前に進みます。' }
+        ]
+      },
+      {
+        situation: '> "Last thing — our CEO reads one page before any decision. Could you write it? In plain language."',
+        limitSec: 14,
+        choices: [
+          { text: 'I can. Let me write it as: the question, what we would measure, what a positive result would look like, and what it would cost. Send me your format if you have one.', delta: 3, best: true,
+            why: '**中身の構成をその場で示し、相手の型を尋ねて**います。一枚紙を書けることは、基礎研究者の大きな武器です。' },
+          { text: 'Of course. I will send you the introduction of my latest paper.', delta: -2,
+            why: '論文の緒言は経営者向けの文章ではありません。相手の読者を想像していません。' },
+          { text: 'Writing for non-scientists is difficult for me. Could someone in your company write it instead?', delta: -1,
+            why: '自分の研究を説明する仕事を人任せにすると、意図が必ずずれます。' },
+          { text: 'Yes, I will send something next month.', delta: 1,
+            why: '引き受けたのは良いのですが、中身も期限もぼんやりしています。熱は冷めます。' }
+        ]
+      }
+    ]
+  },
+
+  {
+    day: 2,
+    id: 'boss-organizer', reward: { funds: 70, gems: 3 },
+    title: '👑 学会の実行委員長',
+    partner: 'Prof. Kang — 今回の学会を自国に招致した張本人。忙しい合間にあなたを探しに来た',
+    focus: ['network', 'confidence'],
+    turns: [
+      {
+        situation: 'レセプション会場。あなたを招待した実行委員長が、人混みをかき分けて近づいてきました。\n\n> "You made it! Was the journey all right? I worried about your connection."',
+        limitSec: 12,
+        choices: [
+          { text: 'Everything went smoothly, thank you — and the airport pickup you arranged made it easy. I know how much work this week must be for you.', delta: 3, best: true,
+            why: '無事の報告に加え、**相手の手配と負担に触れて**います。主催者がいちばん言われたい一言です。' },
+          { text: 'It was fine. (そのまま沈黙)', delta: 0,
+            why: '嘘はありませんが、探しに来てくれた相手にはそっけない返しです。' },
+          { text: 'Actually the flight was delayed, the hotel check-in was slow, and my room is very far from the venue.', delta: -2,
+            why: '会った瞬間に不満を並べると、以後あなたは「手のかかる招待者」として記憶されます。' },
+          { text: 'Yes. By the way, can I change my presentation slot to the afternoon?', delta: -3,
+            why: '挨拶を飛ばして要求から入っています。プログラムは何ヶ月もかけて組まれています。' }
+        ]
+      },
+      {
+        situation: '> "Your session is the only basic-science block this year. Some of the committee thought it was too far from the theme."\n\n自分の枠の存在意義を、遠回しに問われています。',
+        limitSec: 15,
+        choices: [
+          { text: 'Then let me earn the slot — I\'ll frame it as a principle that applies to any genome, not a fission yeast detail. If people leave with one sentence, that\'s the win.', delta: 3, best: true,
+            why: '**批判を引き受けたうえで、具体的な設計方針**を返しています。委員長がほしかったのは反論ではなく、この保証です。' },
+          { text: 'Basic science is the foundation of everything. The committee should understand that.', delta: -2,
+            why: '正論で押し返しても、委員長を味方から敵に変えるだけです。' },
+          { text: 'Should I change my talk? I can make it more applied if you want.', delta: 1,
+            why: '柔軟さは良いのですが、招待されたのはあなたの研究です。軸は変えず、語り方を変えましょう。' },
+          { text: 'I understand. I will keep it short so the applied talks have more time.', delta: 0,
+            why: '譲りすぎです。枠を短くすることは、セッションの価値を自分で下げることになります。' }
+        ]
+      },
+      {
+        situation: '> "We are putting together a thematic issue from this meeting. Each session contributes one or two papers. Would you write something?"',
+        limitSec: 14,
+        choices: [
+          { text: 'I\'d be glad to. A short review on how the three folding tiers are built would fit — when is the deadline, and how long?', delta: 3, best: true,
+            why: '**中身の案・締切・分量**を一度に確認しています。編集する側にとって、いちばん扱いやすい返事です。' },
+          { text: 'Yes, of course! I will write anything you need.', delta: 1,
+            why: '前向きですが、何をいつまでに書くかが決まりません。あとで双方が困ります。' },
+          { text: 'I am quite busy this year. Maybe someone else in my field would be better.', delta: -1,
+            why: '断るのも選択ですが、招待講演者の寄稿はセッションの記録そのものです。断るなら代案を添えて。' },
+          { text: 'Is it indexed? What is the impact factor?', delta: -3,
+            why: '招致した本人の前で雑誌の格を値踏みするのは、最も失礼な反応のひとつです。' }
+        ]
+      },
+      {
+        situation: '> "One favor. A speaker cancelled tomorrow morning. Could you chair that session instead? It is not your field."',
+        limitSec: 14,
+        choices: [
+          { text: 'Happy to help. I don\'t know the field, so I\'ll keep time strictly and ask one general question if the room is quiet — is that what you need?', delta: 3, best: true,
+            why: '**自分にできる範囲を明示して引き受けて**います。分野外の座長に求められるのは、専門性ではなく進行です。' },
+          { text: 'I would like to help, but I know nothing about that field. Sorry.', delta: 0,
+            why: '誠実ですが、座長の仕事の大半は時間管理です。断る理由としては弱いところ。' },
+          { text: 'Sure, no problem! I will prepare deep questions for every speaker tonight.', delta: 1,
+            why: '意気込みは立派ですが、前夜に分野外を詰め込むより、進行に集中するほうが全員のためです。' },
+          { text: 'Only if my own talk can be moved to a better time slot.', delta: -3,
+            why: '困っている主催者に条件を突きつけています。この一言は長く記憶されます。' }
+        ]
+      }
+    ]
+  },
+
+  {
+    day: 3,
+    id: 'boss-students', reward: { funds: 60, gems: 2 },
+    title: '👑 大学院生の最前列',
+    partner: '招待先の大学院生たち — 英語での質疑に慣れておらず、最初は誰も手を挙げない',
+    focus: ['english', 'network'],
+    turns: [
+      {
+        situation: '大学でのセミナーが終わりました。30人の大学院生。司会が質問を促しても、誰も手を挙げません。沈黙が10秒続きます。',
+        limitSec: 13,
+        choices: [
+          { text: 'Let me start with a question for you instead — how many of you have used Hi-C data? …Two hands. OK, then let me explain what the axes mean.', delta: 3, best: true,
+            why: '**自分から質問して、手を挙げる敷居を下げて**います。沈黙を破るのは聴衆ではなく演者の仕事です。' },
+          { text: 'No questions? All right, thank you very much. (終了する)', delta: -1,
+            why: '楽ですが、学生は聞きたいことを抱えたまま帰ります。この15秒が一日の価値を決めます。' },
+          { text: 'Come on, somebody must have a question. Anyone? Really? Nobody?', delta: -2,
+            why: '急かすほど手は挙がりません。プレッシャーは沈黙を固くします。' },
+          { text: 'In Japan students are also quiet, so I understand. (笑って待つ)', delta: 1,
+            why: '場は和みますが、まだ質問は出ません。次の一手が必要です。' }
+        ]
+      },
+      {
+        situation: '一人が勇気を出して質問しました。ところが緊張で英語が崩れ、内容が半分しか分かりません。',
+        limitSec: 14,
+        choices: [
+          { text: 'Let me make sure I got it — you\'re asking whether the domains change when the cell is stressed? (学生がうなずく) Great question, and yes —', delta: 3, best: true,
+            why: '**聞き取れた部分から言い換えて確認**しています。学生は「通じた」と感じ、会場の他の学生も続きやすくなります。' },
+          { text: 'Sorry, I could not understand. Could you repeat the whole question?', delta: 0,
+            why: '誠実ですが、繰り返すほど緊張は増します。こちらから半分を補いましょう。' },
+          { text: 'Yes, exactly. Good question. (分からないまま一般論を話す)', delta: -3,
+            why: '分かったふりは最悪です。的外れな回答は、勇気を出した学生を傷つけます。' },
+          { text: 'Your English is very good! Don\'t worry. Now, what was the question again?', delta: -1,
+            why: '善意でも、英語そのものに言及されると学生はかえって萎縮します。中身に反応しましょう。' }
+        ]
+      },
+      {
+        situation: '質疑が終わり、数人の学生が前に集まってきました。\n\n> "How did you decide to go abroad for your postdoc? I am scared to apply."',
+        limitSec: 15,
+        choices: [
+          { text: 'I was scared too — I wrote to five labs and four never replied. The one that did changed my career. The reply rate is low for everyone, not just you.', delta: 3, best: true,
+            why: '**自分の失敗を具体的な数字で**共有しています。成功談より、うまくいかなかった回数のほうが学生を動かします。' },
+          { text: 'Just apply everywhere. If you work hard, it will work out.', delta: 0,
+            why: '励ましですが、中身がありません。学生が知りたいのは実際の手順です。' },
+          { text: 'Honestly, the job market is terrible now. Think carefully before leaving a stable position.', delta: -2,
+            why: '現実を伝えるのは大切ですが、相談してきた学生への最初の一言としては重すぎます。' },
+          { text: 'It was easy for me because my supervisor arranged everything.', delta: -1,
+            why: '事実だとしても、参考にならないうえに距離を作ります。' }
+        ]
+      },
+      {
+        situation: '最後に一人の学生が、あなたの解析結果に対する反論を持ってきました。指摘はかなり的を射ています。',
+        limitSec: 15,
+        choices: [
+          { text: 'You\'re right, and honestly that\'s the weakest part of the analysis. Could you send me your reasoning by email? I\'d like to test it properly.', delta: 3, best: true,
+            why: '**学生の指摘を対等に受け止め、次につないで**います。これができる演者は、その研究室で長く語り継がれます。' },
+          { text: 'That is a good point, but we already considered it. (詳細は説明しない)', delta: -1,
+            why: '検討済みなら中身を説明すべきです。説明のない却下は、学生を黙らせるだけになります。' },
+          { text: 'Well, when you have published a few papers yourself, you will see why we did it this way.', delta: -3,
+            why: '経歴を盾にした反論です。指摘の正しさは経歴では決まりません。' },
+          { text: 'Interesting! Let me think about it. Thank you. (そのまま会場を出る)', delta: 1,
+            why: '悪くはありませんが、せっかくの鋭い指摘を持ち帰る形にできていません。' }
+        ]
+      }
+    ]
   }
 ];
+
 
 /* 1日を「午前のプログラム」「午後のプログラム」の2部に分けた。
  * 1部 = 1マップ = 8マスなので、午前だけで切り上げても1回の遊びとして完結する。 */
