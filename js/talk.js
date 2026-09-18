@@ -461,7 +461,19 @@ const Talk = {
     return this.current.transcript;
   },
 
-  /* ---------- 要約 ---------- */
+  /* ---------- 要約 ----------
+   * ⚠ max_tokens は「思考+本文」の合計です。
+   *   Sonnet 5 以降のモデルは thinking を指定しなくても考えてから答えるため、
+   *   思考ぶんもこの予算から引かれます。3000 にしていた頃は、80分級の
+   *   長い文字起こしだと思考だけで使い切り、本文が1文字も返らないまま
+   *   「要約なし」で保存されていました。
+   *   80分の会議(英語で約4万字)を通すため、予算を16000に上げ、
+   *   effort を下げて思考が伸びすぎないようにしています。
+   */
+  SUMMARY_MAX_TOKENS: 16000,
+  SUMMARY_EFFORT: 'medium',
+  TRANSCRIPT_LIMIT: 200000,   // AIに渡す文字起こしの上限(80分の会議で約4万字)
+
   async summarize() {
     const c = this.current;
     if (!c.transcript) throw new Error('文字起こしがありません。');
@@ -476,9 +488,19 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       user += `\n\n「重要」とマークした箇所(特に丁寧に反映してください):\n${c.markedText.join('\n')}`;
     }
     if (c.note) user += `\n\nメモ:\n${c.note}`;
-    user += `\n\n文字起こし:\n${c.transcript.slice(0, 40000)}`;
 
-    c.summary = await AI.chat(sys, [{ role: 'user', content: user }], 3000);
+    // 長すぎる場合だけ切るが、黙っては切らない(要約に注記させる)
+    const body = c.transcript.slice(0, this.TRANSCRIPT_LIMIT);
+    user += `\n\n文字起こし:\n${body}`;
+    if (body.length < c.transcript.length) {
+      user += `\n\n(※ 文字起こしが長いため、全${c.transcript.length}文字のうち冒頭${body.length}文字までを渡しています。`
+        + '後半が欠けていることを要約の冒頭に1行だけ注記してください)';
+    }
+
+    const text = await AI.chat(sys, [{ role: 'user', content: user }],
+      this.SUMMARY_MAX_TOKENS, { effort: this.SUMMARY_EFFORT });
+    if (!text || !text.trim()) throw new Error('要約が空でした。もう一度お試しください。');
+    c.summary = text;
     return c.summary;
   },
 

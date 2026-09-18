@@ -1746,6 +1746,47 @@ async function talkSummarizeStep() {
   }
 }
 
+/* ---------- 🔁 要約だけのやり直し ----------
+ * 文字起こしのやり直し(retranscribeSaved)と違い、音声は要りません。
+ * 文字起こしさえ残っていれば、音声を破棄したあとでも・別の端末に移したあとでも
+ * 要約を作り直せます。費用も要約ぶん(数十円未満)だけで、文字起こし代はかかりません。
+ * 使いどころ: 要約が空/失敗した、ミーティングモードに切り替えたい、モデルを変えたい。
+ */
+
+/** 「要約だけをやり直す」ボタン。文字起こしが無いときは何も出さない */
+function resummarizeBtnHtml(label) {
+  const c = Talk.current;
+  if (!c || !c.transcript || !c.transcript.trim()) return '';
+  return `<div class="audio-actions" style="margin-top:8px">
+    <button class="btn-control" id="btn-talk-resummarize" type="button">🔁 ${escapeHtml(label)}</button>
+  </div>`;
+}
+
+/** resummarizeBtnHtml() を差し込んだあとに必ず呼ぶ(innerHTMLの差し替えで消えるため) */
+function wireResummarizeBtn() {
+  const btn = document.getElementById('btn-talk-resummarize');
+  if (btn) btn.addEventListener('click', () => resummarizeCurrent());
+}
+
+/** 文字起こしはそのままで、要約だけを作り直す */
+async function resummarizeCurrent() {
+  const c = Talk.current;
+  if (!c || !c.transcript || !c.transcript.trim()) {
+    appAlert('文字起こしが無いため、要約を作れません。', '🔁 要約のやり直し');
+    return;
+  }
+  // 作るだけなら確認は要らない。上書きになるときだけ止める
+  if (c.summary && c.summary.trim()) {
+    const ok = await appConfirm(
+      '文字起こしはそのままで、要約だけを作り直します。\n' +
+      '(いまの要約は新しい結果で置きかわります)\n\n' +
+      'AIの利用料が新たにかかります(文字起こしの費用はかかりません)。よろしいですか?',
+      '🔁 要約のやり直し');
+    if (!ok) return;
+  }
+  await talkSummarizeStep();
+}
+
 /** 文字起こしがほぼ空だったときの案内。録音は保持しているので言語を変えてやり直せる */
 function renderTalkRetry(len) {
   const el = document.getElementById('talk-result-content');
@@ -1796,7 +1837,10 @@ function talkErrorView(err) {
       <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
   }
   el.innerHTML += partNotesHtml();
+  // 要約だけ失敗したのなら、文字起こしからやり直す必要はない
+  el.innerHTML += resummarizeBtnHtml('要約をやり直す');
   el.innerHTML += '<div id="talk-audio-box" style="margin-top:12px"></div>';
+  wireResummarizeBtn();
   renderTalkAudioBox();
 }
 
@@ -1816,12 +1860,14 @@ function renderTalkResult() {
     <div id="talk-audio-box"></div>
     ${partNotesHtml()}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
+    ${resummarizeBtnHtml('要約をやり直す')}
     ${c.transcript ? `
       <details class="card" style="margin-top:10px">
         <summary style="cursor:pointer">📝 文字起こし全文を見る(${c.transcript.length}文字)</summary>
         <div class="transcript-box" style="margin-top:8px">${escapeHtml(c.transcript)}</div>
       </details>` : ''}
   `;
+  wireResummarizeBtn();
   renderTalkAudioBox();
 }
 
@@ -2135,11 +2181,14 @@ function renderTalkList() {
       if (found.summary) {
         renderTalkResult();
       } else {
+        // 文字起こしが残っていれば、音声が無くてもここから要約だけ作り直せる
         document.getElementById('talk-result-content').innerHTML =
           `<div class="card"><h3 style="font-size:1.05rem">${escapeHtml(found.title)}</h3>
-           <p class="field-note">要約がありません(作成時にエラー)。文字起こしのみ表示します。</p></div>
+           <p class="field-note">要約がありません(作成時にエラー)。文字起こしのみ表示します。</p>
+           ${resummarizeBtnHtml('この文字起こしから要約を作る')}</div>
            <div id="talk-audio-box"></div>
            <div class="transcript-box">${escapeHtml(found.transcript || '')}</div>`;
+        wireResummarizeBtn();
         renderTalkAudioBox();
       }
     });

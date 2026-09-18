@@ -45,6 +45,26 @@ function apiAuthError(provider, status) {
   return err;
 }
 
+/**
+ * 「本文が1文字も返らなかった」エラーを作る。err.emptyReply で判別できる。
+ *
+ * ⚠ これは失敗なのに HTTP 200 で返ってきます。検出しないと、空の要約が
+ *   「成功」として保存され、一覧に「要約なし」とだけ並びます。
+ *
+ * いちばん多い原因は max_tokens の使い切りです。Sonnet 5 以降のモデルは
+ * thinking を指定しなくても「考えてから答える」ため、思考ぶんも max_tokens
+ * から引かれます。入力が長いほど思考も長くなるので、予算が小さいと
+ * 思考だけで打ち切られ、本文(textブロック)が0個のまま返ります。
+ */
+function emptyReplyError(hitLimit) {
+  const err = new Error(hitLimit
+    ? 'AIの出力が上限(max_tokens)に達し、本文が返りませんでした。'
+      + '入力が長いほど起きやすくなります。文字起こしを短くするか、出力上限を上げてください。'
+    : 'AIから空の応答が返りました。もう一度お試しください。');
+  err.emptyReply = true;
+  return err;
+}
+
 /** OpenAIによる文字起こし */
 const STT = {
   getKey() {
@@ -136,15 +156,40 @@ const AI = {
     return false;
   },
 
-  async chat(systemPrompt, messages, maxTokens = 1500) {
+  /**
+   * このモデルが adaptive thinking(と effort 指定)を受け付けるか。
+   * Haiku 4.5 のような旧世代に thinking を送ると 400 で弾かれるので、
+   * 対応モデルにだけ付ける。
+   */
+  supportsThinking(model) {
+    return /^claude-(fable-5|opus-5|opus-4-[678]|sonnet-5|sonnet-4-6)/.test(model || '');
+  },
+
+  /**
+   * opts(任意): { effort: 'low'|'medium'|'high'|'xhigh'|'max' }
+   * 長い入力を扱う呼び出しは effort を下げて、思考が max_tokens を
+   * 食い尽くさないようにする(要約はこれを使う)。
+   */
+  async chat(systemPrompt, messages, maxTokens = 1500, opts) {
     const key = this.getKey();
     if (!key) throw apiKeyError(this.getProvider());
     return this.getProvider() === 'openai'
-      ? this._chatOpenAI(key, systemPrompt, messages, maxTokens)
-      : this._chatClaude(key, systemPrompt, messages, maxTokens);
+      ? this._chatOpenAI(key, systemPrompt, messages, maxTokens, opts)
+      : this._chatClaude(key, systemPrompt, messages, maxTokens, opts);
   },
 
-  async _chatClaude(key, systemPrompt, messages, maxTokens) {
+  async _chatClaude(key, systemPrompt, messages, maxTokens, opts) {
+    const model = this.getModel();
+    const body = {
+      model: model,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: messages
+    };
+    if (opts && opts.effort && this.supportsThinking(model)) {
+      body.thinking = { type: 'adaptive' };
+      body.output_config = { effort: opts.effort };
+    }
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -153,12 +198,7 @@ const AI = {
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
-      body: JSON.stringify({
-        model: this.getModel(),
-        max_tokens: maxTokens,
-        system: systemPrompt,
-        messages: messages
-      })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) throw apiAuthError('claude', res.status);
@@ -166,24 +206,34 @@ const AI = {
       throw new Error(`Claude APIエラー (${res.status}): ${body.slice(0, 300)}`);
     }
     const data = await res.json();
-    return (data.content || [])
+    // thinkingブロックは中身が空で返るので、textブロックだけを拾う。
+    // それが0個なら「成功したが本文が無い」状態 → 黙って空文字を返さない
+    const text = (data.content || [])
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
       .join('\n');
+    if (!text.trim()) throw emptyReplyError(data.stop_reason === 'max_tokens');
+    return text;
   },
 
-  async _chatOpenAI(key, systemPrompt, messages, maxTokens) {
+  async _chatOpenAI(key, systemPrompt, messages, maxTokens, opts) {
+    const body = {
+      model: this.getModel(),
+      max_completion_tokens: maxTokens,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages]
+    };
+    // GPT-5系も推論トークンが max_completion_tokens から引かれるので、
+    // 長い入力では推論の量を下げて本文ぶんを残す
+    if (opts && opts.effort && /^gpt-5/.test(body.model)) {
+      body.reasoning_effort = opts.effort === 'medium' ? 'medium' : 'low';
+    }
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         'Authorization': `Bearer ${key}`
       },
-      body: JSON.stringify({
-        model: this.getModel(),
-        max_completion_tokens: maxTokens,
-        messages: [{ role: 'system', content: systemPrompt }, ...messages]
-      })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) throw apiAuthError('openai', res.status);
@@ -191,7 +241,10 @@ const AI = {
       throw new Error(`OpenAI APIエラー (${res.status}): ${body.slice(0, 300)}`);
     }
     const data = await res.json();
-    return (data.choices && data.choices[0] && data.choices[0].message.content) || '';
+    const choice = (data.choices && data.choices[0]) || null;
+    const text = (choice && choice.message && choice.message.content) || '';
+    if (!text.trim()) throw emptyReplyError(choice && choice.finish_reason === 'length');
+    return text;
   },
 
   /** 発表のAIフィードバック */

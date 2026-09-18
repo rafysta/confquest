@@ -233,7 +233,8 @@ window.addEventListener('unhandledrejection', function (e) {
         <option value="ja">日本語</option>
         <option value="ko">韓国語</option>
       </select>
-      <span class="field-note">指定した言語はWhisperに強制されます。実際の音声と違う言語を選ぶと文字起こしが空になることがあるため、迷ったら自動判定のままで。</span>
+      <span class="field-note">指定した言語はWhisperに強制されます。実際の音声と違う言語を選ぶと文字起こしが空になることがあるため、迷ったら自動判定のままで。<br>
+        ⚠ 45分を超えて分割された場合、自動判定はパートごとに別々に行われます。長い英語の会議では一部だけ日本語と判定されることがあるので、言語が分かっているなら指定してください。</span>
     </label>
     <p class="field-note">💡 ふつうの講演(15〜40分)は分割されず1本のまま扱われます。45分を超えるか、ファイルが大きくなりすぎたときだけ自動で分割されるので、時間の制限はありません(2時間を超える場合は端末のメモリにご注意)。</p>
     <button class="btn-large primary" id="btn-talk-start">● 録音を開始</button>
