@@ -482,7 +482,7 @@ const Talk = {
     let user = `${c.kind === 'meeting' ? '会議名' : '講演タイトル'}: ${c.title}
 ${c.kind === 'meeting' ? '参加者(出席者の一覧。全員が発言したとは限らない)' : '発表者'}: ${c.speaker || '不明'}
 ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '不明'}
-録音時間: ${PracticeUtil.fmtTime(c.durationMs)}`;
+録音時間: ${c.source === 'text' ? '不明(文字起こしテキストから作成)' : PracticeUtil.fmtTime(c.durationMs)}`;
 
     if (c.markedText && c.markedText.length) {
       user += `\n\n「重要」とマークした箇所(特に丁寧に反映してください):\n${c.markedText.join('\n')}`;
@@ -566,11 +566,20 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
 後から検索するための語を10〜20個、カンマ区切りで。専門用語は英語。`;
   },
 
-  /** 🎓 講演用(従来) */
+  /** 🎓 講演用の要約。
+   *  v1.34.0 から質問候補はここでは作らない(makeQuestions() が専用の呼び出しで作る)。
+   *  理由: 質疑応答は講演の直後なので、長い要約の完成を待たずに質問だけ先に出したい。
+   *  録音中の「💡質問を先に作る」と、終了後の質問づくりで同じプロンプトを使うためでもある。 */
   _talkPrompt() {
     return `あなたは生命科学分野の研究者を補佐するアシスタントです。学会講演の文字起こしを読み、後でPCで整理しやすい要約を日本語で作成してください。
 
-出力はMarkdown形式で、以下の見出し構成に従ってください。内容が読み取れない項目は「(聞き取れず)」と書いてください。専門用語・遺伝子名・手法名は英語のまま残してください。
+入力について:
+- 文字起こしは自動音声認識(または動画の自動字幕)の出力で、専門用語や固有名詞の聞き間違いを含みます。スライドは見えていません。
+- 聞き間違いと思われる語を、確信が無いのに別の語へ直さないでください。文脈に合わない語は元の語のまま「[要確認]」を付けてください。
+- 数値は何の値かを添え、換算しないでください(billion/million を 億/万 に直さない)。
+- 「メモ」は聴講者本人が講演中に書いたものです。「重要」マーク箇所は本人が注目した場面です。
+
+出力はMarkdown形式で、以下の見出し構成に従ってください。内容が読み取れない項目は「(聞き取れず)」と書いてください。専門用語・遺伝子名・手法名は英語のまま残してください。質問の候補は別に作るので、ここには書かないでください。
 
 ## 概要
 3〜4文で研究の全体像。
@@ -586,11 +595,295 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
 
 ## 結論とインパクト
 
-## 気になった点・質問候補
-この講演に対してその場で聞けそうな質問を2〜3個、英語で。
+## 質疑応答
+録音に質疑応答が含まれていれば、質問と回答の要点を箇条書きで。無ければ「(なし)」。
 
 ## キーワード
 重要語を10個程度、カンマ区切りで(英語)。`;
+  },
+
+  /* ---------- 💡 質問候補 (v1.34.0) ----------
+   * 要約とは別の、短い専用の呼び出しで作る。
+   *   ・録音中の「💡質問を先に作る」(ここまでの録音のスナップショットから)
+   *   ・録音終了後(全文から。要約と並行して走り、先にできたほうから表示)
+   *   ・保存済みの講演からの作り直し
+   * のどれも同じ makeQuestions() を通る。
+   *
+   * 結果は current.questions に入る:
+   *   { items:[{type, ja, q, basis, picked}], raw, partial, atSec, createdAt }
+   * items が空で raw だけある場合は、JSONとして読めなかった応答。そのままMarkdownで見せる
+   * (質問が読めれば用は足りるので、形式の失敗で捨てない)。
+   */
+  MY_RESEARCH_KEY: 'lq_my_research',
+  QUESTION_MAX_TOKENS: 6000,
+  QUESTION_EFFORT: 'low',          // 速さ優先。質疑応答に間に合わせるため
+
+  QUESTION_TYPES: {
+    memo:      { label: 'メモより',     icon: '📝' },
+    confirm:   { label: '確認',         icon: '🔍' },
+    interpret: { label: '別の解釈',     icon: '🔀' },
+    consensus: { label: '通説との違い', icon: '📚' },
+    propose:   { label: '解析の提案',   icon: '🧪' },
+    relate:    { label: '自分の研究と', icon: '🤝' }
+  },
+
+  myResearch() {
+    return (localStorage.getItem(this.MY_RESEARCH_KEY) || '').trim();
+  },
+
+  _questionPrompt(partial) {
+    return `あなたは、学会講演を聴いている研究者(以下「聴講者」)が質疑応答で良い質問をするのを助けるアシスタントです。講演の文字起こしを読み、聴講者がその中から選んで使える質問の候補を作ってください。
+
+入力について:
+- 文字起こしは自動音声認識の出力で、専門用語や固有名詞の聞き間違いを含みます。スライドは見えていません。
+- 「聴講者の研究・関心」は、聴講者本人が書いた自己紹介です。質問の視点として使ってください。
+- 「メモ」は聴講者が講演中に書いたもの、「重要マーク箇所」は聴講者が注目した場面です。${partial ? `
+- ⚠ この文字起こしは講演の【途中まで】です。結論やまとめはまだ含まれていない可能性があります。すでに示された結果に基づいて質問を作り、「このあと話されそうなこと」を聞く質問は避けてください。` : `
+- 文字起こしに質疑応答が含まれている場合、会場ですでに出た質問と同じ内容は出さないでください。`}
+
+良い質問の条件:
+- 講演で実際に述べられた特定の結果・手法・主張を1つ取り上げ、冒頭でそれに短く触れてから聞く(例: "You showed that ... . Did you ...?")。どの講演にも当てはまる一般的な質問(他の生物種では? 今後の計画は?)は出さない。
+- 講演の中ですでに答えが述べられていることは聞かない。スライドにしか無い情報を前提にしない。
+- 1問につき聞くことは1つ。2〜3文以内、声に出して20秒以内。
+- 講演と同じ言語で書く(英語の講演なら英語)。平易で、そのまま読み上げられる文にする。
+- 聞き間違いの疑いがある固有名詞を質問の中心に据えない。必要なら "the factor you mentioned" のように言い換える。
+- 発表者を試したり誤りを指摘したりする調子にしない。発表者が話したくなる、議論が広がる聞き方にする。
+
+質問の種類(type):
+- "memo": メモに聴講者自身が考えた質問が書かれている場合、その内容を変えずに自然な表現に整えたもの。あれば必ず含め、先頭に置く。
+- "confirm": 手法・条件・定義の確認。気軽に聞けて、答えが結果の解釈に効くもの。
+- "interpret": 同じデータから別の解釈が成り立たないか、対照実験、因果と相関の区別、結論の一般性を問うもの。
+- "consensus": その分野で一般に受け入れられている理解と、この講演の主張・結果が食い違う点、または通説を更新する点を取り上げるもの。発表者が最も話したい新規性であることが多い。通説の側はあなた自身の知識に基づくので、断定せず "I had the impression that ... is generally thought to ... . How do you reconcile this with your result?" のように聞く。通説の内容に自信が持てないとき、食い違いが聞き間違いのせいかもしれないときは、この種類は出さない。
+- "propose": 聴講者の専門(解析手法・持っているツールやデータ)から、発表者のデータに対して行える具体的な解析や比較を提案し、そこから何が分かりそうかを一言添えるもの(例: "Have you looked at ...? If ..., I would expect ... ")。押しつけにならない聞き方にする。聴講者の情報が無ければ、講演内容から自然に導かれる解析の提案にする。
+- "relate": 聴講者の研究との接点を問うもの。講演後の会話や共同研究のきっかけになりうるもの。聴講者の情報もメモも無ければ出さない。
+
+個数と順序:
+- 全部で6〜8個。"memo" と "relate" 以外の種類はできるだけ1個以上含め、聴講者の研究・関心が書かれていれば "propose" は2個まで出してよい。
+- 無理に数を合わせない。根拠の弱い質問を足すくらいなら少なくてよい。
+- あなたが勧める順に並べる(重要マーク箇所に関するものは優先)。
+
+出力形式:
+JSON配列だけを出力してください。前置き・後書き・コードブロックの記号は不要です。各要素は次の形です。
+{"type":"confirm","ja":"何を聞く質問かを日本語で30字程度(一覧から選ぶときに読む)","q":"質問文","basis":"講演のどの内容に基づくかを日本語で短く"}`;
+  },
+
+  /** 質問づくりに渡す利用者メッセージ */
+  _questionUserMessage(transcript, markedText) {
+    const c = this.current;
+    let user = `講演タイトル: ${c.title}
+発表者: ${c.speaker || '不明'}
+会場・セッション: ${c.venue || '不明'}`;
+    const me = this.myResearch();
+    user += `\n\n聴講者の研究・関心:\n${me || '(未記入)'}`;
+    if (c.note) user += `\n\nメモ:\n${c.note}`;
+    if (markedText && markedText.length) {
+      user += `\n\n重要マーク箇所:\n${markedText.join('\n')}`;
+    }
+    user += `\n\n文字起こし:\n${String(transcript).slice(0, this.TRANSCRIPT_LIMIT)}`;
+    return user;
+  },
+
+  /** AIの応答から質問の配列を取り出す。読めなければ null(呼び出し側が raw を見せる) */
+  _parseQuestions(text) {
+    let t = String(text || '').replace(/```json|```/g, '').trim();
+    const a = t.indexOf('[');
+    const b = t.lastIndexOf(']');
+    if (a < 0 || b <= a) return null;
+    let arr;
+    try { arr = JSON.parse(t.slice(a, b + 1)); } catch (_) { return null; }
+    if (!Array.isArray(arr)) return null;
+    const items = arr
+      .filter((x) => x && typeof x.q === 'string' && x.q.trim())
+      .map((x) => ({
+        type: this.QUESTION_TYPES[x.type] ? x.type : 'confirm',
+        ja: String(x.ja || '').trim(),
+        q: x.q.trim(),
+        basis: String(x.basis || '').trim(),
+        picked: false
+      }));
+    return items.length ? items : null;
+  },
+
+  /**
+   * 質問候補を作って current.questions に入れる。
+   * opts: { transcript, markedText, partial, atSec }
+   *   transcript を省くと current.transcript(全文)を使う。
+   * ⭐を付けた質問は、作り直しても消さずに先頭へ残す(選んだものが入れ替わると困るため)。
+   */
+  async makeQuestions(opts) {
+    const o = opts || {};
+    const c = this.current;
+    const transcript = o.transcript != null ? o.transcript : c.transcript;
+    if (!transcript || !String(transcript).trim()) throw new Error('文字起こしがありません。');
+    const marked = o.markedText != null ? o.markedText : (c.markedText || []);
+
+    const text = await AI.chat(
+      this._questionPrompt(!!o.partial),
+      [{ role: 'user', content: this._questionUserMessage(transcript, marked) }],
+      this.QUESTION_MAX_TOKENS, { effort: this.QUESTION_EFFORT });
+
+    // 待っている間に状況が変わっていたら、結果を捨てる:
+    //  ・別の録音に移っていた
+    //  ・途中版(録音中に作ったもの)なのに、すでに全文版ができている
+    //    (「終了して要約」を押したあとで、先に頼んだ途中版が遅れて返ってきた場合)
+    if (c !== this.current) return c.questions || null;
+    if (o.partial && c.questions && !c.questions.partial) return c.questions;
+
+    const items = this._parseQuestions(text);
+    const kept = ((c.questions && c.questions.items) || []).filter((x) => x.picked);
+    const fresh = (items || []).filter((x) => !kept.some((k) => k.q === x.q));
+    c.questions = {
+      items: kept.concat(fresh),
+      raw: items ? '' : String(text || '').trim(),
+      partial: !!o.partial,
+      atSec: o.atSec != null ? o.atSec : null,
+      createdAt: new Date().toISOString()
+    };
+    return c.questions;
+  },
+
+  /* ---------- 💡 録音中に、ここまでの分から質問を先に作る ----------
+   * 録音は止めない。いまのレコーダーが溜めているデータの「写し」を取り、
+   * それを文字起こしして質問だけを作る。
+   *
+   * ⚠ 写しは _chunks を読むだけで、録音側の状態(segments / recorder)には一切触らない。
+   *   ここで _closeSegment() を呼ぶと、本番の文字起こしのパート割りが変わってしまう。
+   * ⚠ webm/ogg は先頭のチャンクにヘッダーがあるので、「先頭からここまで」をつなげば
+   *   単体で再生できるファイルになる。途中から切り出すことはできない。
+   *   (そのため、終了後の文字起こしと費用が二重になるのは避けられない)
+   * ⚠ iOS Safari(mp4)では、つないだ写しが再生できる形にならない可能性がある。
+   *   その場合は文字起こしAPIがエラーを返すので、メッセージを出して録音はそのまま続ける。
+   */
+  async snapshotSegments() {
+    const rec = this.recorder;
+    const segs = (this.segments || []).filter((sg) => sg.blob && sg.blob.size > 0)
+      .map((sg) => ({ blob: sg.blob, startSec: sg.startSec }));
+    if (rec && rec.state !== 'inactive' && rec._chunks) {
+      // 直近(最大5秒ぶん)のデータを吐き出させてから写す
+      const before = rec._chunks.length;
+      try { rec.requestData(); } catch (_) { /* 非対応なら今あるぶんだけで作る */ }
+      for (let i = 0; i < 20 && rec._chunks.length === before; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      if (rec._chunks.length) {
+        segs.push({
+          blob: new Blob(rec._chunks.slice(), { type: rec.mimeType || 'audio/webm' }),
+          startSec: this.segStartSec
+        });
+      }
+    }
+    return segs;
+  },
+
+  /** マーク時刻の前後を抜き出す(transcribe() と同じ規則) */
+  _markedTextFrom(all, marks) {
+    return (marks || []).map((t) => {
+      const near = all.filter((x) => x.end >= t - 25 && x.start <= t + 10);
+      const txt = near.map((x) => x.text.trim()).join(' ');
+      return `[${PracticeUtil.fmtTime(t * 1000)}] ${txt}`.trim();
+    }).filter((x) => x.length > 12);
+  },
+
+  /**
+   * 録音を続けたまま、ここまでの分から質問を作る。onStage('stt'|'ai') で進み具合を通知。
+   * 失敗しても録音には影響しない(例外は呼び出し側で表示する)。
+   */
+  async earlyQuestions(onStage) {
+    const atSec = Math.round(this.elapsedMs() / 1000);
+    const segs = await this.snapshotSegments();
+    if (!segs.length) throw new Error('まだ録音データがありません。少し待ってからお試しください。');
+    const MAX = 24 * 1024 * 1024;
+    if (onStage) onStage('stt');
+    const all = [];
+    for (let i = 0; i < segs.length; i++) {
+      if (segs[i].blob.size > MAX) continue;      // 通常は起きない(18MBで区切っているため)
+      const res = await STT.transcribe(segs[i].blob, this.current.lang);
+      res.forEach((x) => all.push({
+        start: x.start + segs[i].startSec, end: x.end + segs[i].startSec, text: x.text
+      }));
+    }
+    const transcript = all.map((x) => x.text.trim()).join(' ');
+    if (transcript.trim().length < 200) {
+      throw new Error('ここまでの文字起こしが短すぎます(' + transcript.trim().length +
+        '文字)。講演がもう少し進んでからお試しください。');
+    }
+    if (onStage) onStage('ai');
+    return this.makeQuestions({
+      transcript,
+      markedText: this._markedTextFrom(all, this.current.marks),
+      partial: true,
+      atSec
+    });
+  },
+
+  /** 共有用: 質問候補をMarkdownにする(⭐を付けたものが先) */
+  questionsMarkdown() {
+    const qs = this.current && this.current.questions;
+    if (!qs) return '';
+    if (!qs.items || !qs.items.length) return qs.raw ? `## 質問候補\n\n${qs.raw}\n` : '';
+    const sorted = qs.items.filter((x) => x.picked).concat(qs.items.filter((x) => !x.picked));
+    const lines = sorted.map((x) => {
+      const t = this.QUESTION_TYPES[x.type] || this.QUESTION_TYPES.confirm;
+      return `- ${x.picked ? '⭐ ' : ''}**[${t.label}]** ${x.q}\n  - ${x.ja}${x.basis ? `(根拠: ${x.basis})` : ''}`;
+    });
+    const head = qs.partial && qs.atSec != null
+      ? `(録音の途中 ${PracticeUtil.fmtTime(qs.atSec * 1000)} 時点までの内容から作成)\n\n` : '';
+    return `## 質問候補\n\n${head}${lines.join('\n')}\n`;
+  },
+
+  /* ---------- 📝 文字起こしテキストの読み込み (v1.34.0) ----------
+   * 音声を経由せず、すでにある文字起こし(YouTubeの字幕、別ツールの出力、
+   * 過去の会議の記録など)から要約と質問を作る。プロンプトの試験にも使う。
+   * 文字起こしの費用はかからない。
+   */
+
+  /** 字幕ファイルや貼り付けテキストから、時刻や連番などの「本文でない行」を落とす */
+  cleanTranscriptText(raw) {
+    const lines = String(raw || '').replace(/\r/g, '').split('\n');
+    const out = [];
+    for (let line of lines) {
+      line = line.replace(/<[^>]+>/g, '').trim();                  // VTTの <c> や <00:00:01.000> タグ
+      if (!line) continue;
+      if (/^WEBVTT/i.test(line) || /^(Kind|Language|NOTE)\b/i.test(line)) continue;
+      if (/-->/.test(line)) continue;                               // SRT/VTTの時刻行
+      if (/^\d+$/.test(line)) continue;                             // SRTの連番
+      if (/^\[?\(?\d{1,2}:\d{2}(:\d{2})?\)?\]?$/.test(line)) continue;   // YouTubeの「0:15」だけの行
+      line = line.replace(/^\[?\(?\d{1,2}:\d{2}(:\d{2})?\)?\]?\s+/, '');  // 行頭の時刻
+      // YouTubeの自動字幕(VTT)は同じ行を繰り返すので、直前と同じ行は捨てる
+      if (out.length && out[out.length - 1] === line) continue;
+      out.push(line);
+    }
+    return out.join(' ').replace(/\s+/g, ' ').trim();
+  },
+
+  /** テキストを「文字起こし済みの講演」としてセットする。このあとは talkSummarizeStep() へ */
+  loadText(meta, text, sourceName) {
+    this.discardAudio();
+    clearInterval(this.timer);
+    this.timer = null;
+    this.stream = null;
+    this.recorder = null;
+    this.paused = false;
+    this.current = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      kind: meta.kind === 'meeting' ? 'meeting' : 'talk',
+      title: meta.title || (meta.kind === 'meeting' ? '無題のミーティング' : '無題の講演'),
+      speaker: meta.speaker || '',
+      venue: meta.venue || '',
+      lang: meta.lang != null ? meta.lang : '',
+      marks: [],
+      note: meta.note || '',
+      transcript: text,
+      markedText: [],
+      summary: '',
+      durationMs: 0,
+      startTime: Date.now(),
+      pausedMs: 0,
+      source: 'text',
+      sourceFiles: sourceName ? [sourceName] : null
+    };
+    return this.current;
   },
 
   /* ---------- 共有 ---------- */
@@ -603,12 +896,18 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
     doc += `- ${c.kind === 'meeting' ? '参加者' : '発表者'}: ${c.speaker || '不明'}\n`;
     if (c.venue) doc += `- ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue}\n`;
     doc += `- 日時: ${dateStr}\n`;
-    doc += `- ${c.source === 'import' ? '音声の長さ' : '録音時間'}: ${PracticeUtil.fmtTime(c.durationMs)}\n`;
+    if (c.source === 'text') {
+      doc += `- 元データ: 文字起こしテキスト${c.sourceFiles && c.sourceFiles.length ? '(' + c.sourceFiles.join(' / ') + ')' : '(貼り付け)'}\n`;
+    } else {
+      doc += `- ${c.source === 'import' ? '音声の長さ' : '録音時間'}: ${PracticeUtil.fmtTime(c.durationMs)}\n`;
+    }
     // どの音声から作った要約なのかは、あとで見返すときに効くので必ず残す
     if (c.source === 'import' && c.sourceFiles && c.sourceFiles.length) {
       doc += `- 元の音声ファイル: ${c.sourceFiles.join(' / ')}\n`;
     }
     if (c.note) doc += `\n## 自分のメモ\n\n${c.note}\n`;
+    const qmd = this.questionsMarkdown();
+    if (qmd) doc += `\n${qmd}`;
     doc += `\n${c.summary}\n`;
     if (c.markedText && c.markedText.length) {
       doc += `\n## マークした箇所\n\n${c.markedText.map((t) => `- ${t}`).join('\n')}\n`;
@@ -700,7 +999,8 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       durationMs: c.durationMs, summary: c.summary, transcript: c.transcript,
       markedText: c.markedText || [], note: c.note,
       lang: c.lang || '', partNotes: c.partNotes || null,
-      source: c.source || 'record', sourceFiles: c.sourceFiles || null
+      source: c.source || 'record', sourceFiles: c.sourceFiles || null,
+      questions: c.questions || null
     };
     // 同じIDが既にあれば置きかえる(文字起こしのやり直しで二重に増やさない)
     const list = JSON.parse(localStorage.getItem('lq_talks') || '[]')

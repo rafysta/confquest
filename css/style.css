@@ -2063,3 +2063,39 @@ audio { width: 100%; margin-bottom: 12px; }
   text-align: center; font-size: 0.85rem; line-height: 1.7;
   color: var(--text-dim); margin: -6px 0 10px;
 }
+
+
+/* ---------- 💡 質問候補 (v1.34.0) ----------
+   一覧では「種類 + 日本語の要旨」だけを見せ、タップで質問文を開く。
+   会場で6〜8個の英文を一度に読むのは無理なので、まず日本語で選べるようにする */
+.q-item {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  text-align: left;
+}
+.q-item.picked { border-color: var(--warn); background: rgba(250, 204, 21, 0.07); }
+.q-item summary {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; list-style: none;
+}
+.q-item summary::-webkit-details-marker { display: none; }
+.q-type {
+  flex: 0 0 auto;
+  font-size: 0.72rem; font-weight: 700;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.10);
+  white-space: nowrap;
+}
+.q-ja { flex: 1; font-size: 0.92rem; line-height: 1.4; }
+.q-pick {
+  flex: 0 0 auto;
+  background: none; border: none; color: var(--text);
+  font-size: 1.4rem; line-height: 1;
+  padding: 6px; cursor: pointer;
+}
+.q-text {
+  margin: 10px 0 4px;
+  font-size: 1.08rem; line-height: 1.55;   /* そのまま読み上げるので大きめに */
+}

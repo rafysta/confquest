@@ -376,6 +376,8 @@ function loadSettings() {
     localStorage.getItem('lq_stt_model') || 'whisper-1';
   document.getElementById('time-scale').value =
     localStorage.getItem('lq_time_scale') || '1.5';
+  const _mr = document.getElementById('my-research');
+  if (_mr) _mr.value = localStorage.getItem('lq_my_research') || '';
   const _pf = document.getElementById('learn-profile');
   if (_pf && typeof Profile !== 'undefined') _pf.value = Profile.current();
   document.getElementById('new-per-day').value =
@@ -433,6 +435,8 @@ document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_openai_model', document.getElementById('openai-model').value);
   localStorage.setItem('lq_stt_model', document.getElementById('stt-model').value);
   localStorage.setItem('lq_time_scale', document.getElementById('time-scale').value);
+  const _mrEl = document.getElementById('my-research');
+  if (_mrEl) localStorage.setItem('lq_my_research', _mrEl.value.trim());
   const _pfSel = document.getElementById('learn-profile');
   if (_pfSel && typeof Profile !== 'undefined') Profile.set(_pfSel.value);
   localStorage.setItem('lq_new_per_day', document.getElementById('new-per-day').value);
@@ -1556,6 +1560,7 @@ document.getElementById('btn-talk-start').addEventListener('click', async () => 
     return;
   }
   document.getElementById('talk-note').value = '';
+  resetEarlyQuestionUI(meta.kind);
   document.getElementById('btn-talk-pause').textContent = '⏸ 一時停止';
   document.getElementById('talk-rec-title').textContent = meta.title || '無題の講演';
   showScreen('talk-record');
@@ -1563,6 +1568,214 @@ document.getElementById('btn-talk-start').addEventListener('click', async () => 
 
 document.getElementById('btn-talk-mark').addEventListener('click', () => Talk.addMark());
 document.getElementById('btn-talk-pause').addEventListener('click', () => Talk.togglePause());
+
+/* ---------- 💡 質問候補 (v1.34.0) ----------
+ * 質問は Talk.current.questions に入っている(作るのは Talk.makeQuestions / earlyQuestions)。
+ * ここは表示と、⭐で選ぶ操作だけを受け持つ。録音中の画面と結果画面の両方から使う。
+ *
+ * 見せ方: 一覧では「種類 + 日本語の要旨」だけを並べ、タップで質問文を開く。
+ * 6〜8個の英文を全部開いたまま並べると、会場で選ぶには長すぎるため。
+ * ⭐を付けたものは開いたままにし、共有するMarkdownでも先頭に出す。
+ */
+function talkQuestionsHtml() {
+  const c = Talk.current;
+  const qs = c && c.questions;
+  if (!qs) return '';
+  const head = qs.partial && qs.atSec != null
+    ? `<p class="field-note" style="margin-bottom:6px">録音の途中 ${PracticeUtil.fmtTime(qs.atSec * 1000)} 時点までの内容から作りました。</p>` : '';
+  if (!qs.items || !qs.items.length) {
+    // JSONとして読めなかった応答。質問が読めれば用は足りるので、そのまま見せる
+    return head + (qs.raw ? `<div class="md-body">${renderMarkdown(qs.raw)}</div>` : '');
+  }
+  return head + qs.items.map((x, i) => {
+    const t = Talk.QUESTION_TYPES[x.type] || Talk.QUESTION_TYPES.confirm;
+    return `<details class="q-item${x.picked ? ' picked' : ''}" data-q-idx="${i}"${x.picked ? ' open' : ''}>
+      <summary>
+        <span class="q-type">${t.icon} ${escapeHtml(t.label)}</span>
+        <span class="q-ja">${escapeHtml(x.ja || x.q.slice(0, 40))}</span>
+        <button class="q-pick" type="button" aria-label="この質問を選ぶ">${x.picked ? '⭐' : '☆'}</button>
+      </summary>
+      <p class="q-text">${escapeHtml(x.q)}</p>
+      ${x.basis ? `<p class="field-note">根拠: ${escapeHtml(x.basis)}</p>` : ''}
+    </details>`;
+  }).join('');
+}
+
+/** talkQuestionsHtml() を差し込んだ要素に、⭐の操作を付ける */
+function wireTalkQuestions(root) {
+  if (!root) return;
+  root.querySelectorAll('.q-item .q-pick').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();          // <summary> の開閉と混ざらないように
+      e.stopPropagation();
+      const item = btn.closest('.q-item');
+      const qs = Talk.current && Talk.current.questions;
+      const x = qs && qs.items && qs.items[Number(item.dataset.qIdx)];
+      if (!x) return;
+      x.picked = !x.picked;
+      btn.textContent = x.picked ? '⭐' : '☆';
+      item.classList.toggle('picked', x.picked);
+      if (x.picked) item.open = true;
+      // 保存済みの講演なら、選んだ状態も残す(録音中はまだ保存しない)
+      if (Talk.current.transcript && Talk.current.summary) Talk.save();
+    });
+  });
+}
+
+/** 結果画面の「💡 質問候補」カード。ミーティングでは出さない */
+function talkQuestionsCardHtml() {
+  const c = Talk.current;
+  if (!c || c.kind === 'meeting') return '';
+  const has = c.questions && ((c.questions.items && c.questions.items.length) || c.questions.raw);
+  const canMake = c.transcript && c.transcript.trim();
+  if (!has && !canMake) return '';
+  return `<div class="card" id="talk-q-card">
+    <h3 style="font-size:1rem;margin-bottom:6px">💡 質問候補</h3>
+    ${has ? `<p class="field-note" style="margin-bottom:6px">タップで質問文を開きます。使いたいものに⭐を付けると、共有するファイルでも先頭に出ます。</p>` : ''}
+    ${c.questionError ? `<p class="md-error">${escapeHtml(c.questionError)}</p>` : ''}
+    <div id="talk-q-list">${has ? talkQuestionsHtml() : ''}</div>
+    ${canMake ? `<div class="audio-actions">
+      <button class="btn-control" id="btn-talk-requestion" type="button">💡 ${has ? '質問候補を作り直す' : '質問候補を作る'}</button>
+    </div>` : ''}
+    ${!Talk.myResearch() ? `<p class="field-note" style="margin-top:6px">⚙設定の「自分の研究・関心」を書いておくと、専門に引きつけた質問(解析の提案など)が出るようになります。</p>` : ''}
+  </div>`;
+}
+
+function wireTalkQuestionsCard() {
+  wireTalkQuestions(document.getElementById('talk-q-list'));
+  const btn = document.getElementById('btn-talk-requestion');
+  if (btn) btn.addEventListener('click', () => regenerateQuestions());
+}
+
+/** 文字起こしはそのままで、質問候補だけを作り直す(⭐を付けたものは残る) */
+async function regenerateQuestions() {
+  const c = Talk.current;
+  if (!c || !c.transcript) return;
+  if (!AI.ensureKey(undefined, '質問づくり')) return;
+  const list = document.getElementById('talk-q-list');
+  const btn = document.getElementById('btn-talk-requestion');
+  if (btn) btn.disabled = true;
+  if (list) list.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">質問を考えています…</p>';
+  try {
+    c.questionError = '';
+    await Talk.makeQuestions();
+    if (c.summary) Talk.save();
+  } catch (err) {
+    c.questionError = '質問候補を作れませんでした: ' + aiErrorText(err);
+  }
+  renderTalkResult();
+}
+
+/* ---------- 💡 録音中に質問を先に作る ---------- */
+function resetEarlyQuestionUI(kind) {
+  const wrap = document.getElementById('talk-early-wrap');
+  if (!wrap) return;
+  wrap.classList.toggle('hidden', kind === 'meeting');     // 議事録には質問候補が無い
+  document.getElementById('talk-early-q').innerHTML = '';
+  const btn = document.getElementById('btn-talk-early-q');
+  btn.disabled = false;
+  btn.textContent = '💡 ここまでの内容で質問を作る';
+}
+
+document.getElementById('btn-talk-early-q').addEventListener('click', async () => {
+  if (!Talk.current || !AI.ensureKey(undefined, '質問づくり')) return;
+  const btn = document.getElementById('btn-talk-early-q');
+  const box = document.getElementById('talk-early-q');
+  const rec = Talk.current;                  // 待っている間に別の録音へ移っていないかの確認用
+  // メモに書いた質問の下書きも材料になるので、押した時点の内容を渡す
+  Talk.current.note = document.getElementById('talk-note').value.trim();
+  btn.disabled = true;
+  const t0 = Date.now();
+  const stage = (msg) => {
+    box.innerHTML = `<div class="spinner"></div>
+      <p class="field-note" style="text-align:center">${msg}<br>録音は続いています。</p>`;
+  };
+  stage('ここまでの録音を文字起こししています…');
+  try {
+    await Talk.earlyQuestions((st) => {
+      if (st === 'ai') stage('質問を考えています…');
+    });
+    if (Talk.current !== rec) return;
+    box.innerHTML = `<div class="card" style="margin-top:8px;text-align:left">
+      ${talkQuestionsHtml()}
+      <p class="field-note" style="margin-top:6px">${Math.round((Date.now() - t0) / 1000)}秒で作成。録音終了後に、全文からもう一度作り直します(⭐を付けたものは残ります)。</p>
+    </div>`;
+    wireTalkQuestions(box);
+  } catch (err) {
+    if (Talk.current !== rec) return;
+    box.innerHTML = `<p class="md-error">${escapeHtml(aiErrorText(err))}</p>
+      <p class="field-note">録音には影響ありません。終了後の要約では、通常どおり質問候補が作られます。</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💡 もう一度作る(最新の内容で)';
+  }
+});
+
+/* ---------- 📝 文字起こしテキストから作る (v1.34.0) ---------- */
+let _textSourceName = '';
+
+function updateTalkTextCount() {
+  const raw = document.getElementById('talk-text-input').value;
+  const n = raw.trim() ? Talk.cleanTranscriptText(raw).length : 0;
+  document.getElementById('talk-text-count').textContent =
+    n ? `時刻などを除いた本文: ${n.toLocaleString()}文字` : '';
+}
+
+document.getElementById('btn-talk-text').addEventListener('click', () => {
+  if (!AI.ensureKey(undefined, '要約と質問づくり')) return;
+  const meta = talkMetaFromForm();
+  document.getElementById('talk-text-meta').textContent =
+    `${meta.kind === 'meeting' ? '👥 ミーティング' : '🎓 講演・発表'} · ${meta.title || '(タイトル未入力)'}`
+    + `${meta.speaker ? ' · ' + meta.speaker : ''} — 直したいときは「←」で前の画面へ`;
+  showScreen('talk-text');
+  updateTalkTextCount();
+});
+
+document.getElementById('talk-text-input').addEventListener('input', () => {
+  _textSourceName = '';                       // 手で書き換えたら、ファイル由来とは言えない
+  updateTalkTextCount();
+});
+
+document.getElementById('btn-talk-text-file').addEventListener('click', () => {
+  const input = document.getElementById('talk-text-file');
+  input.value = '';
+  input.click();
+});
+
+document.getElementById('talk-text-file').addEventListener('change', async (e) => {
+  const f = (e.target.files || [])[0];
+  if (!f) return;
+  if (f.size > 5 * 1024 * 1024) {
+    appAlert('ファイルが大きすぎます(5MBまで)。文字起こしのテキストファイルを選んでください。', '📝 読み込み');
+    return;
+  }
+  try {
+    document.getElementById('talk-text-input').value = await f.text();
+    _textSourceName = f.name;
+    updateTalkTextCount();
+  } catch (err) {
+    appAlert('ファイルを読めませんでした: ' + err.message, '📝 読み込み');
+  }
+});
+
+document.getElementById('btn-talk-text-go').addEventListener('click', async () => {
+  const text = Talk.cleanTranscriptText(document.getElementById('talk-text-input').value);
+  if (text.length < 200) {
+    appAlert(`本文が短すぎます(${text.length}文字)。文字起こしを貼り付けるか、ファイルを選んでください。`, '📝 読み込み');
+    return;
+  }
+  const meta = talkMetaFromForm();
+  meta.note = document.getElementById('talk-text-note').value.trim();
+  if (!meta.title) {
+    meta.title = _textSourceName
+      ? _textSourceName.replace(/\.[^.]+$/, '').slice(0, 80)
+      : '文字起こしテキスト';
+  }
+  Talk.loadText(meta, text, _textSourceName);
+  showScreen('talk-result');
+  document.getElementById('talk-share-status').textContent = '';
+  await talkSummarizeStep();
+});
 
 /* ---------- 📁 録音装置の音声ファイルを読み込む(v1.31.0) ---------- */
 /* 選ばれたファイル。確認画面と読み込み処理で共有する */
@@ -1726,8 +1939,35 @@ async function talkSummarizeStep() {
   const actions = document.getElementById('talk-actions');
   actions.classList.add('hidden');
   try {
-    el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">要約を作成中...</p>';
-    await Talk.summarize();
+    // 💡 講演では、要約と並行して質問候補を作る。質疑応答は講演の直後なので、
+    //    先にできたほうから見せる(質問のほうが短いので、たいてい先に出る)。
+    //    すでに全文から作った質問があるとき(要約だけのやり直し)は作り直さない。
+    const cq = Talk.current;
+    const needQ = cq.kind !== 'meeting' && (!cq.questions || cq.questions.partial);
+    el.innerHTML = `<div id="talk-q-first"></div>
+      <div class="spinner"></div><p class="field-note" style="text-align:center">要約を作成中...</p>`;
+    const showFirst = (note) => {
+      const box = document.getElementById('talk-q-first');
+      if (!box || !cq.questions) return;
+      box.innerHTML = `<div class="card"><h3 style="font-size:1rem;margin-bottom:6px">💡 質問候補</h3>
+        ${talkQuestionsHtml()}${note ? `<p class="field-note" style="margin-top:6px">${note}</p>` : ''}</div>`;
+      wireTalkQuestions(box);
+    };
+    if (cq.kind !== 'meeting' && cq.questions) {
+      showFirst(needQ ? '全文から作り直しています…(⭐を付けたものは残ります)' : '');
+    }
+    let qPromise = null;
+    if (needQ) {
+      cq.questionError = '';
+      qPromise = Talk.makeQuestions()
+        .then(() => showFirst(''))
+        .catch((err) => { cq.questionError = '質問候補を作れませんでした: ' + aiErrorText(err); });
+    }
+    try {
+      await Talk.summarize();
+    } finally {
+      if (qPromise) await qPromise;     // 要約が失敗しても、質問は保存に間に合わせる
+    }
     Talk.save();
     // ⚙設定で「録音音声を端末に残す」がオンなら、ここで自動保存する
     if (typeof TalkAudio !== 'undefined' && TalkAudio.keepDefault() && Talk.hasMemoryAudio()) {
@@ -1837,10 +2077,18 @@ function talkErrorView(err) {
       <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
   }
   el.innerHTML += partNotesHtml();
+  // 要約が失敗しても、並行して作った質問候補ができていれば見せる(質疑応答に使うのはこちら)
+  const hasQ = Talk.current && Talk.current.questions &&
+    ((Talk.current.questions.items || []).length || Talk.current.questions.raw);
+  if (hasQ && Talk.current.kind !== 'meeting') {
+    el.innerHTML += `<div class="card"><h3 style="font-size:1rem;margin-bottom:6px">💡 質問候補</h3>
+      <div id="talk-q-list">${talkQuestionsHtml()}</div></div>`;
+  }
   // 要約だけ失敗したのなら、文字起こしからやり直す必要はない
   el.innerHTML += resummarizeBtnHtml('要約をやり直す');
   el.innerHTML += '<div id="talk-audio-box" style="margin-top:12px"></div>';
   wireResummarizeBtn();
+  wireTalkQuestions(document.getElementById('talk-q-list'));
   renderTalkAudioBox();
 }
 
@@ -1851,7 +2099,7 @@ function renderTalkResult() {
     <div class="card">
       <h3 style="font-size:1.05rem;margin-bottom:6px">${escapeHtml(c.title)}</h3>
       <p class="field-note">
-        ${c.speaker ? escapeHtml(c.speaker) + ' · ' : ''}${PracticeUtil.fmtTime(c.durationMs)}
+        ${c.speaker ? escapeHtml(c.speaker) + ' · ' : ''}${c.source === 'text' ? '📝 文字起こしテキストから作成' : PracticeUtil.fmtTime(c.durationMs)}
         ${c.markedText && c.markedText.length ? ' · ⭐' + c.markedText.length : ''}
       </p>
       ${c.source === 'import' && c.sourceFiles && c.sourceFiles.length
@@ -1859,6 +2107,7 @@ function renderTalkResult() {
     </div>
     <div id="talk-audio-box"></div>
     ${partNotesHtml()}
+    ${talkQuestionsCardHtml()}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
     ${resummarizeBtnHtml('要約をやり直す')}
     ${c.transcript ? `
@@ -1868,6 +2117,7 @@ function renderTalkResult() {
       </details>` : ''}
   `;
   wireResummarizeBtn();
+  wireTalkQuestionsCard();
   renderTalkAudioBox();
 }
 
