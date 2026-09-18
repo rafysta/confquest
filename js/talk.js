@@ -615,93 +615,12 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
    * (質問が読めれば用は足りるので、形式の失敗で捨てない)。
    */
   MY_RESEARCH_KEY: 'lq_my_research',
-  QUESTION_MAX_TOKENS: 6000,
-  QUESTION_EFFORT: 'low',          // 速さ優先。質疑応答に間に合わせるため
 
-  QUESTION_TYPES: {
-    memo:      { label: 'メモより',     icon: '📝' },
-    confirm:   { label: '確認',         icon: '🔍' },
-    interpret: { label: '別の解釈',     icon: '🔀' },
-    consensus: { label: '通説との違い', icon: '📚' },
-    propose:   { label: '解析の提案',   icon: '🧪' },
-    relate:    { label: '自分の研究と', icon: '🤝' }
-  },
+  /** 種類の定義は QGen(ai.js)と共通。既存の呼び出しのために別名を残す */
+  get QUESTION_TYPES() { return QGen.TYPES; },
 
   myResearch() {
     return (localStorage.getItem(this.MY_RESEARCH_KEY) || '').trim();
-  },
-
-  _questionPrompt(partial) {
-    return `あなたは、学会講演を聴いている研究者(以下「聴講者」)が質疑応答で良い質問をするのを助けるアシスタントです。講演の文字起こしを読み、聴講者がその中から選んで使える質問の候補を作ってください。
-
-入力について:
-- 文字起こしは自動音声認識の出力で、専門用語や固有名詞の聞き間違いを含みます。スライドは見えていません。
-- 「聴講者の研究・関心」は、聴講者本人が書いた自己紹介です。質問の視点として使ってください。
-- 「メモ」は聴講者が講演中に書いたもの、「重要マーク箇所」は聴講者が注目した場面です。${partial ? `
-- ⚠ この文字起こしは講演の【途中まで】です。結論やまとめはまだ含まれていない可能性があります。すでに示された結果に基づいて質問を作り、「このあと話されそうなこと」を聞く質問は避けてください。` : `
-- 文字起こしに質疑応答が含まれている場合、会場ですでに出た質問と同じ内容は出さないでください。`}
-
-良い質問の条件:
-- 講演で実際に述べられた特定の結果・手法・主張を1つ取り上げ、冒頭でそれに短く触れてから聞く(例: "You showed that ... . Did you ...?")。どの講演にも当てはまる一般的な質問(他の生物種では? 今後の計画は?)は出さない。
-- 講演の中ですでに答えが述べられていることは聞かない。スライドにしか無い情報を前提にしない。
-- 1問につき聞くことは1つ。2〜3文以内、声に出して20秒以内。
-- 講演と同じ言語で書く(英語の講演なら英語)。平易で、そのまま読み上げられる文にする。
-- 聞き間違いの疑いがある固有名詞を質問の中心に据えない。必要なら "the factor you mentioned" のように言い換える。
-- 発表者を試したり誤りを指摘したりする調子にしない。発表者が話したくなる、議論が広がる聞き方にする。
-
-質問の種類(type):
-- "memo": メモに聴講者自身が考えた質問が書かれている場合、その内容を変えずに自然な表現に整えたもの。あれば必ず含め、先頭に置く。
-- "confirm": 手法・条件・定義の確認。気軽に聞けて、答えが結果の解釈に効くもの。
-- "interpret": 同じデータから別の解釈が成り立たないか、対照実験、因果と相関の区別、結論の一般性を問うもの。
-- "consensus": その分野で一般に受け入れられている理解と、この講演の主張・結果が食い違う点、または通説を更新する点を取り上げるもの。発表者が最も話したい新規性であることが多い。通説の側はあなた自身の知識に基づくので、断定せず "I had the impression that ... is generally thought to ... . How do you reconcile this with your result?" のように聞く。通説の内容に自信が持てないとき、食い違いが聞き間違いのせいかもしれないときは、この種類は出さない。
-- "propose": 聴講者の専門(解析手法・持っているツールやデータ)から、発表者のデータに対して行える具体的な解析や比較を提案し、そこから何が分かりそうかを一言添えるもの(例: "Have you looked at ...? If ..., I would expect ... ")。押しつけにならない聞き方にする。聴講者の情報が無ければ、講演内容から自然に導かれる解析の提案にする。
-- "relate": 聴講者の研究との接点を問うもの。講演後の会話や共同研究のきっかけになりうるもの。聴講者の情報もメモも無ければ出さない。
-
-個数と順序:
-- 全部で6〜8個。"memo" と "relate" 以外の種類はできるだけ1個以上含め、聴講者の研究・関心が書かれていれば "propose" は2個まで出してよい。
-- 無理に数を合わせない。根拠の弱い質問を足すくらいなら少なくてよい。
-- あなたが勧める順に並べる(重要マーク箇所に関するものは優先)。
-
-出力形式:
-JSON配列だけを出力してください。前置き・後書き・コードブロックの記号は不要です。各要素は次の形です。
-{"type":"confirm","ja":"何を聞く質問かを日本語で30字程度(一覧から選ぶときに読む)","q":"質問文","basis":"講演のどの内容に基づくかを日本語で短く"}`;
-  },
-
-  /** 質問づくりに渡す利用者メッセージ */
-  _questionUserMessage(transcript, markedText) {
-    const c = this.current;
-    let user = `講演タイトル: ${c.title}
-発表者: ${c.speaker || '不明'}
-会場・セッション: ${c.venue || '不明'}`;
-    const me = this.myResearch();
-    user += `\n\n聴講者の研究・関心:\n${me || '(未記入)'}`;
-    if (c.note) user += `\n\nメモ:\n${c.note}`;
-    if (markedText && markedText.length) {
-      user += `\n\n重要マーク箇所:\n${markedText.join('\n')}`;
-    }
-    user += `\n\n文字起こし:\n${String(transcript).slice(0, this.TRANSCRIPT_LIMIT)}`;
-    return user;
-  },
-
-  /** AIの応答から質問の配列を取り出す。読めなければ null(呼び出し側が raw を見せる) */
-  _parseQuestions(text) {
-    let t = String(text || '').replace(/```json|```/g, '').trim();
-    const a = t.indexOf('[');
-    const b = t.lastIndexOf(']');
-    if (a < 0 || b <= a) return null;
-    let arr;
-    try { arr = JSON.parse(t.slice(a, b + 1)); } catch (_) { return null; }
-    if (!Array.isArray(arr)) return null;
-    const items = arr
-      .filter((x) => x && typeof x.q === 'string' && x.q.trim())
-      .map((x) => ({
-        type: this.QUESTION_TYPES[x.type] ? x.type : 'confirm',
-        ja: String(x.ja || '').trim(),
-        q: x.q.trim(),
-        basis: String(x.basis || '').trim(),
-        picked: false
-      }));
-    return items.length ? items : null;
   },
 
   /**
@@ -717,10 +636,18 @@ JSON配列だけを出力してください。前置き・後書き・コード�
     if (!transcript || !String(transcript).trim()) throw new Error('文字起こしがありません。');
     const marked = o.markedText != null ? o.markedText : (c.markedText || []);
 
-    const text = await AI.chat(
-      this._questionPrompt(!!o.partial),
-      [{ role: 'user', content: this._questionUserMessage(transcript, marked) }],
-      this.QUESTION_MAX_TOKENS, { effort: this.QUESTION_EFFORT });
+    const res = await QGen.generate({
+      mode: 'listener',
+      transcript: transcript,
+      title: c.title,
+      speaker: c.speaker,
+      venue: c.venue,
+      myResearch: this.myResearch(),
+      note: c.note,
+      markedText: marked,
+      partial: !!o.partial,
+      limit: this.TRANSCRIPT_LIMIT
+    });
 
     // 待っている間に状況が変わっていたら、結果を捨てる:
     //  ・別の録音に移っていた
@@ -729,12 +656,11 @@ JSON配列だけを出力してください。前置き・後書き・コード�
     if (c !== this.current) return c.questions || null;
     if (o.partial && c.questions && !c.questions.partial) return c.questions;
 
-    const items = this._parseQuestions(text);
     const kept = ((c.questions && c.questions.items) || []).filter((x) => x.picked);
-    const fresh = (items || []).filter((x) => !kept.some((k) => k.q === x.q));
+    const fresh = res.items.filter((x) => !kept.some((k) => k.q === x.q));
     c.questions = {
       items: kept.concat(fresh),
-      raw: items ? '' : String(text || '').trim(),
+      raw: res.raw,
       partial: !!o.partial,
       atSec: o.atSec != null ? o.atSec : null,
       createdAt: new Date().toISOString()
@@ -823,7 +749,7 @@ JSON配列だけを出力してください。前置き・後書き・コード�
     if (!qs.items || !qs.items.length) return qs.raw ? `## 質問候補\n\n${qs.raw}\n` : '';
     const sorted = qs.items.filter((x) => x.picked).concat(qs.items.filter((x) => !x.picked));
     const lines = sorted.map((x) => {
-      const t = this.QUESTION_TYPES[x.type] || this.QUESTION_TYPES.confirm;
+      const t = QGen.type(x.type);
       return `- ${x.picked ? '⭐ ' : ''}**[${t.label}]** ${x.q}\n  - ${x.ja}${x.basis ? `(根拠: ${x.basis})` : ''}`;
     });
     const head = qs.partial && qs.atSec != null

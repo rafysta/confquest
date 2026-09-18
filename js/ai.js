@@ -285,19 +285,200 @@ ${session.fullTranscript.slice(0, 6000)}`;
     return this.chat(sys, [{ role: 'user', content: user }]);
   },
 
-  /** Q&Aシミュレータの質問生成・追撃 */
-  qaSystemPrompt(persona, session) {
-    const personas = {
-      student: 'a curious graduate student. Ask basic but sincere questions.',
-      general: 'a biologist from a different field. Ask questions about significance and methodology at a general level.',
-      specialist: 'a specialist in the same field. Ask detailed technical questions.',
-      critical: 'a very critical reviewer. Ask sharp questions about causality, controls, and alternative interpretations.'
-    };
-    return `You are simulating audience Q&A after a scientific conference talk. You are ${personas[persona] || personas.general}
-The presentation transcript is below. Ask ONE question at a time in English, based on the actual content. After the presenter answers, either ask a natural follow-up question or briefly (1 sentence) evaluate the answer and ask a new question. Keep each message short (2-4 sentences). You may use **bold** for emphasis and \`backticks\` for technical terms, but do not use headings or long lists.
+  /** Q&Aシミュレータの質問生成・追撃。
+   *  queued に想定質問(QGen が作ったもの)を渡すと、その場で考えた質問ではなく
+   *  リストの質問を順に出す。想定質問は講演の内容に根ざしているので、
+   *  「毎回どこかで聞いたような質問しか来ない」状態を避けられる。 */
+  qaSystemPrompt(persona, session, queued) {
+    const p = QGen.PERSONAS[persona] || QGen.PERSONAS.general;
+    let sys = `You are simulating audience Q&A after a scientific conference talk. You are ${p.en}
+The presentation transcript is below. Ask ONE question at a time in English, based on the actual content. After the presenter answers, either ask a natural follow-up question or briefly (1 sentence) evaluate the answer and ask a new question. Keep each message short (2-4 sentences). You may use **bold** for emphasis and \`backticks\` for technical terms, but do not use headings or long lists.`;
+    if (queued && queued.length) {
+      sys += `
+
+QUESTIONS TO ASK:
+Work through the numbered list below, in order, one question per message. Ask each one essentially as written (you may adjust the wording slightly so it sounds natural in conversation). After the presenter answers, you may ask at most ONE follow-up before moving on to the next number. Do not invent questions of your own until the list is exhausted; once it is, say so in one sentence and then continue freely.
+${queued.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
+    }
+    return `${sys}
 
 TRANSCRIPT:
 ${session.fullTranscript.slice(0, 6000)}`;
+  }
+};
+
+/* ---------- 💡 質問づくり (v1.35.0) ----------
+ * 講演の文字起こしから、質問の候補を作る共通の置き場。2か所から使う。
+ *
+ *   mode:'listener'  🎓講演・発表モード — 自分が聴衆。学会の質疑で自分が聞く質問。
+ *                    ⚙設定の「自分の研究・関心」が質問の視点になる。
+ *   mode:'presenter' 🎤発表練習のQ&A   — 自分が発表者。聴衆から飛んできそうな質問。
+ *                    視点は「質問者のタイプ」(persona)で、自分の研究・関心は使わない
+ *                    (発表内容そのものなので、視点にすると自問自答になる)。
+ *
+ * どちらもJSON配列で受け取る。読めなければ raw を呼び出し側がそのまま見せる
+ * (質問が読めれば用は足りるので、形式の失敗で捨てない)。
+ */
+const QGen = {
+  MAX_TOKENS: 6000,
+  EFFORT: 'low',              // 速さ優先。学会の質疑応答に間に合わせるため
+
+  TYPES: {
+    memo:      { label: 'メモより',     icon: '📝' },
+    confirm:   { label: '確認',         icon: '🔍' },
+    interpret: { label: '別の解釈',     icon: '🔀' },
+    consensus: { label: '通説との違い', icon: '📚' },
+    propose:   { label: '解析の提案',   icon: '🧪' },
+    relate:    { label: '自分の研究と', icon: '🤝' }
+  },
+
+  PERSONAS: {
+    student: {
+      ja: '大学院生',
+      en: 'a curious graduate student. Ask basic but sincere questions.',
+      qja: '好奇心のある大学院生。基本的だが真剣な質問をする。専門用語の意味や、なぜその手法を選んだのかを素直に聞く。'
+    },
+    general: {
+      ja: '分野外の生物学者',
+      en: 'a biologist from a different field. Ask questions about significance and methodology at a general level.',
+      qja: '分野外の生物学者。この研究が何の役に立つのか、他の系にも当てはまるのか、手法の妥当性を一般的なレベルで聞く。'
+    },
+    specialist: {
+      ja: '同分野の専門家',
+      en: 'a specialist in the same field. Ask detailed technical questions.',
+      qja: '同じ分野の専門家。手法の細部、パラメータの選び方、先行研究との食い違い、追加で行える解析まで踏み込んで聞く。'
+    },
+    critical: {
+      ja: '厳しい査読者',
+      en: 'a very critical reviewer. Ask sharp questions about causality, controls, and alternative interpretations.',
+      qja: '厳しい査読者。対照実験の不足、因果と相関の混同、別の解釈の可能性、結論の言い過ぎを鋭く突く。ただし敵意ではなく、論文審査の場として聞く。'
+    }
+  },
+
+  /** 種類の表示(未知の値が来ても落ちないように) */
+  type(key) { return this.TYPES[key] || this.TYPES.confirm; },
+
+  _listenerPrompt(partial) {
+    return `あなたは、学会講演を聴いている研究者(以下「聴講者」)が質疑応答で良い質問をするのを助けるアシスタントです。講演の文字起こしを読み、聴講者がその中から選んで使える質問の候補を作ってください。
+
+入力について:
+- 文字起こしは自動音声認識の出力で、専門用語や固有名詞の聞き間違いを含みます。スライドは見えていません。
+- 「聴講者の研究・関心」は、聴講者本人が書いた自己紹介です。質問の視点として使ってください。
+- 「メモ」は聴講者が講演中に書いたもの、「重要マーク箇所」は聴講者が注目した場面です。${partial ? `
+- ⚠ この文字起こしは講演の【途中まで】です。結論やまとめはまだ含まれていない可能性があります。すでに示された結果に基づいて質問を作り、「このあと話されそうなこと」を聞く質問は避けてください。` : `
+- 文字起こしに質疑応答が含まれている場合、会場ですでに出た質問と同じ内容は出さないでください。`}
+
+${this._commonRules()}
+
+質問の種類(type):
+- "memo": メモに聴講者自身が考えた質問が書かれている場合、その内容を変えずに自然な表現に整えたもの。あれば必ず含め、先頭に置く。
+- "confirm": 手法・条件・定義の確認。気軽に聞けて、答えが結果の解釈に効くもの。
+- "interpret": 同じデータから別の解釈が成り立たないか、対照実験、因果と相関の区別、結論の一般性を問うもの。
+- "consensus": その分野で一般に受け入れられている理解と、この講演の主張・結果が食い違う点、または通説を更新する点を取り上げるもの。発表者が最も話したい新規性であることが多い。通説の側はあなた自身の知識に基づくので、断定せず "I had the impression that ... is generally thought to ... . How do you reconcile this with your result?" のように聞く。通説の内容に自信が持てないとき、食い違いが聞き間違いのせいかもしれないときは、この種類は出さない。
+- "propose": 聴講者の専門(解析手法・持っているツールやデータ)から、発表者のデータに対して行える具体的な解析や比較を提案し、そこから何が分かりそうかを一言添えるもの(例: "Have you looked at ...? If ..., I would expect ... ")。押しつけにならない聞き方にする。聴講者の情報が無ければ、講演内容から自然に導かれる解析の提案にする。
+- "relate": 聴講者の研究との接点を問うもの。講演後の会話や共同研究のきっかけになりうるもの。聴講者の情報もメモも無ければ出さない。
+
+個数と順序:
+- 全部で6〜8個。"memo" と "relate" 以外の種類はできるだけ1個以上含め、聴講者の研究・関心が書かれていれば "propose" は2個まで出してよい。
+- 無理に数を合わせない。根拠の弱い質問を足すくらいなら少なくてよい。
+- あなたが勧める順に並べる(重要マーク箇所に関するものは優先)。
+
+${this._outputRules()}`;
+  },
+
+  _presenterPrompt(persona) {
+    const p = this.PERSONAS[persona] || this.PERSONAS.general;
+    return `あなたは、学会発表の練習をしている研究者(以下「発表者」)が質疑応答に備えるのを助けるアシスタントです。発表の文字起こしを読み、本番で聴衆から飛んできそうな質問を作ってください。発表者はこれを使って答える練習をします。
+
+質問者の立場:
+あなたは【${p.ja}】として質問します。${p.qja}
+
+入力について:
+- 文字起こしは、発表者が練習で話した内容を自動音声認識にかけたものです。専門用語や固有名詞の聞き間違いを含みます。スライドは見えていません。
+- 文字起こしが途中で切れている、または一部しか無い場合は、聞き取れた範囲だけを根拠にしてください。
+
+${this._commonRules()}
+- 発表の中で明確に答えられている内容は聞かないでください。ただし、一度触れただけで説明が足りない点、聞き手が誤解しそうな点は、むしろ良い質問になります。
+- 答えにくい質問を避けないでください。本番で困るのは、準備していなかった質問です。
+
+質問の種類(type):
+- "confirm": 手法・条件・定義の確認。発表では飛ばされたが、結果の解釈に必要なもの。
+- "interpret": 同じデータから別の解釈が成り立たないか、対照実験の不足、因果と相関の区別、結論の一般性を問うもの。
+- "consensus": その分野で一般に受け入れられている理解と、この発表の主張が食い違う点。断定はせず、どう両立するのかを尋ねる形にする。自信が持てないときはこの種類を出さない。
+- "propose": 発表のデータに対して行える追加の解析や実験を提案し、そこから何が分かりそうかを添えるもの。
+
+個数と順序:
+- 全部で6〜8個。答えやすいものから難しいものへ並べる(本番もたいていその順で来る)。
+- 無理に数を合わせない。根拠の弱い質問を足すくらいなら少なくてよい。
+
+${this._outputRules(true)}`;
+  },
+
+  _commonRules() {
+    return `良い質問の条件:
+- 発表で実際に述べられた特定の結果・手法・主張を1つ取り上げ、冒頭でそれに短く触れてから聞く(例: "You showed that ... . Did you ...?")。どの発表にも当てはまる一般的な質問(他の生物種では? 今後の計画は?)は出さない。
+- スライドにしか無い情報を前提にしない。
+- 1問につき聞くことは1つ。2〜3文以内、声に出して20秒以内。
+- 発表と同じ言語で書く(英語の発表なら英語)。平易で、そのまま読み上げられる文にする。
+- 聞き間違いの疑いがある固有名詞を質問の中心に据えない。必要なら "the factor you mentioned" のように言い換える。
+- 発表者を試したり誤りを指摘したりする調子にしない。発表者が話したくなる、議論が広がる聞き方にする。`;
+  },
+
+  _outputRules(forPresenter) {
+    return `出力形式:
+JSON配列だけを出力してください。前置き・後書き・コードブロックの記号は不要です。各要素は次の形です。
+{"type":"confirm","ja":"何を聞く質問かを日本語で30字程度(一覧から選ぶときに読む)","q":"質問文","basis":"${forPresenter ? '発表のどの内容に対する質問かを日本語で短く' : '講演のどの内容に基づくかを日本語で短く'}"}`;
+  },
+
+  /** AIの応答から質問の配列を取り出す。読めなければ null(呼び出し側が raw を見せる) */
+  parse(text) {
+    const t = String(text || '').replace(/```json|```/g, '').trim();
+    const a = t.indexOf('[');
+    const b = t.lastIndexOf(']');
+    if (a < 0 || b <= a) return null;
+    let arr;
+    try { arr = JSON.parse(t.slice(a, b + 1)); } catch (_) { return null; }
+    if (!Array.isArray(arr)) return null;
+    const items = arr
+      .filter((x) => x && typeof x.q === 'string' && x.q.trim())
+      .map((x) => ({
+        type: this.TYPES[x.type] ? x.type : 'confirm',
+        ja: String(x.ja || '').trim(),
+        q: x.q.trim(),
+        basis: String(x.basis || '').trim(),
+        picked: false
+      }));
+    return items.length ? items : null;
+  },
+
+  /**
+   * 質問を作る。戻り値 { items, raw }。items が空で raw だけのことがある。
+   * ctx: { mode, transcript, title, speaker, venue, myResearch, note,
+   *        markedText, partial, persona, limit }
+   */
+  async generate(ctx) {
+    const c = ctx || {};
+    const transcript = String(c.transcript || '');
+    if (!transcript.trim()) throw new Error('文字起こしがありません。');
+    const presenter = c.mode === 'presenter';
+    const sys = presenter ? this._presenterPrompt(c.persona) : this._listenerPrompt(!!c.partial);
+
+    let user = presenter
+      ? `発表タイトル: ${c.title || '不明'}`
+      : `講演タイトル: ${c.title || '不明'}\n発表者: ${c.speaker || '不明'}\n会場・セッション: ${c.venue || '不明'}`;
+    if (!presenter) {
+      user += `\n\n聴講者の研究・関心:\n${c.myResearch || '(未記入)'}`;
+      if (c.note) user += `\n\nメモ:\n${c.note}`;
+      if (c.markedText && c.markedText.length) {
+        user += `\n\n重要マーク箇所:\n${c.markedText.join('\n')}`;
+      }
+    }
+    user += `\n\n文字起こし:\n${transcript.slice(0, c.limit || 200000)}`;
+
+    const text = await AI.chat(sys, [{ role: 'user', content: user }],
+      this.MAX_TOKENS, { effort: this.EFFORT });
+    const items = this.parse(text);
+    return { items: items || [], raw: items ? '' : String(text || '').trim() };
   }
 };
 

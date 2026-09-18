@@ -993,7 +993,7 @@ document.getElementById('btn-ai-feedback').addEventListener('click', async () =>
 });
 
 /* ---------- Q&Aシミュレータ ---------- */
-const QA = { messages: [] };
+const QA = { messages: [], plan: null, persona: '' };
 
 document.getElementById('btn-qa-sim').addEventListener('click', () => {
   if (!Practice.session || !Practice.session.fullTranscript.trim()) {
@@ -1001,14 +1001,107 @@ document.getElementById('btn-qa-sim').addEventListener('click', () => {
     return;
   }
   QA.messages = [];
+  QA.plan = null;
+  QA.persona = '';
   document.getElementById('qa-log').innerHTML = '';
   document.getElementById('qa-start').style.display = 'block';
+  renderQaPlan();
   showScreen('qa');
+});
+
+/* ---------- 💡 想定質問 (v1.35.0) ----------
+ * 🎓講演モードの質問づくり(QGen)を、発表者の側から使う。
+ * 聴衆の視点は「質問者のタイプ」で決まるので、⚙設定の「自分の研究・関心」は渡さない
+ * (自分の発表について自分の視点で質問を作ると、自問自答になってしまう)。
+ *
+ * 作った質問は QA.plan に入れ、⭐を付けたものがあれば、それだけを
+ * シミュレータに渡す(本番前に不安な質問だけを繰り返し練習できる)。
+ */
+function renderQaPlan() {
+  const list = document.getElementById('qa-plan-list');
+  const start = document.getElementById('btn-qa-plan-start');
+  const btn = document.getElementById('btn-qa-plan');
+  const hint = document.getElementById('qa-plan-hint');
+  const has = QA.plan && (QA.plan.items.length || QA.plan.raw);
+  start.classList.toggle('hidden', !(QA.plan && QA.plan.items.length));
+  btn.textContent = has ? '🔁 作り直す' : '💡 想定質問を作る';
+  if (!has) { list.innerHTML = ''; return; }
+  if (!QA.plan.items.length) {
+    list.innerHTML = `<div class="md-body">${renderMarkdown(QA.plan.raw)}</div>`;
+    return;
+  }
+  const picked = QA.plan.items.filter((x) => x.picked).length;
+  hint.textContent = picked
+    ? `⭐を付けた${picked}問だけを順に受けます。`
+    : 'タップで質問文が開きます。⭐を付けると、その質問だけを受けられます(付けなければ全部)。';
+  list.innerHTML = QA.plan.items.map((x, i) => {
+    const t = QGen.type(x.type);
+    return `<details class="q-item${x.picked ? ' picked' : ''}" data-qa-idx="${i}">
+      <summary>
+        <span class="q-type">${t.icon} ${escapeHtml(t.label)}</span>
+        <span class="q-ja">${escapeHtml(x.ja || x.q.slice(0, 40))}</span>
+        <button class="q-pick" type="button" aria-label="この質問を選ぶ">${x.picked ? '⭐' : '☆'}</button>
+      </summary>
+      <p class="q-text">${escapeHtml(x.q)}</p>
+      ${x.basis ? `<p class="field-note">${escapeHtml(x.basis)}</p>` : ''}
+    </details>`;
+  }).join('');
+  list.querySelectorAll('.q-pick').forEach((b) => {
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const x = QA.plan.items[Number(b.closest('.q-item').dataset.qaIdx)];
+      if (!x) return;
+      x.picked = !x.picked;
+      renderQaPlan();
+    });
+  });
+}
+
+/** シミュレータに渡す質問(⭐があればそれだけ、無ければ全部) */
+function qaQueue() {
+  if (!QA.plan || !QA.plan.items.length) return null;
+  const picked = QA.plan.items.filter((x) => x.picked);
+  return (picked.length ? picked : QA.plan.items).map((x) => x.q);
+}
+
+document.getElementById('btn-qa-plan').addEventListener('click', async () => {
+  if (!Practice.session || !AI.ensureKey(null, '想定質問づくり')) return;
+  const list = document.getElementById('qa-plan-list');
+  const btn = document.getElementById('btn-qa-plan');
+  btn.disabled = true;
+  list.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">聴衆の立場で質問を考えています…</p>';
+  try {
+    QA.persona = document.getElementById('qa-persona').value;
+    QA.plan = await QGen.generate({
+      mode: 'presenter',
+      persona: QA.persona,
+      transcript: Practice.session.fullTranscript,
+      title: Practice.pdfName || '発表練習',
+      limit: 20000
+    });
+  } catch (err) {
+    QA.plan = null;
+    list.innerHTML = `<p class="md-error">${escapeHtml(aiErrorText(err))}</p>`;
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+  renderQaPlan();
+});
+
+document.getElementById('btn-qa-plan-start').addEventListener('click', async () => {
+  if (!AI.ensureKey(null, 'Q&Aシミュレータ')) return;
+  QA.messages = [{ role: 'user', content: 'Please ask your first question about my presentation.' }];
+  document.getElementById('qa-log').innerHTML = '';
+  document.getElementById('qa-start').style.display = 'none';
+  await qaAsk();
 });
 
 document.getElementById('qa-start').addEventListener('click', async () => {
   if (!AI.ensureKey(null, 'Q&Aシミュレータ')) return;
   document.getElementById('qa-start').style.display = 'none';
+  // 想定質問を作っていなければ、これまでどおりAIがその場で考える
   QA.messages = [{ role: 'user', content: 'Please ask your first question about my presentation.' }];
   await qaAsk();
 });
@@ -1031,7 +1124,9 @@ async function qaAsk() {
   log.scrollTop = log.scrollHeight;
   try {
     const persona = document.getElementById('qa-persona').value;
-    const sys = AI.qaSystemPrompt(persona, Practice.session);
+    // 想定質問は作ったときのタイプのもの。途中でタイプを変えたら、質問リストは使わない
+    const queue = (QA.plan && QA.persona === persona) ? qaQueue() : null;
+    const sys = AI.qaSystemPrompt(persona, Practice.session, queue);
     const reply = await AI.chat(sys, QA.messages, 500);
     QA.messages.push({ role: 'assistant', content: reply });
     spinner.remove();
