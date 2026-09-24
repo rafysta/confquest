@@ -1878,23 +1878,50 @@ audio { width: 100%; margin-bottom: 12px; }
 .rec-meter { width: 100%; max-width: 420px; margin: 4px auto 8px; }
 .rec-meter-row { display: flex; align-items: center; gap: 8px; }
 .rec-meter-track {
-  flex: 1; height: 12px; border-radius: 6px;
+  position: relative;
+  flex: 1; height: 14px; border-radius: 7px;
   background: #0f172a; border: 1px solid #334155;
   overflow: hidden;
 }
+/* 目安の範囲(25%〜90%)をうっすら示す。ここにバーの山が入っていればOK */
+.rec-meter-okband {
+  position: absolute; top: 0; bottom: 0; left: 25%; width: 65%;
+  background: rgba(74, 222, 128, 0.08);
+}
 .rec-meter-fill {
+  position: relative;
   height: 100%; width: 0%;
-  border-radius: 6px;
-  transition: width 0.12s linear, background-color 0.2s;
+  transition: width 0.12s linear, background-color 0.25s;
   background: #4ade80;
 }
-.rec-meter-fill[data-zone="quiet"] { background: #64748b; }
+.rec-meter-fill[data-zone="quiet"] { background: #475569; }
 .rec-meter-fill[data-zone="ok"] { background: #4ade80; }
-.rec-meter-fill[data-zone="loud"] { background: #facc15; }
+.rec-meter-fill[data-zone="loud"] { background: #f59e0b; }
+/* ピークホールド(直近の最大値) */
+.rec-meter-peak {
+  position: absolute; top: 2px; bottom: 2px; left: 0%; width: 2px;
+  background: #e2e8f0; opacity: 0.7;
+  transition: left 0.12s linear;
+  z-index: 1;
+}
+/* 目安の線 */
+.rec-meter-line {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: #cbd5e1; opacity: 0.9;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.6);   /* 緑のバーの上でも見えるように */
+  z-index: 1;
+}
+.rec-meter-line.quiet { left: 25%; }
+.rec-meter-line.loud { left: 90%; background: #f59e0b; opacity: 0.5; }
+/* 文言の場所はあらかじめ1行ぶん確保する(出たり消えたりしてもレイアウトが動かない) */
 .rec-meter-label {
   font-size: 0.78rem; color: var(--text-dim);
-  text-align: center; margin-top: 5px; min-height: 1.2em;
+  text-align: center; margin-top: 5px;
+  height: 1.4em; line-height: 1.4em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: color 0.3s;
 }
+.rec-meter-label[data-level="warn"] { color: var(--warn); }
 
 /* 全文チェックボックスの無効状態 (v1.24.3) */
 .checkbox-field.disabled-field { opacity: 0.55; }

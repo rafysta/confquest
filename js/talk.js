@@ -179,6 +179,9 @@ const Talk = {
   meterTimer: null,
   _meterBuf: null,
   _quietSince: 0,
+  _loudAt: 0,
+  _peakPct: 0,
+  _peakAt: 0,
 
   /** マイク入力をWeb Audioで監視する(非対応端末では静かに諦める) */
   setupMeter(stream) {
@@ -192,6 +195,8 @@ const Talk = {
       src.connect(this.analyser);   // 出力(スピーカー)へはつながない
       this._meterBuf = new Float32Array(this.analyser.fftSize);
       this._quietSince = Date.now();
+      this._loudAt = 0;
+      this._peakPct = 0;
       this.meterTimer = setInterval(() => this.updateMeter(), 120);
       const box = document.getElementById('talk-meter');
       if (box) box.classList.remove('hidden');
@@ -205,26 +210,48 @@ const Talk = {
    * 音量(RMS)を「量と評価」に変換する。テスト可能な純関数。
    * 戻り値: { pct: 0-100, zone: 'quiet'|'ok'|'loud', label }
    */
+  /* 目安の線(dBFS)。バーの位置は (db + 60) / 60 で 0〜100% に直す → 小さめ=25%、大きめ=90% */
+  METER_QUIET_DB: -45,
+  METER_LOUD_DB: -6,
+  METER_QUIET_MS: 5000,    // これだけ一度も線に届かなければ「小さめ」と出す
+  METER_SILENT_MS: 12000,  // これだけ続けば「ほぼ無音」と強めに出す
+  METER_LOUD_HOLD_MS: 3000,// 大きすぎた後、表示をこれだけ残す(点滅させないため)
+
   meterInfo(rms) {
     const db = 20 * Math.log10(Math.max(rms, 1e-6));   // -120〜0 dBFS
     const pct = Math.max(0, Math.min(100, Math.round((db + 60) / 60 * 100)));
-    if (db < -45) return { pct, zone: 'quiet', label: '🔇 音が小さいようです — 端末を音源に近づけてください' };
-    if (db > -6) return { pct, zone: 'loud', label: '⚠ 大きすぎるかも(音割れ注意) — 少し離すと安全です' };
-    return { pct, zone: 'ok', label: '✓ 十分な音量で録音できています' };
+    const zone = db < this.METER_QUIET_DB ? 'quiet' : (db > this.METER_LOUD_DB ? 'loud' : 'ok');
+    return { pct, zone, db };
+  },
+
+  /**
+   * 表示する文言を決める(テスト可能な純関数)。
+   * 話し声は一瞬ごとに上下するので、瞬間の音量では判定しない。
+   * 「一定時間、一度も線に届かなかった」ときだけ出し、問題がなければ空文字(何も出さない)。
+   * 戻り値 { text, level }  level: '' | 'note' | 'warn'
+   */
+  meterMessage(quietMs, loudRecently) {
+    if (quietMs >= this.METER_SILENT_MS) return { text: 'ほぼ無音が続いています — マイクを確認してください', level: 'warn' };
+    if (quietMs >= this.METER_QUIET_MS) return { text: '音が小さめです — 端末を話し手に近づけてください', level: 'note' };
+    if (loudRecently) return { text: '音が大きめです — 少し離すと音割れを防げます', level: 'note' };
+    return { text: '', level: '' };
   },
 
   updateMeter() {
     if (!this.analyser) return;
     const fill = document.getElementById('talk-meter-fill');
+    const peak = document.getElementById('talk-meter-peak');
     const label = document.getElementById('talk-meter-label');
-    const warn = document.getElementById('talk-meter-warn');
     if (!fill || !label) return;
+    const now = Date.now();
     if (this.paused) {
-      label.textContent = '⏸ 一時停止中(音量の監視も停止)';
+      label.textContent = '一時停止中';
+      label.dataset.level = '';
       fill.style.width = '0%';
       fill.dataset.zone = 'quiet';
-      this._quietSince = Date.now();
-      if (warn) warn.classList.add('hidden');
+      if (peak) peak.style.left = '0%';
+      this._quietSince = now;
+      this._peakPct = 0;
       return;
     }
     this.analyser.getFloatTimeDomainData(this._meterBuf);
@@ -233,14 +260,20 @@ const Talk = {
     const info = this.meterInfo(Math.sqrt(sum / this._meterBuf.length));
     fill.style.width = info.pct + '%';
     fill.dataset.zone = info.zone;
-    label.textContent = info.label;
-    // 10秒以上「小さすぎ」が続いたら強めの警告
-    if (info.zone === 'quiet') {
-      if (warn) warn.classList.toggle('hidden', Date.now() - this._quietSince < 10000);
-    } else {
-      this._quietSince = Date.now();
-      if (warn) warn.classList.add('hidden');
-    }
+
+    // ピークホールド: 直近の最大値に細い線を残し、ゆっくり下げる。
+    // 話し声の山が目安の線を越えているかが一目で分かる。
+    if (info.pct >= (this._peakPct || 0)) { this._peakPct = info.pct; this._peakAt = now; }
+    else if (now - (this._peakAt || 0) > 1200) this._peakPct = Math.max(info.pct, this._peakPct - 2);
+    if (peak) peak.style.left = this._peakPct + '%';
+
+    if (info.zone !== 'quiet') this._quietSince = now;
+    if (info.zone === 'loud') this._loudAt = now;
+    const msg = this.meterMessage(now - this._quietSince,
+      now - (this._loudAt || 0) < this.METER_LOUD_HOLD_MS);
+    // 同じ文言なら書き換えない(不要な再描画をしない)
+    if (label.textContent !== msg.text) label.textContent = msg.text;
+    label.dataset.level = msg.level;
   },
 
   stopMeter() {
