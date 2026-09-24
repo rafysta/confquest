@@ -25,7 +25,7 @@ const Talk = {
    * 再生できず、Whisperにも "Invalid file format" (400) で弾かれます。
    * → 受け皿は必ずレコーダーごとのクロージャに閉じ込めること。
    */
-  SEGMENT_SEC: 2700,                    // 45分。多くの講演は1パートに収まる
+  SEGMENT_SEC: 900,                     // 15分(v1.36.0で45分から短縮)。1パート約3.6MBに抑え、送信失敗の影響を小さくする
   SEGMENT_BYTES: 18 * 1024 * 1024,      // 18MB(APIの25MB上限に余裕を持たせる)
   stream: null,
   segments: [],       // 確定済みセグメント [{blob, startSec}]

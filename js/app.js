@@ -1639,8 +1639,79 @@ function renderStatus() {
 }
 
 /* ---------- 講演の録音・要約 ---------- */
+/* ---------- 🛡 録音前のVPN確認 ----------
+ * ブラウザからは「VPNがオンかどうか」を直接知る手段がない(OSがアプリに見せない)。
+ * そこで、①文字起こしAPIに実際に届くかを短時間で試し、②VPNについて本人に確認してもらう。
+ * 長い録音は1パートが十数MBになり、VPN経由の送信は途中で切れやすい(v1.36.0の背景)。
+ * 「次回から表示しない」は lq_vpn_warn_off に保存する。
+ */
+function confirmBeforeRecording() {
+  if (localStorage.getItem('lq_vpn_warn_off') === '1') return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const old = document.getElementById('vpn-warn-overlay');
+    if (old) old.remove();
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.id = 'vpn-warn-overlay';
+    ov.innerHTML = `
+      <div class="modal-box">
+        <h3>🛡 録音前の確認</h3>
+        <p class="field-note">
+          VPN(NordVPNなど)を使っていると、録音終了後の<strong>文字起こしの送信が途中で切れる</strong>ことがあります。
+          長い録音ほど失敗しやすいので、<strong>VPNをオフにしてから</strong>録音を始めることをおすすめします。
+        </p>
+        <p class="field-note" id="vpn-warn-net">🔎 文字起こしAPIへの接続を確認中…</p>
+        <label class="field-note" style="display:flex;align-items:center;gap:8px;margin:10px 0">
+          <input type="checkbox" id="vpn-warn-skip"> 次回から表示しない
+        </label>
+        <button class="btn-large primary" id="btn-vpn-go">VPNはオフです — 録音を始める</button>
+        <button class="btn-large" id="btn-vpn-anyway">このまま続ける</button>
+        <button class="btn-large" id="btn-vpn-cancel">キャンセル</button>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = (result) => {
+      if (result && ov.querySelector('#vpn-warn-skip').checked) localStorage.setItem('lq_vpn_warn_off', '1');
+      ov.remove();
+      resolve(result);
+    };
+    ov.querySelector('#btn-vpn-go').addEventListener('click', () => close(true));
+    ov.querySelector('#btn-vpn-anyway').addEventListener('click', () => close(true));
+    ov.querySelector('#btn-vpn-cancel').addEventListener('click', () => close(false));
+    // 接続テスト(結果が出る前にボタンを押しても構わない)
+    STT.checkConnection(8000).then((r) => {
+      const el = ov.querySelector('#vpn-warn-net');
+      if (!el) return;
+      el.textContent = r.ok
+        ? '✅ 文字起こしAPIに接続できました(短い確認だけなので、長い送信が切れないことの保証ではありません)'
+        : `⚠ 文字起こしAPIに接続できません: ${r.why}。この状態で録音すると文字起こしが失敗します`;
+      if (!r.ok) el.style.color = 'var(--warn, #e0a020)';
+    });
+  });
+}
+
+/* ---------- 📱 画面消灯の抑止(録音〜要約の間) ----------
+ * Androidは画面が消えるとPWAの長い通信を止めることがある。Wake Lock API が使える端末では、
+ * 録音開始から要約完了まで画面を点けたままにする。非対応端末では静かに何もしない。
+ */
+let _wakeLock = null;
+async function keepScreenOn() {
+  if (!('wakeLock' in navigator) || _wakeLock) return;
+  try {
+    _wakeLock = await navigator.wakeLock.request('screen');
+    _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+  } catch (_) { /* 権限なし・省電力モードなど */ }
+}
+function releaseScreen() {
+  if (_wakeLock) { try { _wakeLock.release(); } catch (_) { /* 無視 */ } _wakeLock = null; }
+}
+// 別アプリから戻ってきたときにロックが外れているので取り直す
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Talk.recorder && Talk.recorder.state !== 'inactive') keepScreenOn();
+});
+
 document.getElementById('btn-talk-start').addEventListener('click', async () => {
   if (!AI.ensureKey('openai', '講演の録音・要約')) return;
+  if (!(await confirmBeforeRecording())) return;
   const meta = {
     kind: document.getElementById('talk-kind').value,
     title: document.getElementById('talk-title').value.trim(),
@@ -1654,6 +1725,7 @@ document.getElementById('btn-talk-start').addEventListener('click', async () => 
     appAlert('録音を開始できませんでした: ' + err.message, '🎙️ エラー');
     return;
   }
+  keepScreenOn();
   document.getElementById('talk-note').value = '';
   resetEarlyQuestionUI(meta.kind);
   document.getElementById('btn-talk-pause').textContent = '⏸ 一時停止';
@@ -2015,6 +2087,7 @@ async function talkTranscribeStep(lang) {
   try {
     if (lang !== undefined) Talk.current.lang = lang;
     el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中...</p>';
+    keepScreenOn();
     await Talk.transcribe((done, total) => {
       if (total > 1) {
         el.innerHTML = `<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中... (パート ${done}/${total})</p>`;
@@ -2026,6 +2099,8 @@ async function talkTranscribeStep(lang) {
     await talkSummarizeStep();
   } catch (err) {
     talkErrorView(err);
+  } finally {
+    releaseScreen();
   }
 }
 
@@ -2171,7 +2246,8 @@ function talkErrorView(err) {
     el.innerHTML += `<p class="field-note">文字起こしは保存しました。「聴講した講演」から確認できます。</p>
       <div class="transcript-box">${escapeHtml(Talk.current.transcript)}</div>`;
   }
-  el.innerHTML += partNotesHtml();
+  // 全パート失敗のエラー文にはパートごとの理由が既に入っているので、同じ一覧を二重に出さない
+  if (!(err && err.partNotes)) el.innerHTML += partNotesHtml();
   // 要約が失敗しても、並行して作った質問候補ができていれば見せる(質疑応答に使うのはこちら)
   const hasQ = Talk.current && Talk.current.questions &&
     ((Talk.current.questions.items || []).length || Talk.current.questions.raw);

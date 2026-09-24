@@ -96,24 +96,87 @@ const STT = {
     // 期待するフレーズをヒントとして渡すと、短い発話の認識が目標語彙に寄る
     if (prompt) form.append('prompt', prompt);
 
-    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${key}` },
-      body: form
-    });
-    if (!res.ok) {
+    // ★ 大きなパート(数MB〜十数MB)の送信は、VPN・電波・画面消灯などで途中で切れることがある。
+    //   その場合 fetch は HTTP 応答なしの TypeError("Failed to fetch") を投げるので、
+    //   時間切れ(AbortController)と一時的な失敗(ネットワーク断・5xx・429)は数回やり直す。
+    //   401/403/400 のような「やり直しても同じ」失敗は即座に投げる。
+    const mb = (blob.size / 1048576).toFixed(1);
+    const timeoutMs = this.uploadTimeoutMs(blob.size);
+    let lastErr = null;
+    for (let attempt = 1; attempt <= this.UPLOAD_RETRIES; attempt++) {
+      const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
+      let res;
+      try {
+        res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${key}` },
+          body: form,
+          signal: ctl ? ctl.signal : undefined
+        });
+      } catch (err) {
+        if (timer) clearTimeout(timer);
+        const aborted = err && err.name === 'AbortError';
+        lastErr = new Error(aborted
+          ? `送信が${Math.round(timeoutMs / 1000)}秒以内に終わりませんでした(${mb}MB)`
+          : `送信中に接続が切れました(${mb}MB): ${(err && err.message) || err}`);
+        if (attempt < this.UPLOAD_RETRIES) { await this._sleep(this.retryWaitMs(attempt)); continue; }
+        throw new Error(`${lastErr.message} — ${this.UPLOAD_RETRIES}回試しました。VPNをオフにする・Wi-Fiに切り替える・画面を消さない、で改善することがあります`);
+      }
+      if (timer) clearTimeout(timer);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.segments) && data.segments.length > 0) {
+          return data.segments.map((sg) => ({ start: sg.start, end: sg.end, text: sg.text }));
+        }
+        // segmentsが無い場合は全文を1セグメント扱い
+        return data.text ? [{ start: 0, end: 0, text: data.text }] : [];
+      }
       if (res.status === 401 || res.status === 403) throw apiAuthError('openai', res.status);
       const body = await res.text().catch(() => '');
-      throw new Error(`文字起こしAPIエラー (${res.status}): ${body.slice(0, 200)}`);
+      lastErr = new Error(`文字起こしAPIエラー (${res.status}): ${body.slice(0, 200)}`);
+      const transient = res.status === 429 || res.status >= 500;
+      if (!transient || attempt >= this.UPLOAD_RETRIES) throw lastErr;
+      await this._sleep(this.retryWaitMs(attempt));
     }
-    const data = await res.json();
-    if (Array.isArray(data.segments) && data.segments.length > 0) {
-      return data.segments.map((sg) => ({ start: sg.start, end: sg.end, text: sg.text }));
+    throw lastErr || new Error('文字起こしに失敗しました');
+  },
+
+  /** 送信のやり直し回数(初回を含む) */
+  UPLOAD_RETRIES: 3,
+  /** 送信の時間切れ: 基本60秒 + 1MBあたり20秒(遅い回線で10MBなら約4分半) */
+  uploadTimeoutMs(bytes) {
+    return 60000 + Math.round(bytes / 1048576) * 20000;
+  },
+  /** 待ち時間: 2秒 → 5秒 */
+  retryWaitMs(attempt) { return attempt === 1 ? 2000 : 5000; },
+  _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); },
+
+  /**
+   * 文字起こしAPIに届くかを短時間で確かめる(キーの正否も分かる)。
+   * 録音を始める前の確認用。{ ok, why } を返し、例外は投げない。
+   */
+  async checkConnection(timeoutMs) {
+    const key = this.getKey();
+    if (!key) return { ok: false, why: 'OpenAI APIキーが未設定です' };
+    const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs || 8000) : null;
+    try {
+      const res = await fetch('https://api.openai.com/v1/models/whisper-1', {
+        headers: { 'Authorization': `Bearer ${key}` },
+        signal: ctl ? ctl.signal : undefined
+      });
+      if (timer) clearTimeout(timer);
+      if (res.status === 401 || res.status === 403) return { ok: false, why: 'APIキーが認証エラーです' };
+      return { ok: true };
+    } catch (err) {
+      if (timer) clearTimeout(timer);
+      return { ok: false, why: (err && err.name === 'AbortError') ? '応答がありません(時間切れ)' : '接続できません' };
     }
-    // segmentsが無い場合は全文を1セグメント扱い
-    return data.text ? [{ start: 0, end: 0, text: data.text }] : [];
   }
 };
+
+
 
 const AI = {
   /** 'claude' | 'openai' */
