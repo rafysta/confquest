@@ -1709,8 +1709,89 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && Talk.recorder && Talk.recorder.state !== 'inactive') keepScreenOn();
 });
 
+/* ---------- 🛟 録音の中断と復元 (v1.37.0) ---------- */
+/** 録音中の画面に「止まっていました」を出す(Talk.onInterrupt から呼ばれる) */
+Talk.onInterrupt = (info) => {
+  const box = document.getElementById('talk-interrupt');
+  if (!box) return;
+  const lostSec = (Date.now() - info.lostFrom) / 1000;
+  document.getElementById('talk-interrupt-msg').innerHTML =
+    `<strong>⚠ ${PracticeUtil.fmtTime(info.atSec * 1000)} の時点で録音が止まっていました</strong><br>` +
+    `${escapeHtml(info.reason)}。` + (lostSec >= 10 ? `${Talk.fmtLost(lostSec)}は録音されていません。` : '') +
+    'ここまでの音声は残っています。';
+  document.getElementById('talk-interrupt-err').textContent = '';
+  box.classList.remove('hidden');
+  const pause = document.getElementById('btn-talk-pause');
+  if (pause) pause.disabled = true;
+  if (document.visibilityState === 'visible' && navigator.vibrate) { try { navigator.vibrate(300); } catch (_) { /* 無視 */ } }
+};
+
+document.getElementById('btn-talk-resume').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-talk-resume');
+  btn.disabled = true;
+  try {
+    await Talk.resumeAfterInterrupt();
+    document.getElementById('talk-interrupt').classList.add('hidden');
+    const pause = document.getElementById('btn-talk-pause');
+    if (pause) { pause.disabled = false; pause.textContent = '⏸ 一時停止'; }
+    keepScreenOn();
+  } catch (err) {
+    document.getElementById('talk-interrupt-err').textContent =
+      'マイクを使えませんでした: ' + ((err && err.message) || err) + '。「終了して要約」で、ここまでの分を要約できます。';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/** 起動時: 要約まで済んでいない録音の途中保存が残っていれば、復元するか尋ねる */
+async function offerRecordingRecovery() {
+  if (typeof RecJournal === 'undefined' || (Talk.recorder && Talk.recorder.state !== 'inactive')) return;
+  const j = await RecJournal.load();
+  if (!j) return;
+  // すでに要約まで済んで保存されている録音なら、途中保存を片付けるだけ
+  const saved = JSON.parse(localStorage.getItem('lq_talks') || '[]').find((t) => t.id === j.meta.id);
+  if (saved && saved.summary) { RecJournal.clear(); return; }
+  const m = j.meta;
+  const when = m.updatedAt ? new Date(m.updatedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.innerHTML = `
+    <div class="modal-box">
+      <h3>🛟 途中の録音が残っています</h3>
+      <p class="field-note">
+        「${escapeHtml(m.title || '無題')}」(約${Math.max(1, Math.round((m.audioSec || 0) / 60))}分・${j.bytes >= 1048576 ? (j.bytes / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(j.bytes / 1024)) + 'KB'}${when ? '・最終 ' + when : ''})が、
+        要約されないまま残っています。録音中にアプリが終了されたか、文字起こしに失敗した録音です。
+      </p>
+      <button class="btn-large primary" id="btn-recover-go">復元して文字起こし・要約する</button>
+      <button class="btn-large" id="btn-recover-later">あとで</button>
+      <button class="btn-large" id="btn-recover-drop">破棄する</button>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#btn-recover-later').addEventListener('click', () => ov.remove());
+  ov.querySelector('#btn-recover-drop').addEventListener('click', async () => {
+    ov.remove();
+    if (await appConfirm('途中の録音を破棄します。元に戻せません。よろしいですか?', '🛟 途中の録音')) RecJournal.clear();
+    else offerRecordingRecovery();
+  });
+  ov.querySelector('#btn-recover-go').addEventListener('click', async () => {
+    ov.remove();
+    if (!AI.ensureKey('openai', '録音の文字起こし')) return;
+    Talk.loadRecovered(j);
+    showScreen('talk-result');
+    document.getElementById('talk-share-status').textContent = '';
+    await talkTranscribeStep();
+  });
+}
+
 document.getElementById('btn-talk-start').addEventListener('click', async () => {
   if (!AI.ensureKey('openai', '講演の録音・要約')) return;
+  // 新しく録音すると途中保存は上書きされるので、残っていれば先に確かめる
+  if (typeof RecJournal !== 'undefined') {
+    const j = await RecJournal.load();
+    const saved = j && JSON.parse(localStorage.getItem('lq_talks') || '[]').find((t) => t.id === j.meta.id);
+    if (j && !(saved && saved.summary) &&
+        !(await appConfirm(`要約されていない途中の録音「${j.meta.title || '無題'}」が残っています。新しく録音すると、それは消えます。続けますか?\n(残したい場合は、キャンセルしてアプリを開き直すと復元できます)`, '🛟 途中の録音'))) return;
+  }
   if (!(await confirmBeforeRecording())) return;
   const meta = {
     kind: document.getElementById('talk-kind').value,
@@ -1728,6 +1809,8 @@ document.getElementById('btn-talk-start').addEventListener('click', async () => 
   keepScreenOn();
   document.getElementById('talk-note').value = '';
   resetEarlyQuestionUI(meta.kind);
+  document.getElementById('talk-interrupt').classList.add('hidden');
+  document.getElementById('btn-talk-pause').disabled = false;
   document.getElementById('btn-talk-pause').textContent = '⏸ 一時停止';
   document.getElementById('talk-rec-title').textContent = meta.title || '無題の講演';
   showScreen('talk-record');
@@ -2075,6 +2158,8 @@ async function runImport() {
 document.getElementById('btn-talk-finish').addEventListener('click', async () => {
   Talk.current.note = document.getElementById('talk-note').value.trim();
   await Talk.stop();
+  document.getElementById('talk-interrupt').classList.add('hidden');
+  document.getElementById('btn-talk-pause').disabled = false;
   showScreen('talk-result');
   document.getElementById('talk-share-status').textContent = '';
   await talkTranscribeStep();
@@ -2278,6 +2363,7 @@ function renderTalkResult() {
     </div>
     <div id="talk-audio-box"></div>
     ${partNotesHtml()}
+    ${gapNotesHtml()}
     ${talkQuestionsCardHtml()}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
     ${resummarizeBtnHtml('要約をやり直す')}
@@ -2326,6 +2412,21 @@ function partNotesHtml() {
     <p class="field-note" style="margin-top:6px">
       要約は、残りのぶんだけから作っています。音声を端末に保存してあれば、下の「🔁 やり直す」で再試行できます。
     </p>
+  </div>`;
+}
+
+/** 🛟 録音が途切れた箇所・復元した録音であることの表示 (v1.37.0) */
+function gapNotesHtml() {
+  const c = Talk.current;
+  if (!c) return '';
+  const gaps = c.gaps || [];
+  const lines = gaps.map((g) => `・${PracticeUtil.fmtTime(g.atSec * 1000)} の時点で` +
+    (g.lostSec ? Talk.fmtLost(g.lostSec) : '') + '録音が途切れています');
+  if (c.recovered) lines.push('・この録音は、アプリが終了されたあとに途中保存から復元したものです。最後の数秒〜十数秒と、終了されてからの分は入っていません');
+  if (!lines.length) return '';
+  return `<div class="card" style="border-left:4px solid var(--text-dim,#94a3b8)">
+    <p class="field-note" style="margin-bottom:4px"><strong>🛟 録音されていない時間があります</strong></p>
+    <p class="field-note">${lines.join('<br>')}</p>
   </div>`;
 }
 
@@ -2749,6 +2850,8 @@ if ('serviceWorker' in navigator) {
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (reloaded) return;
+    // 🛟 録音中に更新が届いても読み込み直さない(録音が消えるため)。新しい版は次回起動時に使われる
+    if (typeof Talk !== 'undefined' && Talk.current && (Talk.interrupted || (Talk.recorder && Talk.recorder.state !== 'inactive'))) return;
     reloaded = true;
     location.reload();
   });
@@ -2766,3 +2869,5 @@ if (typeof CareerRank !== 'undefined') {
   if (up) showRankUp(up);
 }
 ConfMode.maybeSuggest();
+// 🛟 アプリが終了されて要約できなかった録音があれば、復元を提案する
+offerRecordingRecovery();

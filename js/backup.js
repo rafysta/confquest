@@ -228,6 +228,111 @@ const IDBUtil = {
   }
 };
 
+/* ==================== 🛟 録音の途中保存(ジャーナル) v1.37.0 ====================
+ * 録音中、5秒ごとに届く音声の断片をそのまま IndexedDB に書き足していく。
+ * Android がアプリを裏で終了させても(メモリ不足・省電力)、次に開いたときに
+ * ここから録音を組み立て直して文字起こし・要約できる。
+ *
+ * ・保存するのは「いま録音中/まだ要約できていない1件」だけ。新しい録音を始めると消える。
+ * ・要約まで済んだら消す(Talk.save から clearIfId)。文字起こしに失敗した録音は残るので、
+ *   次回起動時に「復元」できる。
+ * ・同じレコーダーの断片は、先頭から順につなげると1本の正しい webm になる
+ *   (Talk.stop が Blob(chunks) を作るのと同じこと)。
+ * ・書き込みは1本の Promise の列で直列化する(断片の順番が入れ替わらないように)。
+ */
+const RecJournal = {
+  DB_NAME: 'confquest-rec-journal',
+  STORE: 'j',
+  _db: null,
+  _q: Promise.resolve(),
+
+  supported() { return typeof indexedDB !== 'undefined'; },
+
+  _open() {
+    if (this._db) return Promise.resolve(this._db);
+    return IDBUtil.open(this.DB_NAME, this.STORE).then((db) => {
+      this._db = db;
+      db.onclose = () => { this._db = null; };
+      db.onversionchange = () => { try { db.close(); } catch (_) { /* 無視 */ } this._db = null; };
+      return db;
+    });
+  },
+
+  /** 書き込みを列に積む。失敗しても録音は止めない(途中保存はあくまで保険) */
+  _tx(fn) {
+    if (!this.supported()) return Promise.resolve();
+    this._q = this._q
+      .then(() => this._open())
+      .then((db) => new Promise((resolve) => {
+        const tx = db.transaction(this.STORE, 'readwrite');
+        fn(tx.objectStore(this.STORE));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      }))
+      .catch(() => { this._db = null; });
+    return this._q;
+  },
+
+  _key(seg, idx) { return `c:${String(seg).padStart(3, '0')}:${String(idx).padStart(6, '0')}`; },
+
+  /** 新しい録音を始める(前の途中保存は消える) */
+  begin(meta) { return this._tx((os) => { os.clear(); os.put(meta, 'meta'); }); },
+
+  putChunk(seg, idx, blob, meta) {
+    return this._tx((os) => {
+      os.put(blob, this._key(seg, idx));
+      if (meta) os.put(meta, 'meta');
+    });
+  },
+
+  putMeta(meta) { return this._tx((os) => os.put(meta, 'meta')); },
+
+  clear() { return this._tx((os) => os.clear()); },
+
+  /** 途中保存がこの録音のものなら消す(要約まで済んだとき) */
+  clearIfId(id) {
+    return this._tx((os) => {
+      const rq = os.get('meta');
+      rq.onsuccess = () => { if (rq.result && rq.result.id === id) os.clear(); };
+    });
+  },
+
+  /**
+   * 残っている途中保存を読み出す。無ければ null。
+   * 戻り値: { meta, segments:[{blob, startSec}], bytes }
+   */
+  async load() {
+    if (!this.supported()) return null;
+    try {
+      await this._q;   // 書きかけがあれば先に終わらせる
+      const items = await IDBUtil.all(this.DB_NAME, this.STORE);
+      const metaItem = items.find((it) => it.key === 'meta');
+      if (!metaItem) return null;
+      const meta = metaItem.value;
+      const bySeg = {};
+      items.forEach((it) => {
+        const m = /^c:(\d+):(\d+)$/.exec(String(it.key));
+        if (!m) return;
+        const seg = parseInt(m[1], 10);
+        (bySeg[seg] = bySeg[seg] || []).push({ idx: parseInt(m[2], 10), blob: it.value });
+      });
+      const type = meta.mimeType || 'audio/webm';
+      const segments = (meta.segs || [])
+        .filter((sg) => bySeg[sg.no] && bySeg[sg.no].length)
+        .map((sg) => ({
+          startSec: sg.startSec || 0,
+          blob: new Blob(bySeg[sg.no].sort((a, b) => a.idx - b.idx).map((c) => c.blob), { type })
+        }));
+      if (!segments.length) return null;
+      const bytes = segments.reduce((n, sg) => n + sg.blob.size, 0);
+      return { meta, segments, bytes };
+    } catch (_) {
+      return null;
+    }
+  }
+};
+
 /* ==================== 講演録音の音声保存 ==================== */
 /* 既定では録音音声は保存されない(要約が終わればメモリから破棄)。
  * ⚙設定のスイッチをオンにすると自動保存、オフのままでも録音ごとに

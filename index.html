@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.36.1">
+<link rel="stylesheet" href="css/style.css?v=1.37.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -291,6 +291,12 @@ window.addEventListener('unhandledrejection', function (e) {
     <div class="talk-rec-status">
       <span class="rec-dot big" id="talk-rec-dot"></span>
       <span id="talk-elapsed" class="talk-time">0:00</span>
+    </div>
+    <div class="card rec-interrupt hidden" id="talk-interrupt" role="alert">
+      <p class="field-note" id="talk-interrupt-msg"></p>
+      <button class="btn-large primary" id="btn-talk-resume">▶ 続きを録音する</button>
+      <p class="field-note">続きは次のパートとしてつながります。「■ 終了して要約」を押すと、ここまでの分で要約します。</p>
+      <p class="field-note" id="talk-interrupt-err" style="color:var(--warn)"></p>
     </div>
     <div class="rec-meter" id="talk-meter">
       <div class="rec-meter-row">
@@ -777,27 +783,27 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.36.1"></script>
-<script src="js/flags.js?v=1.36.1"></script>
-<script src="js/ai.js?v=1.36.1"></script>
-<script src="js/practice.js?v=1.36.1"></script>
-<script src="js/talk.js?v=1.36.1"></script>
-<script src="js/audioimport.js?v=1.36.1"></script>
-<script src="js/backup.js?v=1.36.1"></script>
-<script src="js/scenarios.js?v=1.36.1"></script>
-<script src="js/convo.js?v=1.36.1"></script>
-<script src="js/cards.js?v=1.36.1"></script>
-<script src="js/minigames.js?v=1.36.1"></script>
-<script src="js/bosses.js?v=1.36.1"></script>
-<script src="js/run.js?v=1.36.1"></script>
-<script src="js/progress.js?v=1.36.1"></script>
-<script src="js/profile.js?v=1.36.1"></script>
-<script src="js/phrases.js?v=1.36.1"></script>
-<script src="js/voices.js?v=1.36.1"></script>
-<script src="js/learn.js?v=1.36.1"></script>
-<script src="js/route.js?v=1.36.1"></script>
-<script src="js/topics.js?v=1.36.1"></script>
-<script src="js/drive.js?v=1.36.1"></script>
-<script src="js/app.js?v=1.36.1"></script>
+<script src="js/version.js?v=1.37.0"></script>
+<script src="js/flags.js?v=1.37.0"></script>
+<script src="js/ai.js?v=1.37.0"></script>
+<script src="js/practice.js?v=1.37.0"></script>
+<script src="js/talk.js?v=1.37.0"></script>
+<script src="js/audioimport.js?v=1.37.0"></script>
+<script src="js/backup.js?v=1.37.0"></script>
+<script src="js/scenarios.js?v=1.37.0"></script>
+<script src="js/convo.js?v=1.37.0"></script>
+<script src="js/cards.js?v=1.37.0"></script>
+<script src="js/minigames.js?v=1.37.0"></script>
+<script src="js/bosses.js?v=1.37.0"></script>
+<script src="js/run.js?v=1.37.0"></script>
+<script src="js/progress.js?v=1.37.0"></script>
+<script src="js/profile.js?v=1.37.0"></script>
+<script src="js/phrases.js?v=1.37.0"></script>
+<script src="js/voices.js?v=1.37.0"></script>
+<script src="js/learn.js?v=1.37.0"></script>
+<script src="js/route.js?v=1.37.0"></script>
+<script src="js/topics.js?v=1.37.0"></script>
+<script src="js/drive.js?v=1.37.0"></script>
+<script src="js/app.js?v=1.37.0"></script>
 </body>
 </html>

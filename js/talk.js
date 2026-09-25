@@ -32,6 +32,25 @@ const Talk = {
   segStartSec: 0,     // 現在録音中セグメントの開始位置(全体の経過秒)
   audioUrls: [],      // 再生用URL(セグメントごと)
 
+  /* ---------- 🛟 録音の中断の検知 (v1.37.0) ----------
+   * Android は、裏に回ったアプリのマイクや、アプリそのものを止めることがある。
+   * ウェブアプリからは止められること自体は防げないので、
+   *   ・止まったことに気づく(マイクの終了、レコーダーの停止/エラー、音声データが届かない)
+   *   ・そこまでの音声を1パートとして確定して失わない
+   *   ・戻ってきたときに知らせ、「続きを録音」で次のパートとしてつなぐ
+   * をする。途切れた時間は一時停止と同じ扱いにして、録音の時間軸から除く
+   * (マークや文字起こしの時刻が音声とずれないように)。途切れた位置と長さは current.gaps に残す。
+   * アプリごと終了された場合は、RecJournal(backup.js)の途中保存から次回起動時に復元する。
+   */
+  interrupted: null,      // { reason, atSec, lostFrom } 中断中だけ入る
+  onInterrupt: null,      // app.js が画面の表示を差し込む
+  lastDataAt: 0,          // 最後に音声データが届いた時刻
+  _audioSecAtData: 0,     // そのときの録音位置(秒)
+  _visibleSince: 0,       // 画面が見えている状態になった時刻
+  _segNo: 0,              // 途中保存用のセグメント番号
+  STALL_MS: 15000,        // 画面が見えているのにこれだけデータが来なければ「止まった」
+  VISIBLE_GRACE_MS: 8000, // 戻った直後は、溜まっていたデータが届くのを少し待つ
+
   async start(meta) {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: true, channelCount: 1 }
@@ -43,8 +62,12 @@ const Talk = {
     this.audioBlob = null;
     if (this.audioUrls) this.audioUrls.forEach((u) => { try { URL.revokeObjectURL(u); } catch (_) { /* 無視 */ } });
     this.audioUrls = [];
-    this._startRecorder();
-    this.setupMeter(stream);   // 🎙️ 音量インジケーター
+    this.interrupted = null;
+    this._segNo = 0;
+    this._segs = [];
+    this.lastDataAt = Date.now();
+    this._audioSecAtData = 0;
+    this._visibleSince = Date.now();
 
     this.current = {
       id: Date.now(),
@@ -60,9 +83,13 @@ const Talk = {
       summary: '',
       durationMs: 0,
       startTime: Date.now(),
-      pausedMs: 0
+      pausedMs: 0,
+      gaps: []                 // 途切れた位置と長さ [{atSec, lostSec}]
     };
     this.paused = false;
+    if (typeof RecJournal !== 'undefined') RecJournal.begin(this._journalMeta());
+    this._startRecorder();
+    this.setupMeter(stream);   // 🎙️ 音量インジケーター
     this.timer = setInterval(() => this.updateUI(), 500);
     this.updateUI();
   },
@@ -113,6 +140,24 @@ const Talk = {
     return this.current;
   },
 
+  /**
+   * 🛟 途中保存(RecJournal)から録音を組み立て直す(v1.37.0)。
+   * アプリが裏で終了された録音を、録音したのと同じ状態にして結果画面の流れに乗せる。
+   * j: RecJournal.load() の戻り値
+   */
+  loadRecovered(j) {
+    const m = j.meta;
+    this.loadImported({ kind: m.kind, title: m.title, speaker: m.speaker, venue: m.venue, lang: m.lang },
+      { segments: j.segments, notes: [], durationSec: m.audioSec || 0, files: [] });
+    Object.assign(this.current, {
+      id: m.id, date: m.date,
+      marks: m.marks || [], note: m.note || '',
+      gaps: m.gaps || [],
+      source: 'record', sourceFiles: null, recovered: true
+    });
+    return this.current;
+  },
+
   /** 現在のストリームで新しいMediaRecorderを開始する */
   _startRecorder() {
     // ★受け皿はこのレコーダー専用にする(this.chunks を参照してはいけない)
@@ -125,12 +170,134 @@ const Talk = {
       rec = new MediaRecorder(this.stream);
     }
     rec._chunks = chunks;
+    const segNo = ++this._segNo;
+    let idx = 0;
+    this._segs.push({ no: segNo, startSec: this.segStartSec });
     rec.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data);
+      if (e.data && e.data.size > 0) {
+        chunks.push(e.data);
+        if (this.recorder === rec) {
+          this.lastDataAt = Date.now();
+          this._audioSecAtData = this.elapsedMs() / 1000;
+        }
+        // 🛟 途中保存(アプリごと終了されても次回に復元できるように)
+        if (typeof RecJournal !== 'undefined') {
+          RecJournal.putChunk(segNo, idx++, e.data, this._journalMeta(rec.mimeType));
+        }
+      }
     };
+    // 自分で止めたのではない停止・エラー・マイクの終了 = 中断
+    rec.addEventListener('stop', () => {
+      if (!rec._expectedStop && this.recorder === rec) this._onInterrupt('録音が端末によって止められました');
+    });
+    rec.addEventListener('error', () => {
+      if (this.recorder === rec) this._onInterrupt('録音中にエラーが起きました');
+    });
+    this.stream.getAudioTracks().forEach((t) => {
+      t.addEventListener('ended', () => {
+        if (this.stream && this.stream.getAudioTracks().indexOf(t) >= 0) this._onInterrupt('マイクが端末によって止められました');
+      });
+    });
     this.recorder = rec;
     this.chunks = chunks;      // 互換のため「いまのレコーダーの受け皿」を指しておく
     rec.start(5000);           // 5秒ごとにデータを確保(長時間録音でのメモリ対策)
+  },
+
+  /** 途切れた長さの表示: 「約40秒間」「約8分間」 */
+  fmtLost(sec) {
+    return sec < 60 ? `約${Math.max(1, Math.round(sec))}秒間` : `約${Math.round(sec / 60)}分間`;
+  },
+
+  /** 途中保存に書く、録音の情報(音声以外) */
+  _journalMeta(mimeType) {
+    const c = this.current;
+    if (!c) return null;
+    const noteEl = typeof document !== 'undefined' ? document.getElementById('talk-note') : null;
+    return {
+      id: c.id, date: c.date, kind: c.kind, title: c.title, speaker: c.speaker, venue: c.venue,
+      lang: c.lang, marks: c.marks.slice(), gaps: (c.gaps || []).slice(),
+      note: noteEl ? noteEl.value.trim() : (c.note || ''),
+      segs: (this._segs || []).slice(),
+      audioSec: Math.round(this._audioSecAtData || 0),
+      mimeType: mimeType || (this.recorder && this.recorder.mimeType) || 'audio/webm',
+      updatedAt: Date.now()
+    };
+  },
+
+  /**
+   * 録音が続いているかを確かめる。updateUI(0.5秒ごと)と、画面に戻ったときに呼ぶ。
+   * データが届かないことでの判定は、画面が見えていて少し経ってからだけにする
+   * (裏にいる間はタイマーごと止まっているので、戻った瞬間は溜まったデータがまだ届いていない)。
+   */
+  checkHealth() {
+    if (!this.current || this.interrupted || !this.recorder || this.paused) return;
+    const rec = this.recorder;
+    const tracks = this.stream ? this.stream.getAudioTracks() : [];
+    if (rec.state === 'inactive') { this._onInterrupt('録音が端末によって止められました'); return; }
+    if (tracks.length && tracks.every((t) => t.readyState === 'ended')) { this._onInterrupt('マイクが端末によって止められました'); return; }
+    const visible = typeof document === 'undefined' || document.visibilityState === 'visible';
+    if (rec.state === 'recording' && visible &&
+        Date.now() - this._visibleSince > this.VISIBLE_GRACE_MS &&
+        Date.now() - this.lastDataAt > this.STALL_MS) {
+      this._onInterrupt('音声データが届かなくなりました');
+    }
+  },
+
+  /** 中断を確定する: ここまでを1パートとして残し、時計を止めて、画面に知らせる */
+  _onInterrupt(reason) {
+    if (this.interrupted || !this.current) return;
+    const rec = this.recorder;
+    const lostFrom = this.lastDataAt || Date.now();
+    // 途切れた時間は録音に含めない: 最後にデータが届いた時点から一時停止していた扱いにする
+    // (自分で一時停止していた間に止められた場合は、その一時停止をそのまま続ける)
+    if (!this.paused) {
+      this.paused = true;
+      this.pauseStartedAt = Math.min(lostFrom, Date.now());
+    }
+    const atSec = this.elapsedMs() / 1000;
+
+    if (rec) {
+      rec._expectedStop = true;
+      if (rec.state !== 'inactive') {
+        this._closeSegment();            // 最後の断片は非同期で届いてから確定する
+      } else if (rec._chunks && rec._chunks.length) {
+        this.segments.push({ blob: new Blob(rec._chunks, { type: rec.mimeType || 'audio/webm' }), startSec: this.segStartSec });
+      }
+    }
+    this.segStartSec = atSec;            // 続きはこの位置から
+    this.stopMeter();
+    if (this.stream) this.stream.getTracks().forEach((t) => { try { t.stop(); } catch (_) { /* 無視 */ } });
+    this.stream = null;
+
+    this.interrupted = { reason, atSec, lostFrom };
+    this.current.gaps = this.current.gaps || [];
+    this.current.gaps.push({ atSec: Math.round(atSec * 10) / 10, lostSec: null });
+    if (typeof RecJournal !== 'undefined') RecJournal.putMeta(this._journalMeta());
+    const dot = typeof document !== 'undefined' && document.getElementById('talk-rec-dot');
+    if (dot) dot.classList.add('paused');
+    if (typeof this.onInterrupt === 'function') this.onInterrupt(this.interrupted);
+  },
+
+  /** 「続きを録音」: マイクを取り直して、次のパートとして録音を再開する */
+  async resumeAfterInterrupt() {
+    if (!this.interrupted) return;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: true, channelCount: 1 }
+    });
+    const now = Date.now();
+    const gap = this.current.gaps[this.current.gaps.length - 1];
+    if (gap) gap.lostSec = Math.max(0, Math.round((now - this.interrupted.lostFrom) / 1000));
+    this.current.pausedMs += now - this.pauseStartedAt;
+    this.paused = false;
+    this.interrupted = null;
+    this.stream = stream;
+    this.lastDataAt = now;
+    this._visibleSince = now;
+    this._startRecorder();
+    this.setupMeter(stream);
+    if (typeof RecJournal !== 'undefined') RecJournal.putMeta(this._journalMeta());
+    const dot = document.getElementById('talk-rec-dot');
+    if (dot) dot.classList.remove('paused');
   },
 
   /** いま録音中のセグメントのバイト数 */
@@ -151,6 +318,7 @@ const Talk = {
     if (!rec || rec.state === 'inactive') return null;
     const slot = { blob: null, startSec: this.segStartSec };
     this.segments.push(slot);
+    rec._expectedStop = true;
     rec.onstop = () => {
       slot.blob = new Blob(rec._chunks, { type: rec.mimeType || 'audio/webm' });
     };
@@ -301,7 +469,9 @@ const Talk = {
       mk.textContent = this.current.marks.length
         ? `${this.current.marks.length}箇所にマーク` : 'マークなし';
     }
-    // 長時間録音: 10分ごとにセグメントを確定(Whisper 25MB制限の回避)
+    // 🛟 録音が止められていないか
+    this.checkHealth();
+    // 長時間録音: 15分ごとにセグメントを確定(Whisper 25MB制限の回避)
     this.maybeRotate();
     // メモリの目安として2時間で注意を出す(上限ではない)
     const warn = document.getElementById('talk-size-warn');
@@ -321,7 +491,7 @@ const Talk = {
   },
 
   togglePause() {
-    if (!this.recorder) return;
+    if (!this.recorder || this.interrupted) return;
     if (!this.paused) {
       this.paused = true;
       this.pauseStartedAt = Date.now();
@@ -329,6 +499,7 @@ const Talk = {
     } else {
       this.current.pausedMs += Date.now() - this.pauseStartedAt;
       this.paused = false;
+      this.lastDataAt = Date.now();
       if (this.recorder.state === 'paused') this.recorder.resume();
     }
     const btn = document.getElementById('btn-talk-pause');
@@ -340,28 +511,34 @@ const Talk = {
     return new Promise((resolve) => {
       clearInterval(this.timer);
       this.stopMeter();
-      if (!this.recorder || this.recorder.state === 'inactive') { resolve(); return; }
+      // 直前のセグメントの確定がまだ終わっていない可能性があるので少し待つ
+      let waited = 0;
+      const finish = () => {
+        if (this.segments.some((sg) => !sg.blob) && waited < 60) {
+          waited++;
+          setTimeout(finish, 30);
+          return;
+        }
+        this.segments = this.segments.filter((sg) => sg.blob && sg.blob.size > 0);
+        this.audioUrls = this.segments.map((sg) => URL.createObjectURL(sg.blob));
+        this.audioUrl = this.audioUrls[0] || null;
+        this.audioBlob = this.segments[0] ? this.segments[0].blob : null;
+        if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+        this.stream = null;
+        this.interrupted = null;
+        if (typeof RecJournal !== 'undefined') RecJournal.putMeta(this._journalMeta());
+        resolve();
+      };
+      if (!this.current) { resolve(); return; }
       this.current.durationMs = this.elapsedMs();
       const rec = this.recorder;
+      // 中断のあと続きを録らずに終えた場合: レコーダーはもう止まっている
+      if (!rec || rec.state === 'inactive') { finish(); return; }
+      rec._expectedStop = true;
       const slot = { blob: null, startSec: this.segStartSec };
       this.segments.push(slot);
       rec.onstop = () => {
         slot.blob = new Blob(rec._chunks, { type: rec.mimeType || 'audio/webm' });
-        // 直前のセグメントの確定がまだ終わっていない可能性があるので少し待つ
-        let waited = 0;
-        const finish = () => {
-          if (this.segments.some((sg) => !sg.blob) && waited < 60) {
-            waited++;
-            setTimeout(finish, 30);
-            return;
-          }
-          this.segments = this.segments.filter((sg) => sg.blob && sg.blob.size > 0);
-          this.audioUrls = this.segments.map((sg) => URL.createObjectURL(sg.blob));
-          this.audioUrl = this.audioUrls[0] || null;
-          this.audioBlob = this.segments[0] ? this.segments[0].blob : null;
-          if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
-          resolve();
-        };
         finish();
       };
       rec.stop();
@@ -484,6 +661,12 @@ const Talk = {
       throw err;
     }
 
+    // 🛟 途切れた箇所に目印を入れる(要約が、つながっていない話を無理につなげないように)
+    (this.current.gaps || []).forEach((g) => {
+      all.push({ start: g.atSec - 0.001, end: g.atSec,
+        text: `[— ここで録音が${g.lostSec ? this.fmtLost(g.lostSec) : ''}途切れています —]` });
+    });
+    all.sort((a, b) => a.start - b.start);
     this.current.transcript = all.map((x) => x.text.trim()).join(' ');
     // マーク時刻の前後を抜き出して「注目箇所」にする
     this.current.markedText = (this.current.marks || []).map((t) => {
@@ -959,7 +1142,8 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       markedText: c.markedText || [], note: c.note,
       lang: c.lang || '', partNotes: c.partNotes || null,
       source: c.source || 'record', sourceFiles: c.sourceFiles || null,
-      questions: c.questions || null
+      questions: c.questions || null,
+      gaps: (c.gaps && c.gaps.length) ? c.gaps : null
     };
     // 同じIDが既にあれば置きかえる(文字起こしのやり直しで二重に増やさない)
     const list = JSON.parse(localStorage.getItem('lq_talks') || '[]')
@@ -967,6 +1151,8 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
     list.unshift(entry);
     // 端末の保存領域を圧迫しないよう50件まで
     localStorage.setItem('lq_talks', JSON.stringify(list.slice(0, 50)));
+    // 🛟 要約まで済んだら、この録音の途中保存は用済み
+    if (c.summary && c.source !== 'import' && typeof RecJournal !== 'undefined') RecJournal.clearIfId(c.id);
   },
 
   load(id) {
@@ -982,3 +1168,12 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
     return found;
   }
 };
+
+/* 🛟 画面に戻ったとき: 戻った時刻を覚え(データ待ちの猶予に使う)、止まっていないかすぐ確かめる */
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    Talk._visibleSince = Date.now();
+    Talk.checkHealth();
+  });
+}

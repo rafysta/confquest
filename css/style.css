@@ -1923,6 +1923,11 @@ audio { width: 100%; margin-bottom: 12px; }
 }
 .rec-meter-label[data-level="warn"] { color: var(--warn); }
 
+/* 🛟 録音の中断のお知らせ (v1.37.0) */
+.rec-interrupt { width: 100%; max-width: 420px; border-left: 4px solid var(--warn, #e0a020); }
+.rec-interrupt .btn-large { margin: 8px 0 4px; }
+.btn-control:disabled { opacity: 0.45; }
+
 /* 全文チェックボックスの無効状態 (v1.24.3) */
 .checkbox-field.disabled-field { opacity: 0.55; }
 
