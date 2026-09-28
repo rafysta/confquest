@@ -144,6 +144,8 @@ function showScreen(name) {
   if (name === 'settings') loadSettings();
   if (name === 'about') renderAbout();
   if (name === 'talk-list') renderTalkList();
+  if (name === 'talk-setup') refreshPlanPicker();
+  if (name === 'talk-plans') renderPlans();
   if (name === 'convo-list') renderConvoList();
   if (name === 'status') renderStatus();
   if (name === 'run-map') Run.renderMap();
@@ -212,6 +214,12 @@ function renderHome() {
   const effective = (d.lastDay === today || d.lastDay === yesterday) ? d.streak : 0;
   document.getElementById('streak-text').textContent =
     d.lastDay === today ? `連続 ${effective} 日 (今日クリア!)` : `連続 ${effective} 日`;
+  // 📅 予定の講演の件数(学会モード欄)
+  const plansDesc = document.getElementById('home-plans-desc');
+  if (plansDesc && typeof Plans !== 'undefined') {
+    const n = Plans.upcoming().length;
+    plansDesc.textContent = n ? `${n} 件を登録済み。選んで録音を始める` : '聴く講演を登録して下調べを持っておく';
+  }
   const rank = (typeof CareerRank !== 'undefined') ? CareerRank.current() : null;
   document.getElementById('points-badge').textContent =
     rank ? `${rank.icon} ⭐ ${d.points} pt` : `⭐ ${d.points} pt`;
@@ -1793,19 +1801,14 @@ document.getElementById('btn-talk-start').addEventListener('click', async () => 
         !(await appConfirm(`要約されていない途中の録音「${j.meta.title || '無題'}」が残っています。新しく録音すると、それは消えます。続けますか?\n(残したい場合は、キャンセルしてアプリを開き直すと復元できます)`, '🛟 途中の録音'))) return;
   }
   if (!(await confirmBeforeRecording())) return;
-  const meta = {
-    kind: document.getElementById('talk-kind').value,
-    title: document.getElementById('talk-title').value.trim(),
-    speaker: document.getElementById('talk-speaker').value.trim(),
-    venue: document.getElementById('talk-venue').value.trim(),
-    lang: document.getElementById('talk-lang').value
-  };
+  const meta = talkMetaFromForm();
   try {
     await Talk.start(meta);
   } catch (err) {
     appAlert('録音を開始できませんでした: ' + err.message, '🎙️ エラー');
     return;
   }
+  markPlanUsed(meta);
   keepScreenOn();
   document.getElementById('talk-note').value = '';
   resetEarlyQuestionUI(meta.kind);
@@ -2022,6 +2025,7 @@ document.getElementById('btn-talk-text-go').addEventListener('click', async () =
       : '文字起こしテキスト';
   }
   Talk.loadText(meta, text, _textSourceName);
+  markPlanUsed(meta);
   showScreen('talk-result');
   document.getElementById('talk-share-status').textContent = '';
   await talkSummarizeStep();
@@ -2032,14 +2036,268 @@ document.getElementById('btn-talk-text-go').addEventListener('click', async () =
 let _importFiles = [];
 
 function talkMetaFromForm() {
-  return {
+  const meta = {
     kind: document.getElementById('talk-kind').value,
     title: document.getElementById('talk-title').value.trim(),
     speaker: document.getElementById('talk-speaker').value.trim(),
     venue: document.getElementById('talk-venue').value.trim(),
-    lang: document.getElementById('talk-lang').value
+    lang: document.getElementById('talk-lang').value,
+    planId: null,
+    prep: null
+  };
+  // 📅 予定の講演が選ばれていれば、事前情報(抄録・下調べ・語彙)を録音に付ける
+  const sel = document.getElementById('talk-plan');
+  const plan = (sel && sel.value && typeof Plans !== 'undefined') ? Plans.get(sel.value) : null;
+  if (plan && meta.kind !== 'meeting') {
+    meta.planId = plan.id;
+    meta.prep = Plans.snapshot(plan);
+  }
+  return meta;
+}
+
+/** 録音・読み込みを始めたら、選んでいた予定を「録音済み」にする */
+function markPlanUsed(meta) {
+  if (!meta || !meta.planId || typeof Plans === 'undefined') return;
+  Plans.markUsed(meta.planId, Talk.current && Talk.current.id);
+  const sel = document.getElementById('talk-plan');
+  if (sel) sel.value = '';
+}
+
+/* ---------- 📅 予定の講演 (v1.38.0) ----------
+ * 一覧(screen-talk-plans)・編集(screen-talk-plan-edit)と、
+ * 録音設定画面(talk-setup)の「予定から選ぶ」。データは Plans(plans.js)。
+ */
+let _planEditingId = null;      // 編集中の予定の id(新規なら null)
+let _planBackTo = 'talk-plans'; // 編集画面の ← の戻り先
+
+/** talk-setup の予定セレクトを作り直す。selectId を渡すとそれを選んだ状態にする */
+function refreshPlanPicker(selectId) {
+  const sel = document.getElementById('talk-plan');
+  if (!sel || typeof Plans === 'undefined') return;
+  const keep = selectId != null ? String(selectId) : sel.value;
+  const up = Plans.upcoming();
+  sel.innerHTML = '<option value="">(選ばない — 下に手で入力する)</option>' +
+    up.map((p) => `<option value="${p.id}">${Plans.fmtDate(p.date) ? Plans.fmtDate(p.date) + ' ' : ''}${escapeHtml(p.title)}${p.speaker ? ' — ' + escapeHtml(p.speaker) : ''}</option>`).join('');
+  sel.value = up.some((p) => String(p.id) === keep) ? keep : '';
+  sel.closest('.plan-pick').classList.toggle('hidden', false);
+  applyPlanToForm();
+}
+
+/** 選んだ予定の内容をフォームに写す(選択解除なら何もしない) */
+function applyPlanToForm() {
+  const sel = document.getElementById('talk-plan');
+  const note = document.getElementById('talk-plan-note');
+  const plan = (sel && sel.value && typeof Plans !== 'undefined') ? Plans.get(sel.value) : null;
+  if (!plan) {
+    if (note) note.textContent = Plans.upcoming().length
+      ? '選ぶと下の項目が埋まり、登録した抄録・下調べ・語彙が文字起こし・要約・質問づくりに使われます。'
+      : '学会の前に「予定の講演」を登録しておくと、ここで選んで ● 録音を開始 を押すだけで始められます。登録した抄録・下調べ・語彙は、文字起こし(語彙ヒント)・要約・質問づくりに使われます。';
+    return;
+  }
+  document.getElementById('talk-kind').value = 'talk';
+  document.getElementById('talk-title').value = plan.title || '';
+  document.getElementById('talk-speaker').value = [plan.speaker, plan.affil].filter(Boolean).join(' / ');
+  document.getElementById('talk-venue').value = plan.venue || '';
+  document.getElementById('talk-lang').value = plan.lang || '';
+  const terms = Plans.termList(plan.terms);
+  const have = [];
+  if (plan.abstract) have.push('抄録');
+  if (plan.prep) have.push('下調べ');
+  if (terms.length) have.push(`語彙 ${terms.length} 語`);
+  if (note) note.textContent = have.length
+    ? `✅ この講演の事前情報(${have.join('・')})が、文字起こし・要約・質問づくりに使われます。あとは ● 録音を開始 を押すだけです。`
+    : '⚠ この予定には抄録・下調べ・語彙がまだありません。タイトルと講演者だけが使われます(それでも動きます)。';
+}
+
+document.getElementById('talk-plan').addEventListener('change', applyPlanToForm);
+document.getElementById('btn-talk-plans').addEventListener('click', () => showScreen('talk-plans'));
+
+function planBadgesHtml(p) {
+  const terms = Plans.termList(p.terms).length;
+  return `<span class="plan-badges">
+    <span class="plan-badge ${p.abstract ? 'on' : ''}">${p.abstract ? '✓' : '–'} 抄録</span>
+    <span class="plan-badge ${p.prep ? 'on' : ''}">${p.prep ? '✓' : '–'} 下調べ</span>
+    <span class="plan-badge ${terms ? 'on' : ''}">${terms ? '✓ 語彙 ' + terms : '– 語彙'}</span>
+  </span>`;
+}
+
+function renderPlans() {
+  if (typeof Plans === 'undefined') return;
+  const up = Plans.upcoming();
+  const done = Plans.done();
+  const upEl = document.getElementById('plans-upcoming');
+  const row = (p, isDone) => `<div class="talk-item-row">
+      <button class="talk-item" data-plan-id="${p.id}">
+        <span class="talk-item-title">${escapeHtml(p.title)}</span>
+        <span class="meta">${[Plans.fmtDate(p.date), p.speaker, p.venue].filter(Boolean).map(escapeHtml).join(' · ') || '&nbsp;'}</span>
+        ${planBadgesHtml(p)}
+      </button>
+      ${isDone ? '' : `<button class="plan-rec" data-plan-rec="${p.id}" aria-label="この講演を録音する">●<br>録音</button>`}
+    </div>`;
+  upEl.innerHTML = up.length
+    ? up.map((p) => row(p, false)).join('')
+    : '<p class="empty-note">まだ予定がありません。<br>学会プログラムを見ながら、聴く講演を登録しましょう。</p>';
+  const wrap = document.getElementById('plans-done-wrap');
+  wrap.classList.toggle('hidden', !done.length);
+  document.getElementById('plans-done-summary').textContent = `✅ 録音済みの予定(${done.length}件)`;
+  document.getElementById('plans-done').innerHTML = done.map((p) => row(p, true)).join('');
+
+  document.querySelectorAll('#screen-talk-plans [data-plan-id]').forEach((btn) => {
+    btn.addEventListener('click', () => openPlanEdit(Number(btn.dataset.planId), 'talk-plans'));
+  });
+  document.querySelectorAll('#screen-talk-plans [data-plan-rec]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showScreen('talk-setup');
+      refreshPlanPicker(Number(btn.dataset.planRec));
+    });
+  });
+}
+
+/** 編集画面を開く。id が null なら新規 */
+function openPlanEdit(id, backTo) {
+  _planEditingId = id || null;
+  _planBackTo = backTo || 'talk-plans';
+  const p = (id && Plans.get(id)) || {};
+  document.getElementById('plan-edit-title').textContent = id ? '予定を編集' : '予定を登録';
+  document.getElementById('plan-title').value = p.title || '';
+  document.getElementById('plan-speaker').value = p.speaker || '';
+  document.getElementById('plan-affil').value = p.affil || '';
+  document.getElementById('plan-venue').value = p.venue || '';
+  document.getElementById('plan-date').value = p.date || '';
+  document.getElementById('plan-lang').value = p.lang || '';
+  document.getElementById('plan-abstract').value = p.abstract || '';
+  document.getElementById('plan-prep').value = p.prep || '';
+  document.getElementById('plan-terms').value = p.terms || '';
+  document.getElementById('plan-prep-note').textContent = '';
+  document.getElementById('btn-plan-delete').classList.toggle('hidden', !id);
+  document.getElementById('btn-plan-save').textContent = '💾 保存';
+  updatePlanTermsNote();
+  showScreen('talk-plan-edit');
+}
+
+function planFromForm() {
+  return {
+    id: _planEditingId || undefined,
+    title: document.getElementById('plan-title').value,
+    speaker: document.getElementById('plan-speaker').value,
+    affil: document.getElementById('plan-affil').value,
+    venue: document.getElementById('plan-venue').value,
+    date: document.getElementById('plan-date').value,
+    lang: document.getElementById('plan-lang').value,
+    abstract: document.getElementById('plan-abstract').value,
+    prep: document.getElementById('plan-prep').value,
+    terms: document.getElementById('plan-terms').value
   };
 }
+
+function updatePlanTermsNote() {
+  const n = Plans.termList(document.getElementById('plan-terms').value).length;
+  const prompt = Plans.whisperPrompt(planFromForm());
+  const el = document.getElementById('plan-terms-note');
+  el.textContent = n
+    ? `${n} 語。Whisper には「${prompt.slice(0, 90)}${prompt.length > 90 ? '…' : ''}」のように渡されます(約 ${Plans.PROMPT_MAX_CHARS} 文字まで。超えたぶんは前から切られます)。`
+    : '文字起こし(Whisper)に「この語が出てきます」と教えるヒントです。専門用語・遺伝子名・人名・略語の聞き間違いが減ります。効くのは末尾の約 200 語ぶんまでなので、大事な語を後ろに置いてください。';
+}
+document.getElementById('plan-terms').addEventListener('input', updatePlanTermsNote);
+
+/** 下調べを貼り付けたら「## 語彙リスト」から語彙を自動で拾う(語彙欄が空のときだけ) */
+document.getElementById('plan-prep').addEventListener('input', () => {
+  const termsEl = document.getElementById('plan-terms');
+  const note = document.getElementById('plan-prep-note');
+  const found = Plans.termsFromPrep(document.getElementById('plan-prep').value);
+  if (found.length >= 5 && !termsEl.value.trim()) {
+    termsEl.value = found.join(', ');
+    updatePlanTermsNote();
+    note.textContent = `✅ 下調べの「語彙リスト」から ${found.length} 語を語彙ヒントに入れました。`;
+  } else if (found.length >= 5) {
+    note.textContent = `下調べに語彙リスト(${found.length} 語)があります。語彙欄を空にして貼り直すと自動で入ります。`;
+  } else if (document.getElementById('plan-prep').value.trim()) {
+    note.textContent = '「## 語彙リスト」の見出しが見つかりませんでした。下の 🧠 ボタンで AI に語彙を作らせるか、手で入力してください。';
+  } else {
+    note.textContent = '';
+  }
+});
+
+/** Claude への依頼文をクリップボードへ */
+async function copyPlanRequest() {
+  const text = Plans.requestText(planFromForm());
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('📋 依頼文をコピーしました。Claude に貼り付けて送ってください');
+    return true;
+  } catch (_) {
+    appAlert('クリップボードにコピーできませんでした。「📤 依頼文を共有」から Claude アプリや Gmail へ送ってください。', '📋 コピー');
+    return false;
+  }
+}
+document.getElementById('btn-plan-request').addEventListener('click', copyPlanRequest);
+document.getElementById('btn-plan-request-share').addEventListener('click', async () => {
+  const text = Plans.requestText(planFromForm());
+  if (navigator.share) {
+    try { await navigator.share({ title: '講演の下調べ依頼', text }); return; } catch (_) { /* キャンセル */ }
+  } else {
+    copyPlanRequest();
+  }
+});
+
+document.getElementById('btn-plan-terms-ai').addEventListener('click', async () => {
+  if (!AI.ensureKey(undefined, '語彙の作成')) return;
+  const p = planFromForm();
+  if (!p.title.trim() && !p.abstract.trim() && !p.prep.trim()) {
+    appAlert('タイトル・抄録・下調べのどれかを先に入力してください。', '🧠 語彙');
+    return;
+  }
+  const btn = document.getElementById('btn-plan-terms-ai');
+  btn.disabled = true; btn.textContent = '🧠 作成中…';
+  try {
+    const terms = await Plans.generateTerms(p);
+    const el = document.getElementById('plan-terms');
+    const merged = Plans.termList([el.value, terms].filter(Boolean).join(', ')).join(', ');
+    el.value = merged;
+    updatePlanTermsNote();
+    showToast(`🧠 語彙を ${Plans.termList(merged).length} 語にしました`);
+  } catch (err) {
+    appAlert('語彙を作れませんでした: ' + err.message, '🧠 語彙');
+  } finally {
+    btn.disabled = false; btn.textContent = '🧠 AI に語彙を作らせる(タイトル・抄録・下調べから)';
+  }
+});
+
+function savePlanFromForm() {
+  const p = planFromForm();
+  if (!p.title.trim()) {
+    appAlert('タイトルを入力してください。', '📅 予定');
+    return null;
+  }
+  const saved = Plans.save(p);
+  _planEditingId = saved.id;
+  document.getElementById('btn-plan-delete').classList.remove('hidden');
+  return saved;
+}
+
+document.getElementById('btn-plan-save').addEventListener('click', () => {
+  if (!savePlanFromForm()) return;
+  showToast('💾 予定を保存しました');
+  showScreen(_planBackTo);
+});
+document.getElementById('btn-plan-record').addEventListener('click', () => {
+  const saved = savePlanFromForm();
+  if (!saved) return;
+  showScreen('talk-setup');
+  refreshPlanPicker(saved.id);
+});
+document.getElementById('btn-plan-delete').addEventListener('click', async () => {
+  if (!_planEditingId) return;
+  const p = Plans.get(_planEditingId);
+  if (!(await appConfirm(`「${p ? p.title : 'この予定'}」を削除しますか?\n(録音済みの講演の要約は消えません)`, '🗑 削除'))) return;
+  Plans.remove(_planEditingId);
+  _planEditingId = null;
+  showToast('🗑 削除しました');
+  showScreen('talk-plans');
+});
+document.getElementById('btn-plan-back').addEventListener('click', () => showScreen(_planBackTo));
+document.getElementById('btn-plan-new').addEventListener('click', () => openPlanEdit(null, 'talk-plans'));
 
 document.getElementById('btn-talk-import').addEventListener('click', () => {
   if (typeof AudioImport === 'undefined' || !AudioImport.supported()) {
@@ -2150,6 +2408,7 @@ async function runImport() {
   }
 
   Talk.loadImported(meta, prepared);
+  markPlanUsed(meta);
   showScreen('talk-result');
   document.getElementById('talk-share-status').textContent = '';
   await talkTranscribeStep();

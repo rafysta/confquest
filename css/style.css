@@ -2131,3 +2131,21 @@ audio { width: 100%; margin-bottom: 12px; }
   margin: 10px 0 4px;
   font-size: 1.08rem; line-height: 1.55;   /* そのまま読み上げるので大きめに */
 }
+
+/* ---------- 📅 予定の講演 (v1.38.0) ---------- */
+.plan-pick { background: var(--bg-card); border-radius: 12px; padding: 12px; }
+.plan-pick .quest-nav { margin-top: 4px; }
+.plan-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.plan-btn-row .quest-nav { flex: 1; }
+.plan-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.plan-badge {
+  font-size: 0.72rem; padding: 2px 8px; border-radius: 999px;
+  background: #1e293b; color: var(--text-dim);
+}
+.plan-badge.on { background: #14532d; color: #bbf7d0; }
+.plan-rec {
+  background: linear-gradient(135deg, #0284c7, #2563eb); color: #fff;
+  border: none; border-radius: 12px; padding: 0 14px; font-size: 0.9rem; cursor: pointer;
+}
+.plan-rec:active { transform: scale(0.95); }
+.danger-text { color: var(--danger, #f87171); }

@@ -77,6 +77,7 @@ const Talk = {
       speaker: meta.speaker || '',
       venue: meta.venue || '',
       lang: meta.lang != null ? meta.lang : '',   // '' = Whisperの自動判定
+      prep: meta.prep || null,                     // 📅 予定の講演の事前情報(Plans.snapshot)
       marks: [],
       note: '',
       transcript: '',
@@ -123,6 +124,7 @@ const Talk = {
       speaker: meta.speaker || '',
       venue: meta.venue || '',
       lang: meta.lang != null ? meta.lang : '',
+      prep: meta.prep || null,
       marks: [],                        // 読み込みでは「ここは重要」が押せないので常に空
       note: '',
       transcript: '',
@@ -147,7 +149,7 @@ const Talk = {
    */
   loadRecovered(j) {
     const m = j.meta;
-    this.loadImported({ kind: m.kind, title: m.title, speaker: m.speaker, venue: m.venue, lang: m.lang },
+    this.loadImported({ kind: m.kind, title: m.title, speaker: m.speaker, venue: m.venue, lang: m.lang, prep: m.prep || null },
       { segments: j.segments, notes: [], durationSec: m.audioSec || 0, files: [] });
     Object.assign(this.current, {
       id: m.id, date: m.date,
@@ -215,7 +217,7 @@ const Talk = {
     const noteEl = typeof document !== 'undefined' ? document.getElementById('talk-note') : null;
     return {
       id: c.id, date: c.date, kind: c.kind, title: c.title, speaker: c.speaker, venue: c.venue,
-      lang: c.lang, marks: c.marks.slice(), gaps: (c.gaps || []).slice(),
+      lang: c.lang, prep: c.prep || null, marks: c.marks.slice(), gaps: (c.gaps || []).slice(),
       note: noteEl ? noteEl.value.trim() : (c.note || ''),
       segs: (this._segs || []).slice(),
       audioSec: Math.round(this._audioSecAtData || 0),
@@ -603,6 +605,29 @@ const Talk = {
    * 1つのパートが駄目でも全体を止めず、無事なパートだけで文字起こしを作る。
    * 駄目だったパートは current.partNotes に理由つきで残す。
    */
+  /* ---------- 📅 予定の講演の事前情報 (v1.38.0) ----------
+   * current.prep = { planId, abstract, notes, terms:[...], affil }(Plans.snapshot)。
+   * 予定を消しても録音側に残るようスナップショットで持つ。 */
+
+  /** Whisper へ渡す語彙ヒント。事前情報が無ければ、タイトルと発表者だけの短いもの */
+  sttPrompt() {
+    const c = this.current;
+    if (!c || c.kind === 'meeting') return '';
+    if (typeof Plans === 'undefined') return '';
+    const p = c.prep || {};
+    return Plans.whisperPrompt({
+      title: c.title, speaker: c.speaker, affil: p.affil || '', lang: c.lang || '',
+      terms: (p.terms || []).join(', ')
+    });
+  },
+
+  /** 要約・質問のプロンプトへ添える事前情報の本文('' なら無し) */
+  prepContext() {
+    const c = this.current;
+    if (!c || !c.prep || typeof Plans === 'undefined') return '';
+    return Plans.contextText(c.prep);
+  },
+
   async transcribe(onProgress) {
     const segs = (this.segments && this.segments.length)
       ? this.segments
@@ -639,7 +664,7 @@ const Talk = {
     for (let k = 0; k < usable.length; k++) {
       if (onProgress) onProgress(k + 1, usable.length);
       try {
-        const res = await STT.transcribe(usable[k].sg.blob, this.current.lang);
+        const res = await STT.transcribe(usable[k].sg.blob, this.current.lang, this.sttPrompt());
         // セグメント内の相対時刻を、録音全体の時刻に直して結合する
         res.forEach((x) => all.push({
           start: x.start + usable[k].sg.startSec,
@@ -704,6 +729,8 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       user += `\n\n「重要」とマークした箇所(特に丁寧に反映してください):\n${c.markedText.join('\n')}`;
     }
     if (c.note) user += `\n\nメモ:\n${c.note}`;
+    const prepCtx = c.kind === 'meeting' ? '' : this.prepContext();
+    if (prepCtx) user += `\n\n講演前に用意した事前情報:\n${prepCtx}`;
 
     // 長すぎる場合だけ切るが、黙っては切らない(要約に注記させる)
     const body = c.transcript.slice(0, this.TRANSCRIPT_LIMIT);
@@ -794,6 +821,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
 - 聞き間違いと思われる語を、確信が無いのに別の語へ直さないでください。文脈に合わない語は元の語のまま「[要確認]」を付けてください。
 - 数値は何の値かを添え、換算しないでください(billion/million を 億/万 に直さない)。
 - 「メモ」は聴講者本人が講演中に書いたものです。「重要」マーク箇所は本人が注目した場面です。
+- 「事前情報」(抄録・下調べ)が付いている場合: 抄録や下調べに出てくる用語と音が近い聞き間違いは、その用語に直してかまいません(この場合は[要確認]不要)。ただし事前情報は講演の【前】に書かれたものなので、講演で実際に話された内容を優先し、事前情報にしか無い内容を「講演で述べられた」ことにしないでください。下調べに書かれた講演者の以前の主張と、今回の講演の内容が食い違う・更新されている点があれば、「結論とインパクト」の中で1〜2行、明示してください。
 
 出力はMarkdown形式で、以下の見出し構成に従ってください。内容が読み取れない項目は「(聞き取れず)」と書いてください。専門用語・遺伝子名・手法名は英語のまま残してください。質問の候補は別に作るので、ここには書かないでください。
 
@@ -859,6 +887,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       speaker: c.speaker,
       venue: c.venue,
       myResearch: this.myResearch(),
+      prep: this.prepContext(),
       note: c.note,
       markedText: marked,
       partial: !!o.partial,
@@ -939,7 +968,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
     const all = [];
     for (let i = 0; i < segs.length; i++) {
       if (segs[i].blob.size > MAX) continue;      // 通常は起きない(18MBで区切っているため)
-      const res = await STT.transcribe(segs[i].blob, this.current.lang);
+      const res = await STT.transcribe(segs[i].blob, this.current.lang, this.sttPrompt());
       res.forEach((x) => all.push({
         start: x.start + segs[i].startSec, end: x.end + segs[i].startSec, text: x.text
       }));
@@ -1014,6 +1043,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       speaker: meta.speaker || '',
       venue: meta.venue || '',
       lang: meta.lang != null ? meta.lang : '',
+      prep: meta.prep || null,
       marks: [],
       note: meta.note || '',
       transcript: text,
@@ -1141,6 +1171,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       durationMs: c.durationMs, summary: c.summary, transcript: c.transcript,
       markedText: c.markedText || [], note: c.note,
       lang: c.lang || '', partNotes: c.partNotes || null,
+      prep: c.prep || null,
       source: c.source || 'record', sourceFiles: c.sourceFiles || null,
       questions: c.questions || null,
       gaps: (c.gaps && c.gaps.length) ? c.gaps : null

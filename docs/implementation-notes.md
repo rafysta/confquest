@@ -343,6 +343,7 @@ Slay the Spire型。会話が戦闘。`js/run.js` + `cards.js` + `minigames.js` 
 | `lq_quests` / `lq_daily_plays` | デイリークエスト / 日別プレイ回数 |
 | `lq_achv` / `lq_itemdex` | 実績 / アイテム図鑑 |
 | `lq_login` / `lq_points_log` | ログイン記録 / 日別ポイント |
+| `lq_talk_plans` | 📅 予定の講演(v1.38.0。抄録・下調べ・語彙ヒント) |
 
 ---
 
@@ -387,6 +388,19 @@ Slay the Spire型。会話が戦闘。`js/run.js` + `cards.js` + `minigames.js` 
 現状、ホーム画面の「🇰🇷 韓国語・広東語」メニューは`disabled`で「近日公開」表示。語学要素は学会攻略のお宝クイズに12問あるのみ。
 
 ---
+
+## 10.5 📅 予定の講演と事前情報 (v1.38.0)
+
+**目的**: 学会の前に講演情報を登録し、会場では「選んで ● 録音を開始」だけで始める。登録した情報を文字起こし・要約・質問づくりの 3 か所で使う。
+
+- **js/plans.js (`Plans`)**: `lq_talk_plans` に JSON 配列。`upcoming()`(未使用、日付順・空欄は最後)/ `done()`(`usedAt` あり)。`markUsed(id, talkId)` は録音・読み込み・テキスト作成のどの経路でも app.js の `markPlanUsed(meta)` から呼ぶ。
+- **事前情報は録音にコピーして持つ**: `Talk.current.prep = Plans.snapshot(plan)` = `{planId, abstract, notes, terms[], affil}`。予定を消しても録音側に残る。`Talk.save()`/`load()`/`RecJournal`(途中保存)にも `prep` を含める。
+- **Whisper prompt**: `Talk.sttPrompt()` → `Plans.whisperPrompt()`。形は `Talk: <title>. Speaker: <who>. Key terms: a, b, c.`(リストより「書き起こしの冒頭」に見える自然文のほうが効く)。**Whisper は prompt の末尾 224 トークンしか使わない**ので、語彙を末尾に置き、700 文字を超えたら**前から**切る。予定なしの録音でもタイトル・発表者は渡す。ミーティングは渡さない。`STT.transcribe(blob, lang, prompt)` の第3引数(以前から存在、講演では未使用だった)。
+- **要約**(`Talk.summarize`): user に「講演前に用意した事前情報」として `Plans.contextText(prep)`(抄録+下調べ、14000 文字上限)。system に「事前情報の用語と音が近い聞き間違いは直してよい / 事前情報にしか無い内容を講演で述べたことにしない / 以前の主張との違いを結論に明記」。
+- **質問**(`QGen.generate` に `ctx.prep`): 以前の論文との違い・抄録にあって話されなかった点・未解決の問いへの答え、を高価値の質問として促す。根拠は必ず今回の講演に置く。
+- **下調べの入手**: `Plans.requestText(plan)` が Claude(チャット)への依頼文を作る(見出し固定: 研究の流れ / 最近の主要論文 / 予想される内容 / 論点 / 質問の切り口 / **語彙リスト**)。`lq_my_research` があれば添える。貼り戻すと `Plans.termsFromPrep()` が「## 語彙リスト」(Glossary/Terms/用語 も可)の下のカンマ区切り・箇条書きから語彙を拾い、語彙欄が空なら自動で入れる。無ければ 🧠 `Plans.generateTerms()`(AI、effort low)。
+- **画面**: `screen-talk-plans`(一覧、行の右に ● 録音)/ `screen-talk-plan-edit`(フォーム)。talk-setup 最上部の `#talk-plan` セレクトは `refreshPlanPicker(selectId)` で作り直し、`applyPlanToForm()` がタイトル等を写す。入口はホームの学会モード欄と talk-setup 内。
+- **テスト**: `/tmp/.../v138-test.js`(34項目)。`STT.transcribe`/`AI.chat` を差し替えて **prompt と事前情報が実際に API 呼び出しへ届くか**を検査する。**同じミリ秒に2件保存すると id が衝突する**バグをこのテストで発見した(`Plans.save()` で `while` 加算)。
 
 ## 11. テストについて
 

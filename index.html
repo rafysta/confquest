@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.37.0">
+<link rel="stylesheet" href="css/style.css?v=1.38.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -57,6 +57,11 @@ window.addEventListener('unhandledrejection', function (e) {
         <span class="menu-icon">📚</span>
         <span class="menu-label">聴講した講演</span>
         <span class="menu-desc">保存した要約を見る・送る</span>
+      </button>
+      <button class="menu-btn" data-nav="talk-plans">
+        <span class="menu-icon">📅</span>
+        <span class="menu-label">予定の講演</span>
+        <span class="menu-desc" id="home-plans-desc">聴く講演を登録して下調べを持っておく</span>
       </button>
       <button class="menu-btn" data-nav="topics">
         <span class="menu-icon">🚗</span>
@@ -205,6 +210,15 @@ window.addEventListener('unhandledrejection', function (e) {
     <h2>講演を録音</h2>
   </header>
   <div class="setup-form">
+    <!-- 📅 予定の講演から選ぶ(v1.38.0)。選ぶと下の項目が埋まり、事前情報が録音に付く -->
+    <div class="field plan-pick">
+      <span>📅 予定の講演から選ぶ</span>
+      <select id="talk-plan">
+        <option value="">(選ばない — 下に手で入力する)</option>
+      </select>
+      <span class="field-note" id="talk-plan-note">学会の前に「予定の講演」を登録しておくと、ここで選んで ● 録音を開始 を押すだけで始められます。登録した抄録・下調べ・語彙は、文字起こし(語彙ヒント)・要約・質問づくりに使われます。</span>
+      <button class="quest-nav" id="btn-talk-plans">📅 予定の講演を登録・編集する</button>
+    </div>
     <label class="field">
       <span>録音の種類</span>
       <select id="talk-kind">
@@ -355,6 +369,88 @@ window.addEventListener('unhandledrejection', function (e) {
 </section>
 
 <!-- 聴講した講演の一覧 -->
+<!-- 📅 予定の講演: 一覧 (v1.38.0) -->
+<section id="screen-talk-plans" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" data-nav="home">←</button>
+    <h2>予定の講演</h2>
+  </header>
+  <p class="field-note" style="margin-bottom:12px">学会の前に、聴く予定の講演を登録しておく場所です。抄録を貼り、Claude などに下調べを作ってもらって貼り付けておくと、会場では選んで録音を始めるだけで、専門用語の聞き取り・要約・質問づくりが賢くなります。</p>
+  <button class="btn-large primary" id="btn-plan-new">＋ 新しい予定を登録</button>
+  <div id="plans-upcoming" style="margin-top:14px"></div>
+  <details id="plans-done-wrap" class="hidden" style="margin-top:16px">
+    <summary class="field-note" style="cursor:pointer" id="plans-done-summary">✅ 録音済みの予定</summary>
+    <div id="plans-done" style="margin-top:8px"></div>
+  </details>
+</section>
+
+<!-- 📅 予定の講演: 登録・編集 -->
+<section id="screen-talk-plan-edit" class="screen">
+  <header class="screen-header">
+    <button class="back-btn" id="btn-plan-back">←</button>
+    <h2 id="plan-edit-title">予定を登録</h2>
+  </header>
+  <div class="setup-form">
+    <label class="field">
+      <span>タイトル</span>
+      <input type="text" id="plan-title" placeholder="Chromatin organization in senescence">
+    </label>
+    <label class="field">
+      <span>講演者</span>
+      <input type="text" id="plan-speaker" placeholder="Kyoung-Dong Kim">
+    </label>
+    <label class="field">
+      <span>所属(任意)</span>
+      <input type="text" id="plan-affil" placeholder="Chung-Ang University">
+    </label>
+    <label class="field">
+      <span>学会・セッション(任意)</span>
+      <input type="text" id="plan-venue" placeholder="ISSY39 Session 3">
+    </label>
+    <label class="field">
+      <span>日付(任意。一覧の並び順に使います)</span>
+      <input type="date" id="plan-date">
+    </label>
+    <label class="field">
+      <span>講演の言語</span>
+      <select id="plan-lang">
+        <option value="" selected>自動判定(おすすめ)</option>
+        <option value="en">英語</option>
+        <option value="ja">日本語</option>
+        <option value="ko">韓国語</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>抄録(任意。プログラムからコピー)</span>
+      <textarea id="plan-abstract" rows="6" placeholder="学会プログラムの Abstract をそのまま貼り付け"></textarea>
+    </label>
+
+    <h3 class="about-section">🔎 下調べ</h3>
+    <p class="field-note">Claude(チャット)などに調べてもらった内容を貼り付けます。下のボタンで依頼文をコピーし、Claude に貼って送ると、講演者の研究の流れ・最近の論文・論点・質問の切り口・語彙リストがまとまって返ってきます。それをそのまま下に貼り付けてください(「## 語彙リスト」があれば語彙は自動で拾います)。</p>
+    <div class="plan-btn-row">
+      <button class="quest-nav" id="btn-plan-request">📋 Claude への依頼文をコピー</button>
+      <button class="quest-nav" id="btn-plan-request-share">📤 依頼文を共有</button>
+    </div>
+    <label class="field">
+      <span>下調べ(Markdown)</span>
+      <textarea id="plan-prep" rows="10" placeholder="Claude の出力をここに貼り付け"></textarea>
+      <span class="field-note" id="plan-prep-note"></span>
+    </label>
+
+    <h3 class="about-section">🔤 語彙ヒント</h3>
+    <label class="field">
+      <span>講演中に出そうな用語(英語、カンマ区切り)</span>
+      <textarea id="plan-terms" rows="4" placeholder="Hi-C, TAD, cohesin, CTCF, senescence-associated secretory phenotype, ..."></textarea>
+      <span class="field-note" id="plan-terms-note">文字起こし(Whisper)に「この語が出てきます」と教えるヒントです。専門用語・遺伝子名・人名・略語の聞き間違いが減ります。効くのは末尾の約 200 語ぶんまでなので、大事な語を後ろに置いてください。</span>
+    </label>
+    <button class="quest-nav" id="btn-plan-terms-ai">🧠 AI に語彙を作らせる(タイトル・抄録・下調べから)</button>
+
+    <button class="btn-large primary" id="btn-plan-save">💾 保存</button>
+    <button class="btn-large" id="btn-plan-record">● この講演を録音する</button>
+    <button class="quest-nav danger-text hidden" id="btn-plan-delete">🗑 この予定を削除</button>
+  </div>
+</section>
+
 <section id="screen-talk-list" class="screen">
   <header class="screen-header">
     <button class="back-btn" data-nav="home">←</button>
@@ -783,27 +879,28 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.37.0"></script>
-<script src="js/flags.js?v=1.37.0"></script>
-<script src="js/ai.js?v=1.37.0"></script>
-<script src="js/practice.js?v=1.37.0"></script>
-<script src="js/talk.js?v=1.37.0"></script>
-<script src="js/audioimport.js?v=1.37.0"></script>
-<script src="js/backup.js?v=1.37.0"></script>
-<script src="js/scenarios.js?v=1.37.0"></script>
-<script src="js/convo.js?v=1.37.0"></script>
-<script src="js/cards.js?v=1.37.0"></script>
-<script src="js/minigames.js?v=1.37.0"></script>
-<script src="js/bosses.js?v=1.37.0"></script>
-<script src="js/run.js?v=1.37.0"></script>
-<script src="js/progress.js?v=1.37.0"></script>
-<script src="js/profile.js?v=1.37.0"></script>
-<script src="js/phrases.js?v=1.37.0"></script>
-<script src="js/voices.js?v=1.37.0"></script>
-<script src="js/learn.js?v=1.37.0"></script>
-<script src="js/route.js?v=1.37.0"></script>
-<script src="js/topics.js?v=1.37.0"></script>
-<script src="js/drive.js?v=1.37.0"></script>
-<script src="js/app.js?v=1.37.0"></script>
+<script src="js/version.js?v=1.38.0"></script>
+<script src="js/flags.js?v=1.38.0"></script>
+<script src="js/ai.js?v=1.38.0"></script>
+<script src="js/practice.js?v=1.38.0"></script>
+<script src="js/plans.js?v=1.38.0"></script>
+<script src="js/talk.js?v=1.38.0"></script>
+<script src="js/audioimport.js?v=1.38.0"></script>
+<script src="js/backup.js?v=1.38.0"></script>
+<script src="js/scenarios.js?v=1.38.0"></script>
+<script src="js/convo.js?v=1.38.0"></script>
+<script src="js/cards.js?v=1.38.0"></script>
+<script src="js/minigames.js?v=1.38.0"></script>
+<script src="js/bosses.js?v=1.38.0"></script>
+<script src="js/run.js?v=1.38.0"></script>
+<script src="js/progress.js?v=1.38.0"></script>
+<script src="js/profile.js?v=1.38.0"></script>
+<script src="js/phrases.js?v=1.38.0"></script>
+<script src="js/voices.js?v=1.38.0"></script>
+<script src="js/learn.js?v=1.38.0"></script>
+<script src="js/route.js?v=1.38.0"></script>
+<script src="js/topics.js?v=1.38.0"></script>
+<script src="js/drive.js?v=1.38.0"></script>
+<script src="js/app.js?v=1.38.0"></script>
 </body>
 </html>
