@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.38.0">
+<link rel="stylesheet" href="css/style.css?v=1.39.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -721,6 +721,12 @@ window.addEventListener('unhandledrejection', function (e) {
       <span>Filler語リスト (カンマ区切り)</span>
       <input type="text" id="filler-words" value="um, uh, so, actually, basically, you know, kind of, I mean, like">
     </label>
+    <h3 class="about-section">👥 ラボ会議の議事録</h3>
+    <label class="field">
+      <span>ラボ用語集・参加者の表記</span>
+      <textarea id="lab-glossary" rows="7" placeholder="例(1行に1語、またはカンマ区切り):&#10;cohesin, condensin, TAD, Hi-C, nascent RNA-seq&#10;S. pombe, YES, EMM-N, spo6, spo3, rnh (RNase H) mutant&#10;GapR-seq, DRIP-seq, R-loop, Neurospora&#10;Kenichi Noma (Ken), Hideki Tanizawa, Osamu Iwasaki, Sanki Tashiro, Tomomi Hayashi"></textarea>
+      <span class="field-note">👥会議モードで、文字起こし(Whisper の語彙ヒント)と議事録づくりの両方に渡されます。ここにある語と音が近い聞き間違い(例: cohesin → "incohesion")は議事録でこの表記に直され、人名もこの表記になります。空欄でも動きます。</span>
+    </label>
     <h3 class="about-section">💡 講演への質問づくり</h3>
     <label class="field">
       <span>自分の研究・関心</span>
@@ -879,28 +885,28 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.38.0"></script>
-<script src="js/flags.js?v=1.38.0"></script>
-<script src="js/ai.js?v=1.38.0"></script>
-<script src="js/practice.js?v=1.38.0"></script>
-<script src="js/plans.js?v=1.38.0"></script>
-<script src="js/talk.js?v=1.38.0"></script>
-<script src="js/audioimport.js?v=1.38.0"></script>
-<script src="js/backup.js?v=1.38.0"></script>
-<script src="js/scenarios.js?v=1.38.0"></script>
-<script src="js/convo.js?v=1.38.0"></script>
-<script src="js/cards.js?v=1.38.0"></script>
-<script src="js/minigames.js?v=1.38.0"></script>
-<script src="js/bosses.js?v=1.38.0"></script>
-<script src="js/run.js?v=1.38.0"></script>
-<script src="js/progress.js?v=1.38.0"></script>
-<script src="js/profile.js?v=1.38.0"></script>
-<script src="js/phrases.js?v=1.38.0"></script>
-<script src="js/voices.js?v=1.38.0"></script>
-<script src="js/learn.js?v=1.38.0"></script>
-<script src="js/route.js?v=1.38.0"></script>
-<script src="js/topics.js?v=1.38.0"></script>
-<script src="js/drive.js?v=1.38.0"></script>
-<script src="js/app.js?v=1.38.0"></script>
+<script src="js/version.js?v=1.39.0"></script>
+<script src="js/flags.js?v=1.39.0"></script>
+<script src="js/ai.js?v=1.39.0"></script>
+<script src="js/practice.js?v=1.39.0"></script>
+<script src="js/plans.js?v=1.39.0"></script>
+<script src="js/talk.js?v=1.39.0"></script>
+<script src="js/audioimport.js?v=1.39.0"></script>
+<script src="js/backup.js?v=1.39.0"></script>
+<script src="js/scenarios.js?v=1.39.0"></script>
+<script src="js/convo.js?v=1.39.0"></script>
+<script src="js/cards.js?v=1.39.0"></script>
+<script src="js/minigames.js?v=1.39.0"></script>
+<script src="js/bosses.js?v=1.39.0"></script>
+<script src="js/run.js?v=1.39.0"></script>
+<script src="js/progress.js?v=1.39.0"></script>
+<script src="js/profile.js?v=1.39.0"></script>
+<script src="js/phrases.js?v=1.39.0"></script>
+<script src="js/voices.js?v=1.39.0"></script>
+<script src="js/learn.js?v=1.39.0"></script>
+<script src="js/route.js?v=1.39.0"></script>
+<script src="js/topics.js?v=1.39.0"></script>
+<script src="js/drive.js?v=1.39.0"></script>
+<script src="js/app.js?v=1.39.0"></script>
 </body>
 </html>

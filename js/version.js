@@ -1,14 +1,23 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.38.0';
-const APP_BUILD = '2026-09-28';
+const APP_VERSION = '1.39.0';
+const APP_BUILD = '2026-10-01';
 
 /**
  * 更新履歴(新しい順)
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.39.0',
+    date: '2026-10-01',
+    items: [
+      { type: 'change', text: '👥 会議の議事録を厚くしました。Zoom の要約と比べたところ、捏造は無くなった代わりに内容が 1/4 ほどに薄くなり、Action items が「(なし)」になっていたためです。録音の長さに応じた分量の目安(60分以上なら本文 2,000〜4,000字)を指示し、質疑は「質問: / 回答:」の対で、人名が分からなくても省かずに書きます。議題ごとに「発表者」欄を付け、司会の指名("Sanki, do you have anything?")を手がかりにします。"I\'ll check" "I started …" のような引き受け発言は、担当が不明でも Action items に載せます' },
+      { type: 'new', text: '📖 設定に「ラボ用語集・参加者の表記」を追加しました。よく出る用語・gene 名・株・培地・project 名と、参加者の正式な表記を書いておくと、会議モードの文字起こし(Whisper の語彙ヒント)と議事録づくりの両方に渡されます。用語集の語と音が近い聞き間違い(cohesin → "incohesion" など)は議事録でその表記に直され、直した語は「要確認の語」の末尾に残ります' },
+      { type: 'fix', text: '👥 議事録で condensin が「凝縮体」、supercoiled が「スーパークイルド」のように訳・カタカナになることがあったので、英語のまま残す語の例を明示しました。同じ対象の表記ゆれ(RNSH / RNase H)は本文で統一し、別表記は「要確認の語」に「→」で残します。既知の正しい用語(TAD boundary など)には [要確認] を付けません' }
+    ]
+  },
   {
     version: '1.38.0',
     date: '2026-09-28',

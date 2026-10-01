@@ -386,6 +386,8 @@ function loadSettings() {
     localStorage.getItem('lq_time_scale') || '1.5';
   const _mr = document.getElementById('my-research');
   if (_mr) _mr.value = localStorage.getItem('lq_my_research') || '';
+  const _lg = document.getElementById('lab-glossary');
+  if (_lg) _lg.value = localStorage.getItem('lq_lab_glossary') || '';
   const _pf = document.getElementById('learn-profile');
   if (_pf && typeof Profile !== 'undefined') _pf.value = Profile.current();
   document.getElementById('new-per-day').value =
@@ -445,6 +447,8 @@ document.getElementById('save-settings').addEventListener('click', () => {
   localStorage.setItem('lq_time_scale', document.getElementById('time-scale').value);
   const _mrEl = document.getElementById('my-research');
   if (_mrEl) localStorage.setItem('lq_my_research', _mrEl.value.trim());
+  const _lgEl = document.getElementById('lab-glossary');
+  if (_lgEl) localStorage.setItem('lq_lab_glossary', _lgEl.value.trim());
   const _pfSel = document.getElementById('learn-profile');
   if (_pfSel && typeof Profile !== 'undefined') Profile.set(_pfSel.value);
   localStorage.setItem('lq_new_per_day', document.getElementById('new-per-day').value);
