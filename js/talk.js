@@ -674,10 +674,15 @@ const Talk = {
     }
 
     const all = [];
+    const sttNotes = [];
     for (let k = 0; k < usable.length; k++) {
       if (onProgress) onProgress(k + 1, usable.length);
       try {
-        const res = await STT.transcribe(usable[k].sg.blob, this.current.lang, this.sttPrompt());
+        const raw = await STT.transcribe(usable[k].sg.blob, this.current.lang, this.sttPrompt());
+        // 🧹 無音の幻聴・同じ文の繰り返しを除く(v1.44.0)。何をしたかは sttNotes に残す
+        const cleaned = STT.clean(raw);
+        cleaned.notes.forEach((n) => sttNotes.push(usable.length > 1 ? `パート${usable[k].part}: ${n}` : n));
+        const res = cleaned.segments;
         // セグメント内の相対時刻を、録音全体の時刻に直して結合する
         res.forEach((x) => all.push({
           start: x.start + usable[k].sg.startSec,
@@ -692,6 +697,7 @@ const Talk = {
     }
 
     this.current.partNotes = notes;
+    this.current.sttNotes = sttNotes;
     if (!all.length) {
       const err = new Error('どのパートも文字起こしできませんでした。\n' +
         notes.map((n) => `・${n.file ? n.file : 'パート' + n.part}: ${n.why}`).join('\n'));
@@ -749,6 +755,10 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
     const prepCtx = c.kind === 'meeting' ? '' : this.prepContext();
     if (prepCtx) user += `\n\n講演前に用意した事前情報:\n${prepCtx}`;
 
+    if (c.sttNotes && c.sttNotes.length) {
+      user += '\n\n(※ 文字起こしの「[※ 同じ文が N 回続いたため省略]」は、音声認識が無音・雑音に当てはめて繰り返した文を取り除いた目印です。'
+        + '話者が強調したわけではないので、要約に含めず、その文自体も内容として扱わないでください)';
+    }
     // 長すぎる場合だけ切るが、黙っては切らない(要約に注記させる)
     const body = c.transcript.slice(0, this.TRANSCRIPT_LIMIT);
     user += `\n\n文字起こし:\n${body}`;
@@ -1008,7 +1018,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
     const all = [];
     for (let i = 0; i < segs.length; i++) {
       if (segs[i].blob.size > MAX) continue;      // 通常は起きない(18MBで区切っているため)
-      const res = await STT.transcribe(segs[i].blob, this.current.lang, this.sttPrompt());
+      const res = STT.clean(await STT.transcribe(segs[i].blob, this.current.lang, this.sttPrompt())).segments;
       res.forEach((x) => all.push({
         start: x.start + segs[i].startSec, end: x.end + segs[i].startSec, text: x.text
       }));
@@ -1211,6 +1221,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       durationMs: c.durationMs, summary: c.summary, transcript: c.transcript,
       markedText: c.markedText || [], note: c.note,
       lang: c.lang || '', partNotes: c.partNotes || null,
+      sttNotes: (c.sttNotes && c.sttNotes.length) ? c.sttNotes : null,
       prep: c.prep || null,
       source: c.source || 'record', sourceFiles: c.sourceFiles || null,
       questions: c.questions || null,

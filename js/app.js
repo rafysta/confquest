@@ -2906,6 +2906,7 @@ function renderTalkResult() {
     </div>
     <div id="talk-audio-box"></div>
     ${partNotesHtml()}
+    ${sttNotesHtml()}
     ${gapNotesHtml()}
     ${talkQuestionsCardHtml()}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
@@ -2954,6 +2955,20 @@ function partNotesHtml() {
       `・${label(n)}: ${escapeHtml(String(n.why || '不明'))}`).join('<br>')}</p>
     <p class="field-note" style="margin-top:6px">
       要約は、残りのぶんだけから作っています。音声を端末に保存してあれば、下の「🔁 やり直す」で再試行できます。
+    </p>
+  </div>`;
+}
+
+/** 🧹 文字起こしを整えた記録(無音の幻聴・同じ文の繰り返し)の表示 (v1.44.0) */
+function sttNotesHtml() {
+  const notes = (Talk.current && Talk.current.sttNotes) || [];
+  if (!notes.length) return '';
+  return `<div class="card" style="border-left:4px solid #3b82f6">
+    <p class="field-note" style="margin-bottom:4px"><strong>🧹 文字起こしを整えました</strong></p>
+    <p class="field-note">${notes.map((n) => `・${escapeHtml(n)}`).join('<br>')}</p>
+    <p class="field-note" style="margin-top:6px">
+      音声認識(Whisper)は、録音を始めてから話し始めるまでの無音や雑音に「それらしい文」を当てはめ、
+      それを何度も繰り返すことがあります。除いた箇所は文字起こしに [※ …] の目印で残しています。
     </p>
   </div>`;
 }

@@ -74,6 +74,106 @@ const STT = {
     return localStorage.getItem('lq_stt_model') || 'whisper-1';
   },
 
+  /* ---------- 🧹 Whisper の幻聴・繰り返しの除去 (v1.44.0) ----------
+   * ユーザー報告(2026-10-07): 文字起こしの冒頭に「NHKパラティによる検証報告を進めております。」
+   * が 34 回、別の録音では「コロナウイルスの影響について説明します。」が 13 回続いていた。
+   * これは Whisper が、録音開始直後の無音・雑音(話し始める前の時間)に対して起こす典型的な
+   * 誤りで、(a) 無音に「それらしい文」を当てはめる (b) 一度出した文を繰り返し続ける、の 2 つ。
+   * verbose_json の各セグメントには Whisper 自身の品質指標が付いてくるのに、これまで捨てていた。
+   *   no_speech_prob    … 無音である確率
+   *   avg_logprob       … 認識の確信度(低いほど怪しい)
+   *   compression_ratio … 文の圧縮率(同じ文の繰り返しだと高くなる)
+   * Whisper の参照実装は「no_speech_prob > 0.6 かつ avg_logprob < -1.0 なら無音とみなす」
+   * 「compression_ratio > 2.4 なら繰り返しとみなす」という規則で結果を捨て直すが、
+   * API はその判定を通さずに返してくるので、ここで同じ規則を当てる。
+   */
+  NO_SPEECH_THRESHOLD: 0.6,
+  LOGPROB_THRESHOLD: -1.0,
+  COMPRESSION_THRESHOLD: 2.4,
+  REPEAT_MIN: 3,               // 同じ文がこの回数以上続いたら繰り返しとみなす
+
+  /** 文の比較用: 空白・句読点・記号を落として小文字に */
+  _norm(text) {
+    return String(text || '').toLowerCase().replace(/[\s\u3000。、．，,.!?！？…・「」『』()（）\-–—]/g, '');
+  },
+
+  /**
+   * 1 パートぶんのセグメントを整える。戻り値 { segments, notes:[string] }。
+   * 1. 無音の幻聴: no_speech_prob > 0.6 かつ avg_logprob < -1.0 のセグメントを捨てる
+   * 2. 繰り返し: 同じ文(正規化して比較)が 3 回以上続いたら 1 回だけ残す。
+   *    1 つのセグメントの中で同じ文が 3 回以上並んでいる場合も 1 回にする。
+   * 文字起こし本文には「[※ 同じ文が N 回続いたため省略]」の目印を入れ、要約が
+   * 「強調していた」などと誤解しないようにする。
+   */
+  clean(segments) {
+    const segs = Array.isArray(segments) ? segments : [];
+    const notes = [];
+    let silence = 0;
+    const kept = [];
+    for (const sg of segs) {
+      const t = String(sg.text || '').trim();
+      if (!t) continue;
+      if (sg.noSpeech != null && sg.logprob != null &&
+          sg.noSpeech > this.NO_SPEECH_THRESHOLD && sg.logprob < this.LOGPROB_THRESHOLD) {
+        silence++;
+        continue;
+      }
+      kept.push(Object.assign({}, sg, { text: t }));
+    }
+    if (silence) notes.push(`無音・雑音に当てはめられた文を ${silence} 件除きました`);
+
+    // セグメントの中の繰り返し(「A。A。A。」が 1 セグメントに入っている場合)
+    for (const sg of kept) {
+      const parts = sg.text.split(/(?<=[。．！？!?])\s*/).map((s) => s.trim()).filter(Boolean);
+      if (parts.length < this.REPEAT_MIN) continue;
+      const out = [];
+      let run = 1;
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0 && this._norm(parts[i]) === this._norm(parts[i - 1])) {
+          run++;
+          continue;
+        }
+        if (run >= this.REPEAT_MIN) out.push(`[※ 同じ文が ${run} 回続いたため省略]`);
+        run = 1;
+        out.push(parts[i]);
+      }
+      if (run >= this.REPEAT_MIN) out.push(`[※ 同じ文が ${run} 回続いたため省略]`);
+      if (out.length !== parts.length) {
+        sg._inner = parts.length - out.filter((s) => !s.startsWith('[※')).length;
+        sg.text = out.join(' ');
+      }
+    }
+
+    // セグメントをまたぐ繰り返し
+    const out = [];
+    let repeats = 0;
+    let worst = { text: '', run: 0 };
+    let i = 0;
+    while (i < kept.length) {
+      const key = this._norm(kept[i].text);
+      let j = i + 1;
+      while (j < kept.length && key && this._norm(kept[j].text) === key) j++;
+      const run = j - i;
+      if (run >= this.REPEAT_MIN) {
+        const first = Object.assign({}, kept[i], { end: kept[j - 1].end,
+          text: `${kept[i].text} [※ 同じ文が ${run} 回続いたため省略]` });
+        out.push(first);
+        repeats += run - 1;
+        if (run > worst.run) worst = { text: kept[i].text, run };
+      } else {
+        for (let k = i; k < j; k++) out.push(kept[k]);
+      }
+      i = j;
+    }
+    const inner = kept.reduce((n, sg) => n + (sg._inner || 0), 0);
+    kept.forEach((sg) => { delete sg._inner; });
+    if (repeats + inner) {
+      const ex = worst.text ? `「${worst.text.slice(0, 30)}${worst.text.length > 30 ? '…' : ''}」が ${worst.run} 回` : '';
+      notes.push(`同じ文の繰り返し ${repeats + inner} 件を 1 回にまとめました${ex ? '(' + ex + ')' : ''}`);
+    }
+    return { segments: out, notes };
+  },
+
   /**
    * 音声Blobを文字起こしし、[{start, end, text}] (秒単位) を返す
    */
@@ -127,7 +227,13 @@ const STT = {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.segments) && data.segments.length > 0) {
-          return data.segments.map((sg) => ({ start: sg.start, end: sg.end, text: sg.text }));
+          // Whisper 自身の品質指標も持ち帰る(clean() で無音の幻聴・繰り返しを除くのに使う)
+          return data.segments.map((sg) => ({
+            start: sg.start, end: sg.end, text: sg.text,
+            noSpeech: typeof sg.no_speech_prob === 'number' ? sg.no_speech_prob : null,
+            logprob: typeof sg.avg_logprob === 'number' ? sg.avg_logprob : null,
+            compRatio: typeof sg.compression_ratio === 'number' ? sg.compression_ratio : null
+          }));
         }
         // segmentsが無い場合は全文を1セグメント扱い
         return data.text ? [{ start: 0, end: 0, text: data.text }] : [];

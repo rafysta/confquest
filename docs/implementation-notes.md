@@ -435,6 +435,14 @@ Slay the Spire型。会話が戦闘。`js/run.js` + `cards.js` + `minigames.js` 
 - **対策**: `canPickSaveLocation()` = `showSaveFilePicker` があり、かつ `isAndroidDevice()` でない(`navigator.userAgentData.platform` → 無ければ UA)。バックアップと 📅予定の書き出しの両方で使う。Android はダウンロード。
 - バックアップのダウンロードは ZIP を作り終えてから(=クリックから時間が経ってから)走るので、モバイルが黙って止める可能性がある(v1.30.1 と同じ種類の問題)。`_backupBlob` に持っておき、**状況表示に「⬇ ダウンロードされていなければ、ここを押す」ボタン**を出す(押せば同じタスクで `downloadBackupBlob()`)。
 
+### 🧹 Whisper の幻聴・繰り返しの除去 (v1.44.0)
+
+- **症状**: 文字起こしの冒頭に同じ文が 34 回 / 13 回。録音開始〜話し始めの無音・雑音に対する Whisper の幻聴+繰り返しループ。
+- **原因側の事実**: `verbose_json` の各セグメントに `no_speech_prob` / `avg_logprob` / `compression_ratio` が付いてくるのに、`STT.transcribe()` が `{start,end,text}` だけに削っていた。API は Whisper 参照実装の「捨て直し」規則(no_speech>0.6 かつ logprob<-1.0 → 無音、compression_ratio>2.4 → 繰り返し)を通さずに返す。
+- **`STT.clean(segments)`** → `{segments, notes}`。①無音の幻聴(両方の条件)を捨てる ②同じ文(`_norm`: 空白・句読点を除いて比較)が `REPEAT_MIN=3` 回以上続いたら 1 回+`[※ 同じ文が N 回続いたため省略]`。1 セグメント内の「A。A。A。」も同じ。2 回は本物の可能性があるので残す。指標が無いモデル(gpt-4o-transcribe)でも②は効く。
+- `Talk.transcribe()` がパートごとに適用し `current.sttNotes`(保存にも入れる)→ 結果画面 `sttNotesHtml()`。`earlyQuestions()` も適用。`summarize()` は目印の意味を user に添える。
+- **根本対策ではない**: 録音開始直後の無音は避けられない。語彙ヒント(prompt)が幻聴を助長する可能性は否定できないが、専門用語の効果のほうが大きいので残している。症状が続くなら「文字起こしモデル」を gpt-4o-transcribe に切り替えて比べる。
+
 ## 11. テストについて
 
 jsdomでブラウザ環境を再現した自動テストを都度作成している(`/tmp/*.js`)。**セッションが変わると消えるため、大きな変更時は作り直す**。カバーしてきた範囲:
