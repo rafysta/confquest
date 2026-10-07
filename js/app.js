@@ -2903,6 +2903,7 @@ function renderTalkResult() {
       </p>
       ${c.source === 'import' && c.sourceFiles && c.sourceFiles.length
         ? `<p class="field-note" style="margin-top:4px">📁 ${escapeHtml(c.sourceFiles.join(' / '))} から読み込み</p>` : ''}
+      ${hasTalkPrep(c) ? '<button class="quest-nav" id="btn-talk-goto-prep" type="button" style="margin-top:8px">🔎 講演前の下調べを見る</button>' : ''}
     </div>
     <div id="talk-audio-box"></div>
     ${partNotesHtml()}
@@ -2911,6 +2912,7 @@ function renderTalkResult() {
     ${talkQuestionsCardHtml()}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
     ${resummarizeBtnHtml('要約をやり直す')}
+    ${talkPrepCardHtml(c)}
     ${c.transcript ? `
       <details class="card" style="margin-top:10px">
         <summary style="cursor:pointer">📝 文字起こし全文を見る(${c.transcript.length}文字)</summary>
@@ -2919,7 +2921,45 @@ function renderTalkResult() {
   `;
   wireResummarizeBtn();
   wireTalkQuestionsCard();
+  wireTalkPrepLink();
   renderTalkAudioBox();
+}
+
+/* ---------- 🔎 録音から講演前の下調べを見る (v1.45.0) ----------
+ * 予定の講演から録音すると、抄録・下調べ・語彙は録音側に写し(c.prep = Plans.snapshot)が残る。
+ * 結果画面(聴講した講演の一覧から開いたときも)の上に「🔎 講演前の下調べを見る」を出し、
+ * 押すと下のカードを開いてそこまで移動する。
+ * ⚠ 予定の編集画面へは移動しない: 結果画面を離れると、保存していない録音音声が破棄されるため。
+ *   写しは予定を消しても残るので、ここだけで読めるほうが確実。 */
+function hasTalkPrep(c) {
+  const p = c && c.kind !== 'meeting' && c.prep;
+  return !!(p && (p.notes || p.abstract || (p.terms && p.terms.length)));
+}
+function talkPrepCardHtml(c) {
+  if (!hasTalkPrep(c)) return '';
+  const p = c.prep;
+  const terms = p.terms || [];
+  return `<details class="card" id="talk-prep-card" style="margin-top:10px">
+    <summary style="cursor:pointer;font-weight:700">🔎 講演前の下調べ${p.notes ? '' : '(抄録・語彙)'}</summary>
+    <div style="margin-top:10px">
+      ${p.abstract ? `<h3 class="about-section" style="margin-top:0">📄 抄録</h3>
+        <div class="md-body">${renderMarkdown(p.abstract)}</div>` : ''}
+      ${p.notes ? `<h3 class="about-section">🔎 下調べ</h3>
+        <div class="md-body">${renderMarkdown(p.notes)}</div>` : ''}
+      ${terms.length ? `<h3 class="about-section">🔤 語彙ヒント(${terms.length}語)</h3>
+        <p class="field-note">${escapeHtml(terms.join(', '))}</p>` : ''}
+      <p class="field-note" style="margin-top:8px">録音したときの内容です(あとで予定を直したり消したりしても、ここは変わりません)。</p>
+    </div>
+  </details>`;
+}
+function wireTalkPrepLink() {
+  const btn = document.getElementById('btn-talk-goto-prep');
+  const card = document.getElementById('talk-prep-card');
+  if (!btn || !card) return;
+  btn.addEventListener('click', () => {
+    card.open = true;
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 /** 「◯分〜」のラベル。パートの開始時刻は実際の分割位置から取る(固定間隔ではない) */

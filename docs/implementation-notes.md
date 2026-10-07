@@ -443,6 +443,11 @@ Slay the Spire型。会話が戦闘。`js/run.js` + `cards.js` + `minigames.js` 
 - `Talk.transcribe()` がパートごとに適用し `current.sttNotes`(保存にも入れる)→ 結果画面 `sttNotesHtml()`。`earlyQuestions()` も適用。`summarize()` は目印の意味を user に添える。
 - **根本対策ではない**: 録音開始直後の無音は避けられない。語彙ヒント(prompt)が幻聴を助長する可能性は否定できないが、専門用語の効果のほうが大きいので残している。症状が続くなら「文字起こしモデル」を gpt-4o-transcribe に切り替えて比べる。
 
+### 🔎 録音から講演前の下調べを見る (v1.45.0)
+
+- `renderTalkResult()` の見出しカードに `#btn-talk-goto-prep`、要約の下に `talkPrepCardHtml(c)`(`<details id="talk-prep-card">`)。中身は録音側の写し `c.prep`(`abstract` / `notes` / `terms`)を `renderMarkdown()` で描く。ボタンは details を開いて `scrollIntoView`。
+- 予定の編集画面へは**移動しない**: `showScreen()` は結果画面を離れるときに保存していない録音音声を破棄するため。写しは予定を消しても残る。ミーティングは対象外。
+
 ## 11. テストについて
 
 jsdomでブラウザ環境を再現した自動テストを都度作成している(`/tmp/*.js`)。**セッションが変わると消えるため、大きな変更時は作り直す**。カバーしてきた範囲:
