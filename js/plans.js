@@ -45,12 +45,20 @@ const Plans = {
   save(plan) {
     const p = Object.assign({}, plan);
     const all = this.list();
+    /* 編集画面のフォームは中身の欄しか持たないので、既存の予定を保存し直すときは
+     * 作成日時と録音済みの印を引き継ぐ(v1.40.0 まではここで作成日時が毎回新しくなり、
+     * 録音済みの予定を編集すると「未使用」に戻っていた。作成日時は端末間で
+     * 同じ予定かどうかを見分けるのに使う) */
+    const prev = p.id ? all.find((x) => x.id === p.id) : null;
+    if (prev) ['createdAt', 'usedAt', 'talkId'].forEach((k) => { if (p[k] === undefined && prev[k] !== undefined) p[k] = prev[k]; });
     if (!p.id) {
       // 同じミリ秒に2件作っても id が重ならないようにする
       p.id = Date.now();
       while (all.some((x) => x.id === p.id)) p.id += 1;
     }
     if (!p.createdAt) p.createdAt = new Date().toISOString();
+    // 書き出し→別の端末で読み込んだときに、どちらが新しいかを比べるのに使う
+    p.updatedAt = new Date().toISOString();
     ['title', 'speaker', 'affil', 'venue', 'date', 'lang', 'abstract', 'prep', 'terms']
       .forEach((k) => { p[k] = String(p[k] == null ? '' : p[k]).trim(); });
     if (!p.title) p.title = '無題の講演';
@@ -222,6 +230,204 @@ ${my ? `私(聴講者)の研究・関心:\n${my}\n` : ''}
     if (p.prep) user += `\n\n下調べ:\n${String(p.prep).slice(0, 12000)}`;
     const text = await AI.chat(sys, [{ role: 'user', content: user }], 1200, { effort: 'low' });
     return this.termList(String(text || '').replace(/\n+/g, ', ')).join(', ');
+  },
+
+  /* ---------- 📤📥 端末間の受け渡し (v1.40.0) ----------
+   * 予定は端末(ブラウザ)ごとの localStorage にあるので、PC で作った予定は
+   * そのままでは携帯に出てこない。💾バックアップの復元は「全部置きかえ」なので
+   * 携帯側の学習の進行まで消えてしまう。そこで予定だけを書き出し、読み込む側では
+   * 既存の予定に「足す」形にする。
+   *
+   * 形は 2 通り:
+   *   ファイル … JSON そのまま(Nextcloud・Google Drive・Gmail の添付で運ぶ)
+   *   テキスト … JSON を UTF-8 → Base64 にして目印の行で挟む(Gmail・LINE・Keep に貼る)。
+   *             引用符の置きかえ・改行の挿入・前後の文章が付いても壊れないように Base64 にする。
+   *             目印に「---」を使わないのは、Gmail が `---` 以降を署名として折りたたむため。
+   */
+  EXPORT_KIND: 'confquest-talk-plans',
+  EXPORT_FORMAT: 1,
+  TEXT_BEGIN: '#### CONFQUEST PLANS BEGIN ####',
+  TEXT_END: '#### CONFQUEST PLANS END ####',
+  FIELDS: ['title', 'speaker', 'affil', 'venue', 'date', 'lang', 'abstract', 'prep', 'terms'],
+  FIELD_MAX: { title: 400, speaker: 300, affil: 300, venue: 300, date: 40, lang: 8, abstract: 20000, prep: 60000, terms: 8000 },
+
+  /** 書き出す中身。録音済みの印(usedAt/talkId)は運ばない(相手の端末では未使用の予定) */
+  exportPayload(plans) {
+    return {
+      kind: this.EXPORT_KIND,
+      format: this.EXPORT_FORMAT,
+      exportedAt: new Date().toISOString(),
+      plans: (plans || []).map((p) => {
+        const o = { id: p.id, createdAt: p.createdAt || '', updatedAt: p.updatedAt || p.createdAt || '' };
+        this.FIELDS.forEach((k) => { o[k] = p[k] == null ? '' : String(p[k]); });
+        return o;
+      })
+    };
+  },
+
+  exportJson(plans) {
+    return JSON.stringify(this.exportPayload(plans), null, 1);
+  },
+
+  exportFileName() {
+    const d = new Date();
+    const z = (n) => String(n).padStart(2, '0');
+    return `confquest-plans-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}.json`;
+  },
+
+  _b64encode(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  },
+  _b64decode(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  },
+
+  /** メールやチャットに貼るテキスト。説明文 + 目印 + Base64(76 文字で改行) */
+  exportText(plans) {
+    const list = plans || [];
+    const b64 = this._b64encode(JSON.stringify(this.exportPayload(list)));
+    const lines = b64.match(/.{1,76}/g) || [];
+    const titles = list.slice(0, 8).map((p) => `・${this.fmtDate(p.date) ? this.fmtDate(p.date) + ' ' : ''}${p.title || '無題の講演'}`);
+    if (list.length > 8) titles.push(`・ほか ${list.length - 8} 件`);
+    return [
+      `ConfQuest「予定の講演」${list.length}件`,
+      ...titles,
+      '',
+      '受け取る端末の ConfQuest で「📅 予定の講演」→「📥 読み込む」→「📋 貼り付けて読み込む」を開き、このメッセージを丸ごと貼り付けてください。',
+      '',
+      this.TEXT_BEGIN,
+      ...lines,
+      this.TEXT_END
+    ].join('\n');
+  },
+
+  /**
+   * 読み込んだファイル・貼り付けたテキストから予定の配列を取り出す。
+   * 受け付けるもの: exportText の出力(前後に別の文章があってもよい)/ exportJson の出力 /
+   * 予定の配列そのもの。読めなければ Error(日本語の説明つき)を投げる。
+   */
+  parseImport(text) {
+    let s = String(text || '').replace(/^﻿/, '');
+    if (!s.trim()) throw new Error('中身が空です。');
+    let data = null;
+    const bi = s.indexOf(this.TEXT_BEGIN);
+    if (bi >= 0) {
+      const ei = s.indexOf(this.TEXT_END, bi);
+      if (ei < 0) throw new Error('終わりの目印(CONFQUEST PLANS END)が見つかりません。メッセージが途中で切れていないか確かめてください。');
+      // メールの引用記号(> )や改行・空白が混じっても、Base64 の文字だけを拾えば元に戻る
+      const body = s.slice(bi + this.TEXT_BEGIN.length, ei).replace(/^[ \t]*>+/gm, '').replace(/[^A-Za-z0-9+/=]/g, '');
+      try { data = JSON.parse(this._b64decode(body)); } catch (_) {
+        throw new Error('貼り付けた内容を読み取れませんでした(途中が欠けているか、別の文字に置きかわっています)。もう一度コピーし直してください。');
+      }
+    } else {
+      const a = s.search(/[[{]/);
+      if (a < 0) throw new Error('ConfQuest の予定のデータが見つかりません。');
+      const close = s[a] === '{' ? '}' : ']';
+      const b = s.lastIndexOf(close);
+      try { data = JSON.parse(s.slice(a, b + 1)); } catch (_) {
+        throw new Error('ConfQuest の予定のデータとして読み取れませんでした。');
+      }
+    }
+    let plans;
+    if (Array.isArray(data)) plans = data;
+    else if (data && Array.isArray(data.plans) && (!data.kind || data.kind === this.EXPORT_KIND)) plans = data.plans;
+    else throw new Error('ConfQuest の予定のデータではないようです。');
+    if (data && data.format && data.format > this.EXPORT_FORMAT) {
+      throw new Error('新しい版の ConfQuest で書き出されたデータです。この端末のアプリを 🔄 更新してから読み込んでください。');
+    }
+    const out = [];
+    plans.forEach((raw) => {
+      if (!raw || typeof raw !== 'object') return;
+      const p = {};
+      this.FIELDS.forEach((k) => {
+        p[k] = String(raw[k] == null ? '' : raw[k]).trim().slice(0, this.FIELD_MAX[k]);
+      });
+      if (!['', 'en', 'ja', 'ko'].includes(p.lang)) p.lang = '';
+      if (!p.title && !p.speaker && !p.abstract && !p.prep) return;   // 空の予定は無視
+      if (!p.title) p.title = '無題の講演';
+      const id = Number(raw.id);
+      p.id = Number.isFinite(id) && id > 0 ? id : 0;
+      p.createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : '';
+      p.updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : p.createdAt;
+      out.push(p);
+    });
+    if (!out.length) throw new Error('読み込める予定が 1 件もありませんでした。');
+    return out;
+  },
+
+  /** 同じ予定か(id と作成日時が同じ = 同じ予定を書き出したもの) */
+  _samePlan(a, b) {
+    return a.id && b.id && a.id === b.id && (a.createdAt || '') === (b.createdAt || '');
+  },
+  _sameContent(a, b) {
+    return this.FIELDS.every((k) => String(a[k] || '') === String(b[k] || ''));
+  },
+
+  /**
+   * 読み込む前の見積もり。各予定に action を付けて返す:
+   *   'add'  … この端末に無い予定(新しく足す)
+   *   'update' … 同じ予定があり、中身が違い、読み込むほうが新しい(上書きする)
+   *   'same' … 同じ予定があり、中身も同じ(何もしない)
+   *   'older' … 同じ予定があり、この端末のほうが新しく直されている(何もしない)
+   */
+  planImport(incoming) {
+    const local = this.list();
+    return (incoming || []).map((p) => {
+      const cur = local.find((x) => this._samePlan(x, p));
+      if (!cur) return { plan: p, action: 'add' };
+      if (this._sameContent(cur, p)) return { plan: p, action: 'same', local: cur };
+      const lu = cur.updatedAt || cur.createdAt || '';
+      const iu = p.updatedAt || p.createdAt || '';
+      if (lu && iu && lu > iu) return { plan: p, action: 'older', local: cur };
+      return { plan: p, action: 'update', local: cur };
+    });
+  },
+
+  /** planImport の結果を書き込む。戻り値 {add, update, same, older} の件数 */
+  applyImport(items) {
+    const all = this.list();
+    const counts = { add: 0, update: 0, same: 0, older: 0 };
+    const added = [];
+    (items || []).forEach((it) => {
+      counts[it.action] = (counts[it.action] || 0) + 1;
+      const p = it.plan;
+      if (it.action === 'update') {
+        const cur = all.find((x) => this._samePlan(x, p));
+        if (!cur) return;
+        this.FIELDS.forEach((k) => { cur[k] = p[k]; });   // 録音済みの印(usedAt/talkId)はこの端末のまま
+        cur.updatedAt = p.updatedAt || new Date().toISOString();
+      } else if (it.action === 'add') {
+        const n = Object.assign({}, p);
+        // id が無い・この端末の別の予定と重なる場合は振り直す
+        if (!n.id || all.some((x) => x.id === n.id) || added.some((x) => x.id === n.id)) {
+          n.id = Date.now();
+          while (all.some((x) => x.id === n.id) || added.some((x) => x.id === n.id)) n.id += 1;
+        }
+        if (!n.createdAt) n.createdAt = new Date().toISOString();
+        if (!n.updatedAt) n.updatedAt = n.createdAt;
+        added.push(n);
+      }
+    });
+    const merged = added.concat(all);
+    if (merged.length > this.MAX) {
+      // 上限を超えたら、録音済みの古いものから落とす(未使用の予定はなるべく残す)
+      const keep = merged.filter((p) => !p.usedAt);
+      const used = merged.filter((p) => p.usedAt);
+      const room = Math.max(0, this.MAX - keep.length);
+      const kept = new Set(keep.slice(0, this.MAX).concat(used.slice(0, room)));
+      localStorage.setItem(this.KEY, JSON.stringify(merged.filter((p) => kept.has(p))));
+    } else {
+      localStorage.setItem(this.KEY, JSON.stringify(merged));
+    }
+    return counts;
   },
 
   /** 一覧表示用の短い日付("10/29" など)。ISO 日付でなければそのまま */

@@ -145,7 +145,7 @@ function showScreen(name) {
   if (name === 'about') renderAbout();
   if (name === 'talk-list') renderTalkList();
   if (name === 'talk-setup') refreshPlanPicker();
-  if (name === 'talk-plans') renderPlans();
+  if (name === 'talk-plans') { plansXferStatus(''); renderPlans(); }
   if (name === 'convo-list') renderConvoList();
   if (name === 'status') renderStatus();
   if (name === 'run-map') Run.renderMap();
@@ -287,7 +287,8 @@ const ConfMode = {
 }
 
 /** テキスト入力ダイアログ。入力文字列を返す(スキップ/キャンセルはnull) */
-function appPrompt(title, msg, initial, placeholder) {
+function appPrompt(title, msg, initial, placeholder, opts) {
+  const o = opts || {};
   return new Promise((resolve) => {
     const ov = document.createElement('div');
     ov.className = 'modal-overlay';
@@ -295,10 +296,10 @@ function appPrompt(title, msg, initial, placeholder) {
       <div class="modal-box">
         <p class="modal-title">${escapeHtml(title || '')}</p>
         <p class="modal-msg">${escapeHtml(msg || '')}</p>
-        <textarea class="prompt-input" rows="3" placeholder="${escapeHtml(placeholder || '')}"></textarea>
+        <textarea class="prompt-input" rows="${o.rows || 3}" placeholder="${escapeHtml(placeholder || '')}"></textarea>
         <div class="modal-actions">
-          <button class="btn-control" data-p="skip">スキップ</button>
-          <button class="btn-control primary" data-p="ok">保存</button>
+          <button class="btn-control" data-p="skip">${escapeHtml(o.cancel || 'スキップ')}</button>
+          <button class="btn-control primary" data-p="ok">${escapeHtml(o.ok || '保存')}</button>
         </div>
       </div>`;
     const ta = ov.querySelector('textarea');
@@ -2175,6 +2176,7 @@ function openPlanEdit(id, backTo) {
   document.getElementById('plan-terms').value = p.terms || '';
   document.getElementById('plan-prep-note').textContent = '';
   document.getElementById('btn-plan-delete').classList.toggle('hidden', !id);
+  document.getElementById('btn-plan-export-one').classList.toggle('hidden', !id);
   document.getElementById('btn-plan-save').textContent = '💾 保存';
   updatePlanTermsNote();
   showScreen('talk-plan-edit');
@@ -2277,6 +2279,7 @@ function savePlanFromForm() {
   const saved = Plans.save(p);
   _planEditingId = saved.id;
   document.getElementById('btn-plan-delete').classList.remove('hidden');
+  document.getElementById('btn-plan-export-one').classList.remove('hidden');
   return saved;
 }
 
@@ -2302,6 +2305,158 @@ document.getElementById('btn-plan-delete').addEventListener('click', async () =>
 });
 document.getElementById('btn-plan-back').addEventListener('click', () => showScreen(_planBackTo));
 document.getElementById('btn-plan-new').addEventListener('click', () => openPlanEdit(null, 'talk-plans'));
+
+/* ---------- 📤📥 予定の講演を別の端末へ (v1.40.0) ----------
+ * PC で抄録・下調べを貼って作った予定を、会場で使う携帯へ運ぶ。
+ * 書き出しはファイル(Nextcloud・Drive・Gmail の添付)かテキスト(自分宛てのメール・LINE・Keep)。
+ * 読み込みは既存の予定に「足す」だけで、学習の進行など他のデータには触れない。 */
+function plansXferStatus(text) {
+  const el = document.getElementById('plans-xfer-status');
+  if (el) el.textContent = text || '';
+}
+
+async function exportPlans(list) {
+  if (!list || !list.length) {
+    appAlert('書き出す予定がありません。先に「＋ 新しい予定を登録」で予定を作ってください。', '📤 書き出す');
+    return;
+  }
+  const n = list.length;
+  const options = [
+    { value: 'file', primary: true, label: '💾 ファイルに保存',
+      desc: window.showSaveFilePicker
+        ? 'Nextcloud や Google Drive の同期フォルダに保存すると、携帯ではそのファイルを選ぶだけです'
+        : 'ダウンロードフォルダに保存します。Gmail の添付などで相手の端末へ送ってください' },
+    { value: 'copy', label: '📋 テキストとしてコピー',
+      desc: '自分宛てのメール・LINE・Google Keep などに貼って送り、携帯でそのまま貼り付けます' }
+  ];
+  if (navigator.share) {
+    options.push({ value: 'share', label: '📤 テキストで共有', desc: 'Gmail などのアプリへ直接送ります' });
+  }
+  const how = await appChoice(`📤 予定を書き出す(${n}件)`, options);
+  if (!how) return;
+
+  if (how === 'file') {
+    const name = Plans.exportFileName();
+    const json = Plans.exportJson(list);
+    // 保存先を選ぶダイアログはクリック直後しか開けないので、ここで先に開く(💾バックアップと同じ)
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          id: 'confquest-plans',
+          suggestedName: name,
+          types: [{ description: 'ConfQuest 予定の講演', accept: { 'application/json': ['.json'] } }]
+        });
+        const w = await handle.createWritable();
+        await w.write(new Blob([json], { type: 'application/json' }));
+        await w.close();
+        plansXferStatus(`✓ 「${handle.name}」に ${n} 件を保存しました。携帯の ConfQuest で「📥 読み込む」→「📁 ファイルから」を選び、このファイルを開いてください。`);
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') { plansXferStatus('保存をキャンセルしました。'); return; }
+        // 使えない環境ならダウンロードで続行
+      }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+    plansXferStatus(`✓ ${name}(${n}件)をダウンロードフォルダに保存しました。携帯へ送り、ConfQuest の「📥 読み込む」→「📁 ファイルから」で開いてください。`);
+    return;
+  }
+
+  const text = Plans.exportText(list);
+  if (how === 'share') {
+    try {
+      await navigator.share({ title: `ConfQuest 予定の講演(${n}件)`, text });
+      plansXferStatus(`✓ ${n} 件を共有しました。受け取った端末の ConfQuest で「📥 読み込む」→「📋 貼り付けて読み込む」に、そのメッセージを丸ごと貼り付けてください。`);
+    } catch (err) {
+      if (!err || err.name !== 'AbortError') plansXferStatus('⚠ 共有できませんでした。「📋 テキストとしてコピー」をお試しください。');
+    }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    plansXferStatus(`✓ ${n} 件をコピーしました。自分宛てのメール(件名は何でも)や LINE・Keep に貼って送り、携帯の ConfQuest で「📥 読み込む」→「📋 貼り付けて読み込む」に丸ごと貼り付けてください。`);
+  } catch (_) {
+    appAlert('クリップボードにコピーできませんでした。「💾 ファイルに保存」をお試しください。', '📋 コピー');
+  }
+}
+
+/** 読み込んだテキスト(ファイルの中身 or 貼り付け)を確かめてから足す */
+async function importPlansText(text) {
+  let items;
+  try {
+    items = Plans.planImport(Plans.parseImport(text));
+  } catch (err) {
+    appAlert(err.message, '📥 読み込めませんでした');
+    plansXferStatus('');
+    return;
+  }
+  const c = (a) => items.filter((it) => it.action === a).length;
+  const add = c('add'), upd = c('update'), same = c('same'), older = c('older');
+  if (!add && !upd) {
+    appAlert(`読み込んだ ${items.length} 件は、すべてこの端末に同じ内容${older ? '(またはこの端末のほうが新しい内容)' : ''}で入っています。`, '📥 読み込む');
+    return;
+  }
+  const tag = { add: '新規', update: '上書き', same: '同じ', older: 'この端末が新しい' };
+  const lines = items.slice(0, 12).map((it) => {
+    const p = it.plan;
+    return `・[${tag[it.action]}] ${Plans.fmtDate(p.date) ? Plans.fmtDate(p.date) + ' ' : ''}${p.title}${p.speaker ? ' — ' + p.speaker : ''}`;
+  });
+  if (items.length > 12) lines.push(`・ほか ${items.length - 12} 件`);
+  const head = [`新しく足す: ${add} 件`];
+  if (upd) head.push(`上書きする: ${upd} 件(この端末にある同じ予定を、読み込む内容で置きかえます)`);
+  if (same + older) head.push(`そのまま: ${same + older} 件(同じ内容${older ? '、またはこの端末のほうが新しい' : ''})`);
+  const ok = await appConfirm(
+    `${head.join('\n')}\n\n${lines.join('\n')}\n\nこの端末の他の予定・録音・学習の進行はそのままです。`,
+    '📥 予定を読み込む');
+  if (!ok) { plansXferStatus('読み込みをキャンセルしました。'); return; }
+  const r = Plans.applyImport(items);
+  renderPlans();
+  showToast(`📥 予定を読み込みました(新規 ${r.add}・上書き ${r.update})`);
+  plansXferStatus(`✓ 新規 ${r.add} 件・上書き ${r.update} 件を読み込みました。`);
+}
+
+document.getElementById('btn-plans-export').addEventListener('click', () => exportPlans(Plans.upcoming()));
+document.getElementById('btn-plan-export-one').addEventListener('click', () => {
+  const saved = savePlanFromForm();   // 編集中の内容も含めて書き出す
+  if (saved) exportPlans([saved]);
+});
+document.getElementById('btn-plans-import').addEventListener('click', async () => {
+  const how = await appChoice('📥 予定を読み込む', [
+    { value: 'file', primary: true, label: '📁 ファイルから', desc: '「💾 ファイルに保存」で書き出した .json ファイルを選びます(Nextcloud・Drive・ダウンロード)' },
+    { value: 'paste', label: '📋 貼り付けて読み込む', desc: 'メールや LINE で送ったテキストを、丸ごと貼り付けます' }
+  ]);
+  if (how === 'file') {
+    const input = document.getElementById('plans-file-input');
+    input.value = '';
+    input.click();
+  } else if (how === 'paste') {
+    const text = await appPrompt('📋 貼り付けて読み込む',
+      '書き出したテキストを丸ごと貼り付けてください(前後にメールの文章が付いていても大丈夫です)。',
+      '', '#### CONFQUEST PLANS BEGIN #### ...', { ok: '読み込む', cancel: 'キャンセル', rows: 8 });
+    if (text) importPlansText(text);
+  }
+});
+document.getElementById('plans-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) {
+    appAlert('ファイルが大きすぎます。ConfQuest の「📤 書き出す」で作ったファイルを選んでください。', '📥 読み込む');
+    return;
+  }
+  plansXferStatus('ファイルを確認しています…');
+  try {
+    importPlansText(await file.text());
+  } catch (err) {
+    appAlert('ファイルを読めませんでした: ' + err.message, '📥 読み込む');
+    plansXferStatus('');
+  }
+});
 
 document.getElementById('btn-talk-import').addEventListener('click', () => {
   if (typeof AudioImport === 'undefined' || !AudioImport.supported()) {

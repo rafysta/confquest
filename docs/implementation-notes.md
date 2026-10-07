@@ -402,6 +402,18 @@ Slay the Spire型。会話が戦闘。`js/run.js` + `cards.js` + `minigames.js` 
 - **画面**: `screen-talk-plans`(一覧、行の右に ● 録音)/ `screen-talk-plan-edit`(フォーム)。talk-setup 最上部の `#talk-plan` セレクトは `refreshPlanPicker(selectId)` で作り直し、`applyPlanToForm()` がタイトル等を写す。入口はホームの学会モード欄と talk-setup 内。
 - **テスト**: `/tmp/.../v138-test.js`(34項目)。`STT.transcribe`/`AI.chat` を差し替えて **prompt と事前情報が実際に API 呼び出しへ届くか**を検査する。**同じミリ秒に2件保存すると id が衝突する**バグをこのテストで発見した(`Plans.save()` で `while` 加算)。
 
+### 10.5.1 📤📥 予定の端末間受け渡し (v1.40.0)
+
+**目的**: PC で抄録・下調べを貼って作った予定を、会場で使う携帯へ運ぶ。`lq_talk_plans` は端末ごとの localStorage なので、何もしないと PC の予定は携帯に出てこない。💾バックアップの復元は**全部置きかえ**(携帯側の学習の進行まで消える)なので使えない。
+
+- **書き出し**: `Plans.exportPayload(list)` = `{kind:'confquest-talk-plans', format:1, exportedAt, plans:[{id, createdAt, updatedAt, title…terms}]}`。**`usedAt`/`talkId` は運ばない**(相手の端末では未使用の予定)。
+  - ファイル: `exportJson()` → `showSaveFilePicker`(PC の Chrome/Edge。Nextcloud の同期フォルダを選べる。**クリック直後しか開けない**ので JSON を作る前に開く…ここでは JSON が同期的に作れるので順序の問題は無い)/ 非対応ならダウンロード。
+  - テキスト: `exportText()` = 説明文 + `#### CONFQUEST PLANS BEGIN ####` + UTF-8→Base64(76 文字改行)+ END。**Base64 にするのは、メールアプリの引用符の置きかえ・改行の挿入・引用記号 `>` で JSON が壊れないため**。**目印に `---` を使わない**(Gmail が署名として折りたたむ。v1.24 で経験済み)。コピー / `navigator.share({text})`。
+- **読み込み**: `Plans.parseImport(text)` は目印つきテキスト(前後に別の文章があってよい。目印の間は Base64 の文字だけ拾う)/ JSON / 配列そのもの を受け付け、フィールドを `FIELDS` に限定・長さを `FIELD_MAX` で切って正規化する。`format` が新しすぎたら「アプリを更新して」。
+- **統合**: `planImport(incoming)` が各予定に action を付ける。**同じ予定 = `id` と `createdAt` が両方一致**(id は `Date.now()` なので別端末の別予定と偶然重なり得る)。`add`(無い)/ `same`(中身が同じ)/ `older`(この端末の `updatedAt` のほうが新しい → 触らない)/ `update`(上書き。**`usedAt`/`talkId` はこの端末のまま**)。`applyImport(items)` が書き込む。新規の id が衝突したら振り直す。`MAX`(60) を超えたら録音済みの古いものから落とす。
+- **`updatedAt`**: v1.40.0 から `Plans.save()` が毎回付ける。それ以前の予定には無いので、比べられないときは読み込む側を採る。
+- **画面**: 一覧に `#btn-plans-export`(未使用の予定すべて)/ `#btn-plans-import`、編集画面に `#btn-plan-export-one`(保存してから 1 件だけ)。確認ダイアログが長くなるので `.modal-box` に `max-height: 88vh; overflow-y: auto` を足した。`appPrompt()` に第5引数 `opts {ok, cancel, rows}` を追加(既存の呼び出しは変わらない)。
+
 ## 11. テストについて
 
 jsdomでブラウザ環境を再現した自動テストを都度作成している(`/tmp/*.js`)。**セッションが変わると消えるため、大きな変更時は作り直す**。カバーしてきた範囲:
