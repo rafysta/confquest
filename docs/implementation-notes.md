@@ -420,6 +420,14 @@ Slay the Spire型。会話が戦闘。`js/run.js` + `cards.js` + `minigames.js` 
 - `setPrepMode('read'|'edit')`。`openPlanEdit()` は**下調べがあれば読む**、無ければ編集で開く。
 - 録音設定(`talk-setup`)で下調べのある予定を選ぶと `#btn-talk-plan-read` が出て、`openPlanEdit(id, 'talk-setup')` で開く。← で戻っても `refreshPlanPicker()` が選択を保つ。
 
+### 💡 文字起こし・要約の待ち時間にも質問候補を見せる (v1.42.0)
+
+- **v1.41.0 までの問題**: 「終了して要約」で `talkTranscribeStep()` が `#talk-result-content` をスピナーだけに置きかえていたため、録音中に 💡 で作った質問(`Talk.current.questions`, `partial:true`)が要約の完成まで見えなかった(要約側の `#talk-q-first` は文字起こしが終わってから作られていた)。
+- **今の形**: 結果画面を `#talk-q-first`(質問の枠)と `#talk-progress`(進み具合)に分ける(`ensureTalkProgressLayout()`)。文字起こし・要約のあいだは `setTalkProgress(text)` で進み具合だけ書きかえ、**質問の枠は作り直さない**(開いた `<details>` と⭐が保たれる)。
+- `renderPendingQuestions(note)`: 中身は `Talk.current.questions` の**参照が前回と違うときだけ**描き直す(`box._qs`。`makeQuestions()` は毎回新しいオブジェクトを入れる)。note は注記だけ書きかえる。
+- `_earlyQPending`: 💡 の結果を待っている間に「終了して要約」を押した場合、枠にスピナーを出し、返ってきた時点で `renderPendingQuestions()` を呼ぶ(全文版が先にできていれば `makeQuestions()` 側で途中版を捨てる)。`resetEarlyQuestionUI()`(録音開始)で戻す。
+- `renderTalkRetry()`(文字起こしがほぼ空)にも質問候補を出す。
+
 ## 11. テストについて
 
 jsdomでブラウザ環境を再現した自動テストを都度作成している(`/tmp/*.js`)。**セッションが変わると消えるため、大きな変更時は作り直す**。カバーしてきた範囲:

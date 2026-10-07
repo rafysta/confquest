@@ -1928,6 +1928,7 @@ async function regenerateQuestions() {
 function resetEarlyQuestionUI(kind) {
   const wrap = document.getElementById('talk-early-wrap');
   if (!wrap) return;
+  _earlyQPending = false;
   wrap.classList.toggle('hidden', kind === 'meeting');     // 議事録には質問候補が無い
   document.getElementById('talk-early-q').innerHTML = '';
   const btn = document.getElementById('btn-talk-early-q');
@@ -1949,11 +1950,15 @@ document.getElementById('btn-talk-early-q').addEventListener('click', async () =
       <p class="field-note" style="text-align:center">${msg}<br>録音は続いています。</p>`;
   };
   stage('ここまでの録音を文字起こししています…');
+  _earlyQPending = true;
   try {
     await Talk.earlyQuestions((st) => {
       if (st === 'ai') stage('質問を考えています…');
     });
     if (Talk.current !== rec) return;
+    _earlyQPending = false;
+    // 待っている間に「終了して要約」を押していたら、結果画面の側にも出す
+    renderPendingQuestions();
     box.innerHTML = `<div class="card" style="margin-top:8px;text-align:left">
       ${talkQuestionsHtml()}
       <p class="field-note" style="margin-top:6px">${Math.round((Date.now() - t0) / 1000)}秒で作成。録音終了後に、全文からもう一度作り直します(⭐を付けたものは残ります)。</p>
@@ -1961,9 +1966,12 @@ document.getElementById('btn-talk-early-q').addEventListener('click', async () =
     wireTalkQuestions(box);
   } catch (err) {
     if (Talk.current !== rec) return;
+    _earlyQPending = false;
+    renderPendingQuestions();
     box.innerHTML = `<p class="md-error">${escapeHtml(aiErrorText(err))}</p>
       <p class="field-note">録音には影響ありません。終了後の要約では、通常どおり質問候補が作られます。</p>`;
   } finally {
+    if (Talk.current === rec) _earlyQPending = false;
     btn.disabled = false;
     btn.textContent = '💡 もう一度作る(最新の内容で)';
   }
@@ -2616,18 +2624,73 @@ document.getElementById('btn-talk-finish').addEventListener('click', async () =>
   await talkTranscribeStep();
 });
 
+/* ---------- 💡 文字起こし・要約の待ち時間にも質問候補を見せる (v1.42.0) ----------
+ * ⚠ v1.41.0 まで、「終了して要約」を押すと結果画面が「文字起こし中…」のスピナーだけに
+ *   置きかわり、録音中に 💡 で作った質問が要約の完成まで見られなかった。質疑応答は講演の
+ *   直後なので、いちばん見たいときに見えないことになる。
+ * 結果画面を「質問の枠(#talk-q-first)」と「進み具合(#talk-progress)」の 2 つに分け、
+ * 文字起こし・要約のあいだは進み具合だけを書きかえる。質問の枠は作り直さないので、
+ * 開いた質問・付けた⭐もそのまま残る。全文からの質問ができたら中身だけ差しかえる。 */
+let _earlyQPending = false;     // 録音中に頼んだ質問がまだ返ってきていない
+
+/** 結果画面を「質問の枠 + 進み具合」の形にする(すでにその形なら何もしない) */
+function ensureTalkProgressLayout() {
+  const el = document.getElementById('talk-result-content');
+  if (!document.getElementById('talk-progress') || !el.contains(document.getElementById('talk-progress'))) {
+    el.innerHTML = '<div id="talk-q-first"></div><div id="talk-progress"></div>';
+  }
+}
+function setTalkProgress(text) {
+  ensureTalkProgressLayout();
+  document.getElementById('talk-progress').innerHTML =
+    `<div class="spinner"></div><p class="field-note" style="text-align:center">${text}</p>`;
+}
+
+/**
+ * 質問の枠を描く。note を渡すと下の注記だけ書きかえる(undefined なら注記はそのまま)。
+ * 質問の中身は、Talk.current.questions が前回描いたときと違うときだけ描き直す。
+ */
+function renderPendingQuestions(note) {
+  const box = document.getElementById('talk-q-first');
+  if (!box) return;
+  const c = Talk.current;
+  const qs = c && c.questions;
+  const has = qs && ((qs.items && qs.items.length) || qs.raw);
+  if (note !== undefined) box._note = note;      // 枠がまだ無いときに来た注記も、あとで出せるように覚えておく
+  if (!c || c.kind === 'meeting' || (!has && !_earlyQPending)) {
+    box.innerHTML = ''; box._qs = null;
+    return;
+  }
+  if (!box.querySelector('#talk-q-first-list')) {
+    box.innerHTML = `<div class="card"><h3 style="font-size:1rem;margin-bottom:6px">💡 質問候補</h3>
+      <div id="talk-q-first-list"></div><p class="field-note" id="talk-q-first-note" style="margin-top:6px"></p></div>`;
+    box._qs = undefined;
+  }
+  const list = box.querySelector('#talk-q-first-list');
+  if (has && box._qs !== qs) {
+    list.innerHTML = talkQuestionsHtml();
+    wireTalkQuestions(list);
+    box._qs = qs;
+  } else if (!has) {
+    list.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">録音中に頼んだ質問を作っています…</p>';
+    box._qs = null;
+  }
+  box.querySelector('#talk-q-first-note').textContent = box._note || '';
+}
+
 /** 文字起こし→(結果チェック)→要約。lang指定つきで呼ぶと言語を変えて再試行 */
 async function talkTranscribeStep(lang) {
   const el = document.getElementById('talk-result-content');
   document.getElementById('talk-actions').classList.add('hidden');
   try {
     if (lang !== undefined) Talk.current.lang = lang;
-    el.innerHTML = '<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中...</p>';
+    el.innerHTML = '';              // 前の講演の枠が残っていても使わない(注記も新しく)
+    ensureTalkProgressLayout();
+    renderPendingQuestions('文字起こしと要約が終わるまで、ここで読めます。終わったら全文からもう一度作り直します(⭐を付けたものは残ります)。');
+    setTalkProgress('文字起こし中...');
     keepScreenOn();
     await Talk.transcribe((done, total) => {
-      if (total > 1) {
-        el.innerHTML = `<div class="spinner"></div><p class="field-note" style="text-align:center">文字起こし中... (パート ${done}/${total})</p>`;
-      }
+      if (total > 1) setTalkProgress(`文字起こし中... (パート ${done}/${total})`);
     });
     // ほぼ空なら黙って要約に進まず、原因と再試行の選択肢を出す
     const len = Talk.current.transcript.trim().length;
@@ -2650,18 +2713,11 @@ async function talkSummarizeStep() {
     //    すでに全文から作った質問があるとき(要約だけのやり直し)は作り直さない。
     const cq = Talk.current;
     const needQ = cq.kind !== 'meeting' && (!cq.questions || cq.questions.partial);
-    el.innerHTML = `<div id="talk-q-first"></div>
-      <div class="spinner"></div><p class="field-note" style="text-align:center">要約を作成中...</p>`;
-    const showFirst = (note) => {
-      const box = document.getElementById('talk-q-first');
-      if (!box || !cq.questions) return;
-      box.innerHTML = `<div class="card"><h3 style="font-size:1rem;margin-bottom:6px">💡 質問候補</h3>
-        ${talkQuestionsHtml()}${note ? `<p class="field-note" style="margin-top:6px">${note}</p>` : ''}</div>`;
-      wireTalkQuestions(box);
-    };
-    if (cq.kind !== 'meeting' && cq.questions) {
-      showFirst(needQ ? '全文から作り直しています…(⭐を付けたものは残ります)' : '');
-    }
+    // 文字起こしの画面から続けて来たときは、質問の枠をそのまま使う(開いた質問が閉じない)
+    ensureTalkProgressLayout();
+    setTalkProgress('要約を作成中...');
+    const showFirst = (note) => { if (Talk.current === cq) renderPendingQuestions(note); };
+    showFirst(needQ ? '全文から作り直しています…(⭐を付けたものは残ります)' : '');
     let qPromise = null;
     if (needQ) {
       cq.questionError = '';
@@ -2739,7 +2795,12 @@ function renderTalkRetry(len) {
   const cur = Talk.current.lang || '';
   const langNames = { '': '自動判定', en: '英語', ja: '日本語', ko: '韓国語' };
   const imported = Talk.current.source === 'import';
+  // 録音中に作った質問候補があれば、こちらでも消さずに見せる
+  const hasQ = Talk.current.kind !== 'meeting' && Talk.current.questions &&
+    ((Talk.current.questions.items || []).length || Talk.current.questions.raw);
   el.innerHTML = `
+    ${hasQ ? `<div class="card"><h3 style="font-size:1rem;margin-bottom:6px">💡 質問候補</h3>
+      <div id="talk-q-list">${talkQuestionsHtml()}</div></div>` : ''}
     <div class="card">
       <h3 style="font-size:1rem;margin-bottom:6px">⚠ 文字起こしがほぼ空でした(${len}文字)</h3>
       <p class="field-note" style="margin-bottom:8px">
@@ -2770,6 +2831,7 @@ function renderTalkRetry(len) {
     talkTranscribeStep(el.querySelector('#talk-retry-lang').value));
   const force = el.querySelector('#btn-talk-force');
   if (force) force.addEventListener('click', () => talkSummarizeStep());
+  wireTalkQuestions(document.getElementById('talk-q-list'));
   renderTalkAudioBox();
 }
 
