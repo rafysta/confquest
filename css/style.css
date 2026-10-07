@@ -2137,6 +2137,16 @@ audio { width: 100%; margin-bottom: 12px; }
 .plan-pick { background: var(--bg-card); border-radius: 12px; padding: 12px; }
 .plan-pick .quest-nav { margin-top: 4px; }
 .plan-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 📖 下調べの「読む / 編集」切り替え (v1.41.0) */
+.prep-tabs { display: flex; gap: 0; margin: 10px 0 8px; border: 1px solid #334155; border-radius: 10px; overflow: hidden; }
+.prep-tab {
+  flex: 1; padding: 9px 6px; background: transparent; color: var(--text-dim);
+  border: none; font: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+}
+.prep-tab + .prep-tab { border-left: 1px solid #334155; }
+.prep-tab.active { background: var(--accent); color: #fff; }
+.prep-view { margin-bottom: 12px; }
+.prep-view .prep-empty { color: var(--text-dim); font-size: 0.9rem; }
 .plan-btn-row .quest-nav { flex: 1; }
 .plan-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 .plan-badge {

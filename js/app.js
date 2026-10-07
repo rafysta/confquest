@@ -2093,6 +2093,8 @@ function applyPlanToForm() {
   const sel = document.getElementById('talk-plan');
   const note = document.getElementById('talk-plan-note');
   const plan = (sel && sel.value && typeof Plans !== 'undefined') ? Plans.get(sel.value) : null;
+  const readBtn = document.getElementById('btn-talk-plan-read');
+  if (readBtn) readBtn.classList.toggle('hidden', !(plan && plan.prep));
   if (!plan) {
     if (note) note.textContent = Plans.upcoming().length
       ? '選ぶと下の項目が埋まり、登録した抄録・下調べ・語彙が文字起こし・要約・質問づくりに使われます。'
@@ -2116,6 +2118,35 @@ function applyPlanToForm() {
 
 document.getElementById('talk-plan').addEventListener('change', applyPlanToForm);
 document.getElementById('btn-talk-plans').addEventListener('click', () => showScreen('talk-plans'));
+document.getElementById('btn-talk-plan-read').addEventListener('click', () => {
+  const sel = document.getElementById('talk-plan');
+  if (sel && sel.value) openPlanEdit(Number(sel.value), 'talk-setup');   // ← で録音設定に戻る(選択はそのまま)
+});
+
+/* ---------- 📖 下調べを「録音の要約」と同じ見た目で読む (v1.41.0) ----------
+ * 下調べは Claude が書いた Markdown なので、貼り付け欄のままだと「##」や「- 」が
+ * 生のまま並んで読みにくい。要約と同じ renderMarkdown()(見出しの節・入れ子の箇条書き・表)で
+ * 整形して見せる。編集は「✏️ 貼り付け・編集」に切り替えて行う。 */
+let _prepMode = 'edit';
+function setPrepMode(mode) {
+  _prepMode = mode === 'read' ? 'read' : 'edit';
+  const read = _prepMode === 'read';
+  document.getElementById('btn-prep-read').classList.toggle('active', read);
+  document.getElementById('btn-prep-edit').classList.toggle('active', !read);
+  document.getElementById('btn-prep-read').setAttribute('aria-selected', String(read));
+  document.getElementById('btn-prep-edit').setAttribute('aria-selected', String(!read));
+  document.getElementById('plan-prep-view').classList.toggle('hidden', !read);
+  document.getElementById('plan-prep-editbox').classList.toggle('hidden', read);
+  if (read) renderPrepView();
+}
+function renderPrepView() {
+  const text = document.getElementById('plan-prep').value;
+  document.getElementById('plan-prep-rendered').innerHTML = text.trim()
+    ? renderMarkdown(text)
+    : '<p class="prep-empty">まだ下調べがありません。「✏️ 貼り付け・編集」を押して、Claude の出力を貼り付けてください。</p>';
+}
+document.getElementById('btn-prep-read').addEventListener('click', () => setPrepMode('read'));
+document.getElementById('btn-prep-edit').addEventListener('click', () => setPrepMode('edit'));
 
 function planBadgesHtml(p) {
   const terms = Plans.termList(p.terms).length;
@@ -2175,6 +2206,8 @@ function openPlanEdit(id, backTo) {
   document.getElementById('plan-prep').value = p.prep || '';
   document.getElementById('plan-terms').value = p.terms || '';
   document.getElementById('plan-prep-note').textContent = '';
+  // 下調べがある予定は「📖 読む」で開く(会場で読み返すことが多い)。無ければ貼り付け欄から
+  setPrepMode(p.prep ? 'read' : 'edit');
   document.getElementById('btn-plan-delete').classList.toggle('hidden', !id);
   document.getElementById('btn-plan-export-one').classList.toggle('hidden', !id);
   document.getElementById('btn-plan-save').textContent = '💾 保存';

@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/style.css?v=1.40.0">
+<link rel="stylesheet" href="css/style.css?v=1.41.0">
 <script>
 /* スクリプト読み込み中のエラーも記録する(app.jsが画面に表示する) */
 window.__earlyErrors = [];
@@ -217,6 +217,7 @@ window.addEventListener('unhandledrejection', function (e) {
         <option value="">(選ばない — 下に手で入力する)</option>
       </select>
       <span class="field-note" id="talk-plan-note">学会の前に「予定の講演」を登録しておくと、ここで選んで ● 録音を開始 を押すだけで始められます。登録した抄録・下調べ・語彙は、文字起こし(語彙ヒント)・要約・質問づくりに使われます。</span>
+      <button class="quest-nav hidden" id="btn-talk-plan-read">📖 この講演の下調べを読む</button>
       <button class="quest-nav" id="btn-talk-plans">📅 予定の講演を登録・編集する</button>
     </div>
     <label class="field">
@@ -437,7 +438,12 @@ window.addEventListener('unhandledrejection', function (e) {
       <button class="quest-nav" id="btn-plan-request">📋 Claude への依頼文をコピー</button>
       <button class="quest-nav" id="btn-plan-request-share">📤 依頼文を共有</button>
     </div>
-    <label class="field">
+    <div class="prep-tabs" role="tablist">
+      <button class="prep-tab" id="btn-prep-read" role="tab" type="button">📖 読む</button>
+      <button class="prep-tab" id="btn-prep-edit" role="tab" type="button">✏️ 貼り付け・編集</button>
+    </div>
+    <div class="card prep-view hidden" id="plan-prep-view"><div class="md-body" id="plan-prep-rendered"></div></div>
+    <label class="field" id="plan-prep-editbox">
       <span>下調べ(Markdown)</span>
       <textarea id="plan-prep" rows="10" placeholder="Claude の出力をここに貼り付け"></textarea>
       <span class="field-note" id="plan-prep-note"></span>
@@ -892,28 +898,28 @@ window.addEventListener('unhandledrejection', function (e) {
   </div>
 </div>
 
-<script src="js/version.js?v=1.40.0"></script>
-<script src="js/flags.js?v=1.40.0"></script>
-<script src="js/ai.js?v=1.40.0"></script>
-<script src="js/practice.js?v=1.40.0"></script>
-<script src="js/plans.js?v=1.40.0"></script>
-<script src="js/talk.js?v=1.40.0"></script>
-<script src="js/audioimport.js?v=1.40.0"></script>
-<script src="js/backup.js?v=1.40.0"></script>
-<script src="js/scenarios.js?v=1.40.0"></script>
-<script src="js/convo.js?v=1.40.0"></script>
-<script src="js/cards.js?v=1.40.0"></script>
-<script src="js/minigames.js?v=1.40.0"></script>
-<script src="js/bosses.js?v=1.40.0"></script>
-<script src="js/run.js?v=1.40.0"></script>
-<script src="js/progress.js?v=1.40.0"></script>
-<script src="js/profile.js?v=1.40.0"></script>
-<script src="js/phrases.js?v=1.40.0"></script>
-<script src="js/voices.js?v=1.40.0"></script>
-<script src="js/learn.js?v=1.40.0"></script>
-<script src="js/route.js?v=1.40.0"></script>
-<script src="js/topics.js?v=1.40.0"></script>
-<script src="js/drive.js?v=1.40.0"></script>
-<script src="js/app.js?v=1.40.0"></script>
+<script src="js/version.js?v=1.41.0"></script>
+<script src="js/flags.js?v=1.41.0"></script>
+<script src="js/ai.js?v=1.41.0"></script>
+<script src="js/practice.js?v=1.41.0"></script>
+<script src="js/plans.js?v=1.41.0"></script>
+<script src="js/talk.js?v=1.41.0"></script>
+<script src="js/audioimport.js?v=1.41.0"></script>
+<script src="js/backup.js?v=1.41.0"></script>
+<script src="js/scenarios.js?v=1.41.0"></script>
+<script src="js/convo.js?v=1.41.0"></script>
+<script src="js/cards.js?v=1.41.0"></script>
+<script src="js/minigames.js?v=1.41.0"></script>
+<script src="js/bosses.js?v=1.41.0"></script>
+<script src="js/run.js?v=1.41.0"></script>
+<script src="js/progress.js?v=1.41.0"></script>
+<script src="js/profile.js?v=1.41.0"></script>
+<script src="js/phrases.js?v=1.41.0"></script>
+<script src="js/voices.js?v=1.41.0"></script>
+<script src="js/learn.js?v=1.41.0"></script>
+<script src="js/route.js?v=1.41.0"></script>
+<script src="js/topics.js?v=1.41.0"></script>
+<script src="js/drive.js?v=1.41.0"></script>
+<script src="js/app.js?v=1.41.0"></script>
 </body>
 </html>

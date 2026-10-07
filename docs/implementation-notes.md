@@ -414,6 +414,12 @@ Slay the Spire型。会話が戦闘。`js/run.js` + `cards.js` + `minigames.js` 
 - **`updatedAt`**: v1.40.0 から `Plans.save()` が毎回付ける。それ以前の予定には無いので、比べられないときは読み込む側を採る。
 - **画面**: 一覧に `#btn-plans-export`(未使用の予定すべて)/ `#btn-plans-import`、編集画面に `#btn-plan-export-one`(保存してから 1 件だけ)。確認ダイアログが長くなるので `.modal-box` に `max-height: 88vh; overflow-y: auto` を足した。`appPrompt()` に第5引数 `opts {ok, cancel, rows}` を追加(既存の呼び出しは変わらない)。
 
+### 10.5.2 📖 下調べを整形して読む (v1.41.0)
+
+- 編集画面の下調べ欄に「📖 読む / ✏️ 貼り付け・編集」の切り替え(`.prep-tabs`)。読むときは `#plan-prep` の中身を **録音の要約と同じ `renderMarkdown()`**(`groupUnderHeadings()` の節・入れ子の箇条書き・表)で `#plan-prep-rendered` に描く。データは textarea 1 つだけで、読む表示は毎回そこから作り直す(二重管理しない)。
+- `setPrepMode('read'|'edit')`。`openPlanEdit()` は**下調べがあれば読む**、無ければ編集で開く。
+- 録音設定(`talk-setup`)で下調べのある予定を選ぶと `#btn-talk-plan-read` が出て、`openPlanEdit(id, 'talk-setup')` で開く。← で戻っても `refreshPlanPicker()` が選択を保つ。
+
 ## 11. テストについて
 
 jsdomでブラウザ環境を再現した自動テストを都度作成している(`/tmp/*.js`)。**セッションが変わると消えるため、大きな変更時は作り直す**。カバーしてきた範囲:
