@@ -428,6 +428,13 @@ Slay the Spire型。会話が戦闘。`js/run.js` + `cards.js` + `minigames.js` 
 - `_earlyQPending`: 💡 の結果を待っている間に「終了して要約」を押した場合、枠にスピナーを出し、返ってきた時点で `renderPendingQuestions()` を呼ぶ(全文版が先にできていれば `makeQuestions()` 側で途中版を捨てる)。`resetEarlyQuestionUI()`(録音開始)で戻す。
 - `renderTalkRetry()`(文字起こしがほぼ空)にも質問候補を出す。
 
+### 💾 Android では保存先を選ぶ画面を使わない (v1.43.0)
+
+- **症状**: Android の Chrome でバックアップを作ると、Dropbox に `confquest-backup_…_full.zip` が中身ゼロで作られ、アプリには「保存をキャンセルしました」。
+- **原因**: Android の Chrome も `showSaveFilePicker` を持つようになった(v1.26.2 の時点では無かったので、Android はダウンロードに回る想定だった)。システムの保存画面でクラウドのアプリ(Dropbox)を選ぶと、**空のファイルだけ作られて `AbortError` が返る**。本当のキャンセルと見分けられない。
+- **対策**: `canPickSaveLocation()` = `showSaveFilePicker` があり、かつ `isAndroidDevice()` でない(`navigator.userAgentData.platform` → 無ければ UA)。バックアップと 📅予定の書き出しの両方で使う。Android はダウンロード。
+- バックアップのダウンロードは ZIP を作り終えてから(=クリックから時間が経ってから)走るので、モバイルが黙って止める可能性がある(v1.30.1 と同じ種類の問題)。`_backupBlob` に持っておき、**状況表示に「⬇ ダウンロードされていなければ、ここを押す」ボタン**を出す(押せば同じタスクで `downloadBackupBlob()`)。
+
 ## 11. テストについて
 
 jsdomでブラウザ環境を再現した自動テストを都度作成している(`/tmp/*.js`)。**セッションが変わると消えるため、大きな変更時は作り直す**。カバーしてきた範囲:

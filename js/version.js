@@ -1,7 +1,7 @@
 /* ConfQuest - バージョン情報と更新履歴 */
 'use strict';
 
-const APP_VERSION = '1.42.0';
+const APP_VERSION = '1.43.0';
 const APP_BUILD = '2026-10-07';
 
 /**
@@ -9,6 +9,14 @@ const APP_BUILD = '2026-10-07';
  * type: 'new' 新機能 / 'fix' 修正 / 'change' 変更
  */
 const CHANGELOG = [
+  {
+    version: '1.43.0',
+    date: '2026-10-07',
+    items: [
+      { type: 'fix', text: '💾 Android でバックアップを作ると、保存先に選んだ Dropbox に中身が空の ZIP だけができ、アプリには「保存をキャンセルしました」と出ていたのを直しました。Android の Chrome に新しく入った「保存先を選ぶ画面」が、Dropbox などのクラウドのアプリを選ぶと空のファイルを作ったまま失敗するためです。Android では以前どおりダウンロードフォルダへ保存します(Dropbox へは Dropbox アプリの「アップロード」から入れてください)。PC の Chrome・Edge では、これまでどおり保存先を選べます' },
+      { type: 'fix', text: '💾 バックアップの作成に時間がかかってダウンロードが始まらなかったときのために、「⬇ ダウンロードされていなければ、ここを押す」ボタンを出すようにしました。📅 予定の講演の書き出し(ファイル)も、Android ではダウンロードフォルダへ保存します' }
+    ]
+  },
   {
     version: '1.42.0',
     date: '2026-10-07',

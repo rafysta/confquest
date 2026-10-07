@@ -494,9 +494,36 @@ if (_audioClear) _audioClear.addEventListener('click', async () => {
   showToast('🗑 録音音声を削除しました');
 });
 
+/* ---------- 保存先を選ぶ画面を使ってよいか (v1.43.0) ----------
+ * ⚠ Android の Chrome も showSaveFilePicker を持つようになったが、保存先に Dropbox などの
+ *   クラウドのアプリを選ぶと、空のファイルだけ作られたうえで AbortError(=キャンセルと同じ)が返る。
+ *   アプリには「保存をキャンセルしました」と出て、Dropbox には中身が空の ZIP が残っていた。
+ *   本当のキャンセルと見分ける手段が無いので、Android ではこの画面を使わず、これまでどおり
+ *   ダウンロードフォルダへ保存する(PC の Chrome・Edge では従来どおり保存先を選べる)。 */
+function isAndroidDevice() {
+  const uad = navigator.userAgentData;
+  if (uad && typeof uad.platform === 'string' && uad.platform) return /android/i.test(uad.platform);
+  return /Android/i.test(navigator.userAgent || '');
+}
+function canPickSaveLocation() {
+  return typeof window.showSaveFilePicker === 'function' && !isAndroidDevice();
+}
+
 /* ---------- 💾 バックアップと復元 ---------- */
 let _backupBlob = null;
 let _backupName = '';
+
+/** 作ったバックアップ ZIP をダウンロードする(クリックと同じタスクで呼ぶこと) */
+function downloadBackupBlob() {
+  if (!_backupBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(_backupBlob);
+  a.download = _backupName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
 
 const _bkExport = document.getElementById('btn-backup-export');
 if (_bkExport) _bkExport.addEventListener('click', async () => {
@@ -509,7 +536,7 @@ if (_bkExport) _bkExport.addEventListener('click', async () => {
    * Nextcloudの同期フォルダを直接選べるので、あとから移す手間がなくなる。
    * 非対応の端末(Android・Firefox・Safari)は従来どおりダウンロードする。 */
   let handle = null;
-  if (window.showSaveFilePicker) {
+  if (canPickSaveLocation()) {
     try {
       handle = await window.showSaveFilePicker({
         id: 'confquest-backup',           // 次回も同じフォルダが開く
@@ -537,13 +564,16 @@ if (_bkExport) _bkExport.addEventListener('click', async () => {
       await w.close();
       status.textContent = `✓ 「${handle.name}」に保存しました(${Backup.fmtBytes(r.bytes)})。`;
     } else {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(r.blob);
-      a.download = r.name;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 20000);
-      status.textContent = `✓ ${r.name}(${Backup.fmtBytes(r.bytes)})を保存しました。` +
-        'ダウンロードフォルダにあるので、Nextcloudの同期フォルダやGoogle Driveに移しておいてください。';
+      // ZIP を作るのに時間がかかるとクリックから離れてしまい、モバイルのブラウザが
+      // ダウンロードを黙って止めることがある。そのときのために、押せばその場で
+      // 保存されるボタンも出しておく(ZIP はもうできているので、押した直後に保存できる)
+      _backupBlob = r.blob;
+      _backupName = r.name;
+      downloadBackupBlob();
+      status.innerHTML = `✓ ${escapeHtml(r.name)}(${escapeHtml(Backup.fmtBytes(r.bytes))})を保存しました。` +
+        'ダウンロードフォルダにあるので、Dropbox・Google Drive・Nextcloud のアプリの「アップロード」から入れておいてください。' +
+        '<br><button class="btn-control" type="button" id="btn-backup-redownload" style="margin-top:6px">⬇ ダウンロードされていなければ、ここを押す</button>';
+      document.getElementById('btn-backup-redownload').addEventListener('click', downloadBackupBlob);
     }
     Backup.markSaved();
     updateBackupInfo();
@@ -2364,7 +2394,7 @@ async function exportPlans(list) {
   const n = list.length;
   const options = [
     { value: 'file', primary: true, label: '💾 ファイルに保存',
-      desc: window.showSaveFilePicker
+      desc: canPickSaveLocation()
         ? 'Nextcloud や Google Drive の同期フォルダに保存すると、携帯ではそのファイルを選ぶだけです'
         : 'ダウンロードフォルダに保存します。Gmail の添付などで相手の端末へ送ってください' },
     { value: 'copy', label: '📋 テキストとしてコピー',
@@ -2380,7 +2410,7 @@ async function exportPlans(list) {
     const name = Plans.exportFileName();
     const json = Plans.exportJson(list);
     // 保存先を選ぶダイアログはクリック直後しか開けないので、ここで先に開く(💾バックアップと同じ)
-    if (window.showSaveFilePicker) {
+    if (canPickSaveLocation()) {
       try {
         const handle = await window.showSaveFilePicker({
           id: 'confquest-plans',
