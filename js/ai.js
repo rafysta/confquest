@@ -91,28 +91,70 @@ const STT = {
   LOGPROB_THRESHOLD: -1.0,
   COMPRESSION_THRESHOLD: 2.4,
   REPEAT_MIN: 3,               // 同じ文がこの回数以上続いたら繰り返しとみなす
+  ECHO_MIN_CHARS: 6,           // 語彙ヒントの「丸写し」とみなす最短の長さ(正規化後)
+
+  /* ---------- 🕳 語彙ヒントの丸写しと、文字起こしの「空洞」 (v1.46.0) ----------
+   * ユーザー報告(2026-10-08, 89分のラボ会議): パート1(冒頭15分)の文字起こしが
+   * 「Ken Osamu Hideki Tomomi Sanki.」(= Whisper に渡した参加者名のヒント)の繰り返し 150 回超と
+   * 「. . . .」だけになり、冒頭 13 分の内容(近況報告・講演でのデータ公開範囲の相談)が丸ごと消えた。
+   * Zoom の文字起こしには同じ区間の発言が全部あるので、音声は入っていた。
+   * Whisper は prompt を「直前の文脈」として扱うため、聞き取りにくい区間でヒントの文をそのまま
+   * 出力し、一度出すと(前の出力を次の文脈にするので)そのまま最後まで抜け出せなくなる。
+   * v1.44.0 の繰り返しの整理は症状を「[※ 同じ文が 127 回続いたため省略]」と畳むだけで、
+   * 15 分ぶんの内容が失われたことは伝えていなかった。
+   *   (1) ヒントの丸写し(ヒント文に含まれるだけの短い文)は、繰り返しに関係なく除く
+   *   (2) 句読点だけの文(「.」「…」)は捨てる
+   *   (3) パートの長さに対して文字数が少なすぎる(「薄い」)なら、呼び出し側が
+   *       ヒント無しで文字起こしをやり直し、それでも薄ければ警告と目印を残す
+   */
+  THIN_CHARS_PER_MIN: 80,      // 英語の会話は通常 300〜900 文字/分。これを割るパートは「薄い」
+  THIN_MIN_SEC: 120,           // 短すぎるパートは判定しない
 
   /** 文の比較用: 空白・句読点・記号を落として小文字に */
   _norm(text) {
-    return String(text || '').toLowerCase().replace(/[\s\u3000。、．，,.!?！？…・「」『』()（）\-–—]/g, '');
+    return String(text || '').toLowerCase().replace(/[\s\u3000。、．，,.!?！？…・「」『』()（）\-–—:：;；]/g, '');
+  },
+
+  /** セグメント列の本文の文字数(目印 [※ …] [— … —] は数えない) */
+  textChars(segments) {
+    return (segments || []).reduce((n, sg) =>
+      n + String(sg.text || '').replace(/\[[※—][^\]]*\]/g, '').trim().length, 0);
+  },
+
+  /** パートの長さに対して文字起こしが薄すぎるか */
+  looksThin(segments, durSec) {
+    if (!(durSec >= this.THIN_MIN_SEC)) return false;
+    return this.textChars(segments) / (durSec / 60) < this.THIN_CHARS_PER_MIN;
   },
 
   /**
    * 1 パートぶんのセグメントを整える。戻り値 { segments, notes:[string] }。
+   * 0. 語彙ヒントの丸写し: ヒント文の中にそのまま含まれる短い文は捨てる (v1.46.0)
    * 1. 無音の幻聴: no_speech_prob > 0.6 かつ avg_logprob < -1.0 のセグメントを捨てる
    * 2. 繰り返し: 同じ文(正規化して比較)が 3 回以上続いたら 1 回だけ残す。
    *    1 つのセグメントの中で同じ文が 3 回以上並んでいる場合も 1 回にする。
    * 文字起こし本文には「[※ 同じ文が N 回続いたため省略]」の目印を入れ、要約が
    * 「強調していた」などと誤解しないようにする。
+   * prompt は Whisper に渡した語彙ヒント(省略可)。
    */
-  clean(segments) {
+  clean(segments, prompt) {
     const segs = Array.isArray(segments) ? segments : [];
     const notes = [];
+    const normPrompt = this._norm(prompt || '');
     let silence = 0;
+    let echo = 0;
+    let echoExample = '';
     const kept = [];
     for (const sg of segs) {
       const t = String(sg.text || '').trim();
       if (!t) continue;
+      const nt = this._norm(t);
+      if (!nt) continue;                                    // 「.」「…」など句読点だけ
+      if (normPrompt && nt.length >= this.ECHO_MIN_CHARS && normPrompt.includes(nt)) {
+        echo++;
+        if (!echoExample) echoExample = t;
+        continue;
+      }
       if (sg.noSpeech != null && sg.logprob != null &&
           sg.noSpeech > this.NO_SPEECH_THRESHOLD && sg.logprob < this.LOGPROB_THRESHOLD) {
         silence++;
@@ -120,6 +162,8 @@ const STT = {
       }
       kept.push(Object.assign({}, sg, { text: t }));
     }
+    if (echo) notes.push(`語彙ヒント(会議名・参加者・用語)をそのまま書き出した文を ${echo} 件除きました`
+      + (echoExample ? `(「${echoExample.slice(0, 30)}${echoExample.length > 30 ? '…' : ''}」)` : ''));
     if (silence) notes.push(`無音・雑音に当てはめられた文を ${silence} 件除きました`);
 
     // セグメントの中の繰り返し(「A。A。A。」が 1 セグメントに入っている場合)

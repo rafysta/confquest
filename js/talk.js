@@ -616,13 +616,19 @@ const Talk = {
     if (typeof Plans === 'undefined') return '';
     if (c.kind === 'meeting') {
       // 👥 会議: ラボ用語集(設定)+会議名+参加者を語彙ヒントにする (v1.39.0)
+      // ⚠ v1.46.0: 「Participants: Ken Osamu Hideki …」のような見出し+語の羅列は、
+      //   聞き取りにくい区間で Whisper がそのまま書き出し、以後ずっと繰り返す引き金になった
+      //   (10/8 の会議で冒頭15分が消えた)。文の形(自然な書き起こしの冒頭に見える形)にし、
+      //   名前は読点で区切る。丸写しが出ても STT.clean() が除き、薄ければヒント無しでやり直す。
       const g = this.labGlossary();
       if (!g && !c.title) return '';
       const parts = [];
-      if (c.title) parts.push(`Lab meeting: ${c.title}.`);
-      if (c.speaker) parts.push(`Participants: ${c.speaker}.`);
+      const who = Plans.termList(c.speaker || '').join(', ');
+      if (c.title && who) parts.push(`This is a recording of the lab meeting "${c.title}", with ${who} attending.`);
+      else if (c.title) parts.push(`This is a recording of the lab meeting "${c.title}".`);
+      else if (who) parts.push(`This is a recording of a lab meeting with ${who} attending.`);
       const terms = Plans.termList(g);
-      if (terms.length) parts.push(`Key terms: ${terms.join(', ')}.`);
+      if (terms.length) parts.push(`Terms that come up include ${terms.join(', ')}.`);
       let s = parts.join(' ');
       if (s.length > Plans.PROMPT_MAX_CHARS) s = s.slice(s.length - Plans.PROMPT_MAX_CHARS);
       return s;
@@ -639,6 +645,17 @@ const Talk = {
     const c = this.current;
     if (!c || !c.prep || typeof Plans === 'undefined') return '';
     return Plans.contextText(c.prep);
+  },
+
+  /** パート idx の長さ(秒)。読み込んだ音声は durationSec を持つ。録音は次のパートの開始(最後は録音全体)から求める */
+  _partDurSec(segs, idx) {
+    const sg = segs[idx];
+    if (!sg) return 0;
+    if (sg.durationSec > 0) return sg.durationSec;
+    const next = segs[idx + 1];
+    if (next && next.startSec > sg.startSec) return next.startSec - sg.startSec;
+    const total = this.current ? (this.current.durationMs || 0) / 1000 : 0;
+    return total > sg.startSec ? total - sg.startSec : 0;
   },
 
   async transcribe(onProgress) {
@@ -675,13 +692,34 @@ const Talk = {
 
     const all = [];
     const sttNotes = [];
+    const prompt = this.sttPrompt();
+    const partLabel = (k) => (usable.length > 1 ? `パート${usable[k].part}` : '');
     for (let k = 0; k < usable.length; k++) {
       if (onProgress) onProgress(k + 1, usable.length);
       try {
-        const raw = await STT.transcribe(usable[k].sg.blob, this.current.lang, this.sttPrompt());
-        // 🧹 無音の幻聴・同じ文の繰り返しを除く(v1.44.0)。何をしたかは sttNotes に残す
-        const cleaned = STT.clean(raw);
-        cleaned.notes.forEach((n) => sttNotes.push(usable.length > 1 ? `パート${usable[k].part}: ${n}` : n));
+        const blob = usable[k].sg.blob;
+        const durSec = this._partDurSec(segs, usable[k].part - 1);
+        const raw = await STT.transcribe(blob, this.current.lang, prompt);
+        // 🧹 無音の幻聴・同じ文の繰り返し・語彙ヒントの丸写しを除く(v1.44.0 / v1.46.0)。何をしたかは sttNotes に残す
+        let cleaned = STT.clean(raw, prompt);
+        // 🕳 薄すぎる(= 中身がほぼ消えた)パートは、語彙ヒント無しでやり直して多いほうを採る (v1.46.0)。
+        //    ヒントの文脈に引きずられて同じ文を出し続ける失敗は、ヒントを外すと抜け出せることが多い。
+        if (prompt && STT.looksThin(cleaned.segments, durSec)) {
+          try {
+            const retry = STT.clean(await STT.transcribe(blob, this.current.lang, ''), '');
+            const before = STT.textChars(cleaned.segments);
+            const after = STT.textChars(retry.segments);
+            if (after > before) {
+              retry.notes.unshift(`文字起こしが薄かったので語彙ヒント無しでやり直しました(${before}文字 → ${after}文字)`);
+              cleaned = retry;
+            } else {
+              cleaned.notes.push(`語彙ヒント無しでもやり直しましたが改善しませんでした(${before}文字 → ${after}文字)`);
+            }
+          } catch (e) {
+            cleaned.notes.push(`語彙ヒント無しのやり直しに失敗しました: ${(e && e.message) || e}`);
+          }
+        }
+        cleaned.notes.forEach((n) => sttNotes.push(partLabel(k) ? `${partLabel(k)}: ${n}` : n));
         const res = cleaned.segments;
         // セグメント内の相対時刻を、録音全体の時刻に直して結合する
         res.forEach((x) => all.push({
@@ -689,6 +727,16 @@ const Talk = {
           end: x.end + usable[k].sg.startSec,
           text: x.text
         }));
+        // 🕳 それでも薄いパートは「失敗」として知らせ、本文にも目印を残す(黙って短い要約にしない)
+        if (STT.looksThin(res, durSec)) {
+          const s0 = usable[k].sg.startSec;
+          const range = `${PracticeUtil.fmtTime(s0 * 1000)}〜${PracticeUtil.fmtTime((s0 + durSec) * 1000)}`;
+          notes.push({ part: usable[k].part,
+            why: `文字起こしがほぼ空でした(${STT.textChars(res)}文字 / ${Math.round(durSec / 60)}分)。` +
+                 '無音・音量不足か、音声認識がこの区間で失敗しています。録音 ' + range + ' の内容は要約に入っていません' });
+          all.push({ start: s0 - 0.001, end: s0,
+            text: `[— ${range} の文字起こしはほぼ得られませんでした。この区間の内容は不明です —]` });
+        }
       } catch (err) {
         // APIキーの問題は全体を止める(1パートずつ失敗させても意味がない)
         if (err && (err.noKey || err.badKey)) throw err;
@@ -759,19 +807,83 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       user += '\n\n(※ 文字起こしの「[※ 同じ文が N 回続いたため省略]」は、音声認識が無音・雑音に当てはめて繰り返した文を取り除いた目印です。'
         + '話者が強調したわけではないので、要約に含めず、その文自体も内容として扱わないでください)';
     }
+    if (/\[— [^\]]*文字起こしはほぼ得られませんでした[^\]]*—\]/.test(c.transcript)) {
+      user += '\n\n(※ 「[— … の文字起こしはほぼ得られませんでした …—]」は、その区間の音声認識が失敗した目印です。'
+        + 'その区間に何が話されたかは分かりません。要約の冒頭に「録音 ○○〜○○ の内容は文字起こしできず、議事録に含まれていない」と1行で注記し、'
+        + '前後の話を無理につなげないでください)';
+    }
+    if (this.hasSpeakerLabels(c.transcript)) {
+      user += '\n\n(※ この文字起こしには「[時刻] 話者名: 発言」の形で話者ラベルが付いています(会議ツールの出力)。'
+        + 'ラベルは信頼してよいので、発表者・質問者・引き受けた人は、ラベルの名前で書いてください。'
+        + 'ラベルの表記が参加者欄やラボ用語集と違う場合(例: Kenichi Noma と Ken)は同一人物として、用語集・参加者欄の表記に揃えてください)';
+    }
     // 長すぎる場合だけ切るが、黙っては切らない(要約に注記させる)
     const body = c.transcript.slice(0, this.TRANSCRIPT_LIMIT);
-    user += `\n\n文字起こし:\n${body}`;
-    if (body.length < c.transcript.length) {
-      user += `\n\n(※ 文字起こしが長いため、全${c.transcript.length}文字のうち冒頭${body.length}文字までを渡しています。`
-        + '後半が欠けていることを要約の冒頭に1行だけ注記してください)';
+    const tail = body.length < c.transcript.length
+      ? `\n\n(※ 文字起こしが長いため、全${c.transcript.length}文字のうち冒頭${body.length}文字までを渡しています。`
+        + '後半が欠けていることを要約の冒頭に1行だけ注記してください)'
+      : '';
+
+    // 🗂 会議は 2 段階にする (v1.46.0): 先に「議題の一覧」だけを作り、本番の議事録に渡して全議題に見出しを立てさせる。
+    //   10/8 の会議では、研究報告の形(発表者/目的/結果)に合わない話題(学会発表の分担と日程、
+    //   データの公開範囲、論文の進捗)が議事録から丸ごと落ちた。一覧を先に固定すると落ちにくい。
+    if (c.kind === 'meeting') {
+      c.topics = null;
+      try {
+        c.topics = await this._listTopics(body + tail);
+      } catch (e) {
+        c.topics = null;   // 一覧に失敗しても議事録は作る
+      }
+      if (c.topics && c.topics.length) {
+        user += '\n\n議題の一覧(この文字起こしを先に読んで作ったもの。「議題と主な結果」では、この一覧のすべての議題に小見出しを立て、'
+          + '種類が「研究報告」でない議題も省かないでください。一覧に無い話題が文字起こしにあれば追加してよい):\n'
+          + c.topics.map((t, i) =>
+            `${i + 1}. [${t.type}] ${t.title}${t.who ? `(主に ${t.who})` : ''} — ${t.gist}`).join('\n');
+      }
     }
+
+    user += `\n\n文字起こし:\n${body}${tail}`;
 
     const text = await AI.chat(sys, [{ role: 'user', content: user }],
       this.SUMMARY_MAX_TOKENS, { effort: this.SUMMARY_EFFORT });
     if (!text || !text.trim()) throw new Error('要約が空でした。もう一度お試しください。');
     c.summary = text;
     return c.summary;
+  },
+
+  /** 文字起こしに会議ツールの話者ラベル([時刻] 名前: 発言)が十分な数あるか */
+  hasSpeakerLabels(text) {
+    const m = String(text || '').match(/\[\d{1,2}:\d{2}(?::\d{2})?\] [^:\n\]]{2,40}: /g);
+    return !!(m && m.length >= 20);
+  },
+
+  /* ---------- 🗂 議題の一覧(議事録の 1 段階目) (v1.46.0) ----------
+   * 文字起こし全体を時間順に「話題」に区切った短い一覧を JSON で作る。
+   * 研究報告だけでなく、日程・分担・予算・論文の進捗・事務連絡も一つの話題として数える。
+   * 戻り値: [{ title, type, who, gist }]。読めなければ [] 。 */
+  TOPICS_MAX_TOKENS: 6000,
+  async _listTopics(transcriptBody) {
+    const sys = `あなたは研究室ミーティングの文字起こしを読み、話題の一覧を作るアシスタントです。
+文字起こしを最初から最後まで時間順に読み、話題が切り替わるところで区切って、すべての話題を一覧にしてください。
+- 研究報告(データの説明)だけでなく、学会発表・講演の相談、発表の分担や日程、予算・funding、論文の進捗、データの公開範囲、実験系の提案、事務連絡も、それぞれ一つの話題として必ず数えてください。
+- 一つの話題は 2〜15 分程度の長さです。同じ内容が後でまた出てきたら、別の話題として分けてかまいません。
+- 出力は JSON の配列だけにしてください。前置き・説明・Markdown のコードフェンスは付けないでください。
+- 各要素: {"title": "話題の名前(project・論文・会議名などの固有名詞を入れる。英語の用語は英語のまま)", "type": "研究報告" | "議論・調整" | "事務連絡", "who": "主に話した人(文字起こしに名前の手がかりがあるときだけ。無ければ空文字)", "gist": "何が話され、どうなったかを日本語 1〜2 文で"}`;
+    const text = await AI.chat(sys, [{ role: 'user', content: `文字起こし:\n${transcriptBody}` }],
+      this.TOPICS_MAX_TOKENS, { effort: 'low' });
+    const raw = String(text || '').replace(/```json|```/g, '').trim();
+    const s = raw.indexOf('[');
+    const e = raw.lastIndexOf(']');
+    if (s < 0 || e <= s) return [];
+    let arr;
+    try { arr = JSON.parse(raw.slice(s, e + 1)); } catch (err) { return []; }
+    if (!Array.isArray(arr)) return [];
+    return arr.map((t) => ({
+      title: String((t && t.title) || '').trim(),
+      type: ['研究報告', '議論・調整', '事務連絡'].includes(t && t.type) ? t.type : '議論・調整',
+      who: String((t && t.who) || '').trim(),
+      gist: String((t && t.gist) || '').trim()
+    })).filter((t) => t.title);
   },
 
   /** 👥 ミーティング用: 議事録形式。
@@ -800,6 +912,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
 - 専門用語、gene/protein名、手法名、株・培地名、project名、ジャーナル名は英語表記のまま残す。カタカナにも日本語訳にもしない(例: condensin を「凝縮体」、cohesin を「コヒーシン」、positively supercoiled DNA を「ポジティブスーパーコイルDNA」と書かない)。キーワードも同じ。
 - 用語集の語と音が近い聞き間違い(例: 用語集に cohesin があり、文字起こしが "incohesion")は、用語集の表記に直してよい([要確認]は不要)。直した語は「要確認の語」の末尾に「用語集で直した語: 元の語 → 直した語」として列挙する。
 - 用語集に無い語を、確信が無いのに別の語へ直さない。文脈に合わない語は日本語に訳さず、元の語のまま「[要確認]」を付ける。正しい用語として知られている語(例: TAD boundary, RNA-seq)には付けない。
+- 別の議題で出た別の語に寄せない。音が似ていても、別の人が別のデータについて使っている語は別物として扱う(例: GapR-seq と Pore-C を同じ語にまとめない)。候補を添えるのは、用語集にある語か、広く知られた正しい用語で、文脈も合うときだけ。
 - 同じ対象が複数の表記で出てくる場合(例: RNSH / RNase H / rnh)は、最も明確な表記を1つ選んで本文中は統一し、他の表記は「要確認の語」に「→」で併記する。
 - 数値・単位・sample数・read数・割合・resolution・thresholdはできるだけ残し、何を数えた値かを必ず添える。別々の対象の数値を1文に混ぜない。
 - 数値は換算しない(billion/million を 億/万 に直さず、聞こえたとおり英語で書く)。
@@ -828,7 +941,12 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
 会議全体の重要点を3〜5項目。各項目は「何を調べて(試して)、何が分かり(どうなり)、次に何をするか」が1文で分かる形で書く。「関係性が示唆された」「構築が試みられた」のような抽象語だけで終わらせない。
 
 ## 議題と主な結果
-議題ごとに小見出し(### 議題名)を立てる。議題名には扱った project・論文・解析の名前を入れる。研究報告は次の5項目で、事務連絡などは要点の箇条書きだけでよい。長い研究報告は、示された解析・図のまとまりごとに結果を拾い、後半を省略しない。
+議題ごとに小見出し(### 議題名)を立てる。議題名には扱った project・論文・解析の名前を入れる。「議題の一覧」が付いている場合は、その一覧のすべての議題に小見出しを立てる。研究報告は次の5項目で書く。長い研究報告は、示された解析・図のまとまりごとに結果を拾い、後半を省略しない。
+研究報告でない議題(学会発表・講演の相談、発表の分担、日程、予算・funding、論文の進捗、データの公開範囲、実験系・共同研究の提案)は、研究報告と同じ重さで扱い、次の4項目で書く。「事務連絡」だけ要点の箇条書きでよい。
+- **経緯**: 何が問題・相談事として出たか(日付・場所・締切など具体的な情報はここに)
+- **出た意見**: 誰が(確実なときだけ)どんな意見・懸念・提案を出したか。対立する意見は両方書く
+- **結論・合意**: 決まったこと。決まっていなければ「未決」と書き、何を待っているか(別の打ち合わせ、誰かの返事)を添える
+- **残った課題**: 持ち越した点、気になっていると言われた点
 - **発表者**: (司会の指名・名乗りなど確実な手がかりがあるときだけ。無ければ「不明」)
 - **報告・目的**: 何のために何をしたか。論文の revision なら、reviewer のどの指摘に対応するものかも書く。
 - **主な結果**: (数値・解析条件・sample情報・図や panel の番号はここに。前回や元の解析からの変更点があれば、何が・なぜ変わったかを書く)
@@ -842,6 +960,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
 - **担当者**: 内容(期限: …) — "根拠となる発言の短い引用"
 次のような発言があれば、担当者が分からなくても「担当不明」として載せる: "I'll check", "let me check", "I'll do that", "I started …", "I'm going to use …", "next time I'll include …", "I'll explain after the meeting", 相手の依頼に対する "okay / yes / I'll do it"。
 議題の発表者が確実なら、その議題内の一人称の作業予定は発表者の担当にする。引き受けた・依頼された発言がまったく無いものは載せない。
+引用は、その Action item が話された箇所の発言から取る。別の議題で出た発言を引用に使わない。期限や内容を、別の議題のもの(例: 論文の図の準備と、別の会議での発表)と混ぜない。
 
 ## 今後検討する事項
 提案された追加解析、結論の出ていない問題、確認が必要な点。誰の提案かは確実なときだけ書く。
@@ -908,6 +1027,40 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
   LAB_GLOSSARY_KEY: 'lq_lab_glossary',
   labGlossary() {
     return (localStorage.getItem(this.LAB_GLOSSARY_KEY) || '').trim();
+  },
+
+  /** 用語集に語を足す(大文字小文字を無視して重複は除く)。足した数を返す */
+  addGlossaryTerms(terms) {
+    const cur = this.labGlossary();
+    const have = new Set(Plans.termList(cur).map((t) => t.toLowerCase()));
+    const add = [];
+    (terms || []).forEach((t) => {
+      const v = String(t || '').trim();
+      if (!v || have.has(v.toLowerCase())) return;
+      have.add(v.toLowerCase());
+      add.push(v);
+    });
+    if (add.length) localStorage.setItem(this.LAB_GLOSSARY_KEY, (cur ? cur + '\n' : '') + add.join('\n'));
+    return add.length;
+  },
+
+  /** 議事録の「## 要確認の語」から、用語集に入れる候補を拾う。[{ original, suggest }] */
+  glossaryCandidates(summary) {
+    const m = String(summary || '').match(/^#{2,3}\s*要確認の語[^\n]*\n([\s\S]*?)(?=\n#{2,3}\s|(?![\s\S]))/m);
+    if (!m) return [];
+    const out = [];
+    m[1].split('\n').forEach((line) => {
+      let s = line.replace(/^\s*(?:[-*+•]|\d+[.)])\s*/, '').replace(/[`*]/g, '').trim();
+      if (!s || /^\(?(なし|none)\)?$/i.test(s)) return;
+      s = s.replace(/^用語集で直した語[:：]\s*/, '').replace(/\[要確認\]/g, '').trim();
+      const parts = s.split(/\s*(?:→|->|⇒)\s*/);
+      const original = parts[0].replace(/[（(].*$/, '').trim();
+      let suggest = (parts[1] || '').replace(/[（(].*$/, '').split(/[,、/]/)[0].trim();
+      if (!suggest) suggest = original;
+      if (!original || original.length > 60) return;
+      out.push({ original, suggest });
+    });
+    return out;
   },
 
   /** 種類の定義は QGen(ai.js)と共通。既存の呼び出しのために別名を残す */
@@ -1018,7 +1171,8 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
     const all = [];
     for (let i = 0; i < segs.length; i++) {
       if (segs[i].blob.size > MAX) continue;      // 通常は起きない(18MBで区切っているため)
-      const res = STT.clean(await STT.transcribe(segs[i].blob, this.current.lang, this.sttPrompt())).segments;
+      const p = this.sttPrompt();
+      const res = STT.clean(await STT.transcribe(segs[i].blob, this.current.lang, p), p).segments;
       res.forEach((x) => all.push({
         start: x.start + segs[i].startSec, end: x.end + segs[i].startSec, text: x.text
       }));
@@ -1058,9 +1212,16 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
    * 文字起こしの費用はかからない。
    */
 
-  /** 字幕ファイルや貼り付けテキストから、時刻や連番などの「本文でない行」を落とす */
+  /** 字幕ファイルや貼り付けテキストから、時刻や連番などの「本文でない行」を落とす。
+   *  🗣 v1.46.0: Zoom の文字起こし(VTT)のように、本文の多くが「話者名: 発言」の形なら、
+   *  話者名と発言の時刻を残して「[時刻] 話者名: 発言」にまとめる(同じ人が続けて話した行は 1 つに)。
+   *  話者ラベルの無い自作の文字起こしより、会議ツールのラベルのほうが「誰の報告か・誰が引き受けたか」を
+   *  確実に伝えられる。要約側は hasSpeakerLabels() でこの形を検出して、ラベルを使ってよいと伝える。 */
   cleanTranscriptText(raw) {
-    const lines = String(raw || '').replace(/\r/g, '').split('\n');
+    const text = String(raw || '').replace(/\r/g, '');
+    const labeled = this._cleanLabeledVtt(text);
+    if (labeled) return labeled;
+    const lines = text.split('\n');
     const out = [];
     for (let line of lines) {
       line = line.replace(/<[^>]+>/g, '').trim();                  // VTTの <c> や <00:00:01.000> タグ
@@ -1075,6 +1236,50 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       out.push(line);
     }
     return out.join(' ').replace(/\s+/g, ' ').trim();
+  },
+
+  /** 話者ラベル付きの VTT/SRT を「[h:mm:ss] 名前: 発言」の行にまとめる。該当しなければ '' */
+  _cleanLabeledVtt(text) {
+    const lines = text.split('\n');
+    const cues = [];               // { at: 'h:mm:ss' | '', who, text }
+    let at = '';
+    let body = 0;
+    for (let line of lines) {
+      line = line.replace(/<[^>]+>/g, '').trim();
+      if (!line) continue;
+      if (/^WEBVTT/i.test(line) || /^(Kind|Language|NOTE)\b/i.test(line)) continue;
+      const tm = line.match(/^(\d{1,2}:)?(\d{2}):(\d{2})[.,]\d{1,3}\s*-->/);
+      if (tm) {
+        const h = tm[1] ? String(parseInt(tm[1], 10)) : '0';
+        at = `${h}:${tm[2]}:${tm[3]}`;
+        continue;
+      }
+      if (/^\d+$/.test(line)) continue;
+      body++;
+      const m = line.match(/^([^:\n]{2,40}?):\s+(.+)$/);
+      // 「http:」「Note:」のような語や、時刻だけの行は話者名として扱わない
+      if (m && !/^\d{1,2}:\d{2}/.test(line) && !/^https?$/i.test(m[1])) {
+        cues.push({ at, who: m[1].trim(), text: m[2].trim() });
+      } else {
+        cues.push({ at, who: '', text: line });
+      }
+    }
+    const withWho = cues.filter((c) => c.who).length;
+    if (body < 20 || withWho < body * 0.5) return '';
+    // 同じ話者が続く行はつなぐ。話者が変わるところにだけ時刻を付ける
+    const out = [];
+    let cur = null;
+    for (const c of cues) {
+      if (cur && (c.who === cur.who || !c.who)) {
+        cur.text += ' ' + c.text;
+        continue;
+      }
+      if (cur) out.push(cur);
+      cur = { at: c.at, who: c.who, text: c.text };
+    }
+    if (cur) out.push(cur);
+    return out.map((c) => `${c.at ? '[' + c.at + '] ' : ''}${c.who ? c.who + ': ' : ''}${c.text}`)
+      .join('\n').replace(/[ \t]+/g, ' ').trim();
   },
 
   /** テキストを「文字起こし済みの講演」としてセットする。このあとは talkSummarizeStep() へ */
@@ -1225,6 +1430,7 @@ ${c.kind === 'meeting' ? '場所' : '会場・セッション'}: ${c.venue || '�
       prep: c.prep || null,
       source: c.source || 'record', sourceFiles: c.sourceFiles || null,
       questions: c.questions || null,
+      topics: (c.topics && c.topics.length) ? c.topics : null,
       gaps: (c.gaps && c.gaps.length) ? c.gaps : null
     };
     // 同じIDが既にあれば置きかえる(文字起こしのやり直しで二重に増やさない)

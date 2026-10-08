@@ -2912,6 +2912,7 @@ function renderTalkResult() {
     ${talkQuestionsCardHtml()}
     <div class="card"><div class="md-body">${renderMarkdown(c.summary)}</div></div>
     ${resummarizeBtnHtml('要約をやり直す')}
+    ${glossaryCandidatesHtml(c)}
     ${talkPrepCardHtml(c)}
     ${c.transcript ? `
       <details class="card" style="margin-top:10px">
@@ -2920,9 +2921,57 @@ function renderTalkResult() {
       </details>` : ''}
   `;
   wireResummarizeBtn();
+  wireGlossaryCandidates();
   wireTalkQuestionsCard();
   wireTalkPrepLink();
   renderTalkAudioBox();
+}
+
+/* ---------- 📚 要確認の語 → ラボ用語集 (v1.46.0) ----------
+ * 議事録の「要確認の語」は、次回の文字起こしで Whisper に渡す語彙ヒントの材料として一番よい。
+ * 10/8 の会議では Pore-C / GapR-seq / Hi-C / Chung-Ang が用語集に無く、POI-C・GAPAR・HEI-C・
+ * Kinsui University のように崩れた。ここから選んで用語集に入れられるようにする。
+ * ⚠ 候補(→ の右側)も AI の推測なので、正しい表記に直してから追加できるよう、入力欄にしておく。 */
+function glossaryCandidatesHtml(c) {
+  if (!c || c.kind !== 'meeting' || !c.summary) return '';
+  const items = Talk.glossaryCandidates(c.summary);
+  if (!items.length) return '';
+  const have = new Set(Plans.termList(Talk.labGlossary()).map((t) => t.toLowerCase()));
+  const rows = items.map((it, i) => {
+    const dup = have.has(it.suggest.toLowerCase());
+    return `<label style="display:flex;gap:8px;align-items:center;margin:4px 0">
+      <input type="checkbox" class="gloss-cand-check" data-i="${i}" ${dup ? 'disabled' : ''}>
+      <input type="text" class="gloss-cand-text" data-i="${i}" value="${escapeHtml(it.suggest)}" style="flex:1;min-width:0" ${dup ? 'disabled' : ''}>
+      <span class="field-note" style="white-space:nowrap">${dup ? '用語集にあります' : escapeHtml(it.original !== it.suggest ? '← ' + it.original : '')}</span>
+    </label>`;
+  }).join('');
+  return `<details class="card" style="margin-top:10px">
+    <summary style="cursor:pointer">📚 要確認の語をラボ用語集に追加する(${items.length}件)</summary>
+    <p class="field-note" style="margin:6px 0">正しい表記に直してからチェックを入れてください。追加した語は、次回の文字起こしの語彙ヒントと議事録の表記に使われます。</p>
+    ${rows}
+    <button class="btn-control" id="btn-gloss-add" type="button" style="margin-top:8px">📚 チェックした語を用語集に追加</button>
+    <span class="field-note" id="gloss-add-msg"></span>
+  </details>`;
+}
+
+function wireGlossaryCandidates() {
+  const btn = document.getElementById('btn-gloss-add');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const picked = [];
+    document.querySelectorAll('.gloss-cand-check').forEach((cb) => {
+      if (!cb.checked) return;
+      const inp = document.querySelector(`.gloss-cand-text[data-i="${cb.dataset.i}"]`);
+      const v = inp && inp.value.trim();
+      if (v) picked.push(v);
+    });
+    const msg = document.getElementById('gloss-add-msg');
+    if (!picked.length) { if (msg) msg.textContent = '語が選ばれていません'; return; }
+    const n = Talk.addGlossaryTerms(picked);
+    const lg = document.getElementById('lab-glossary');
+    if (lg) lg.value = Talk.labGlossary();
+    if (msg) msg.textContent = n ? `${n} 語を用語集に追加しました` : 'すべて用語集にありました';
+  });
 }
 
 /* ---------- 🔎 録音から講演前の下調べを見る (v1.45.0) ----------
